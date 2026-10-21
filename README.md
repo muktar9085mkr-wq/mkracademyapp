@@ -137,3 +137,41 @@ ADMIN_EMAIL="muktar9085mkr@gmail.com"
 - [x] **Admin Dashboard**: Accessible by `muktar9085mkr@gmail.com`.
 - [x] **Banner Management**: Real-time sync of homepage banner without rebuilding.
 - [x] **Mobile Responsiveness**: Clean, professional design on mobile screens, tablets, and desktops.
+
+---
+
+## 6. Deploying to Netlify (Step-by-Step)
+
+The project includes all required Netlify configuration files (`netlify.toml`, `netlify/functions/api.ts`, and `public/_redirects`).
+
+### Step 1: Push Code to GitHub / GitLab
+Make sure your latest code is pushed to your Git repository.
+
+### Step 2: Connect to Netlify
+1. Log in to [Netlify](https://app.netlify.com/).
+2. Click **"Add new site"** > **"Import an existing project"**.
+3. Select your Git provider (GitHub, GitLab, or Bitbucket) and pick your MKR Academy repository.
+
+### Step 3: Verify Build Settings (Auto-detected from `netlify.toml`)
+- **Build command**: `npm run build`
+- **Publish directory**: `dist`
+- **Functions directory**: `netlify/functions`
+
+### Step 4: Add Environment Variables in Netlify
+Go to **Site configuration** > **Environment variables** > **Add a variable**:
+- `RAZORPAY_KEY_ID`: Your Razorpay Key ID (e.g. `rzp_live_...` or `rzp_test_...`)
+- `RAZORPAY_KEY_SECRET`: Your Razorpay Key Secret
+- `RAZORPAY_WEBHOOK_SECRET`: *(Optional)* Your Razorpay webhook secret
+- `ADMIN_EMAIL`: `muktar9085mkr@gmail.com`
+- `NODE_VERSION`: `20`
+
+*(Note: Firebase config is bundled automatically via `firebase-applet-config.json`. If you wish to override any key via env, you can also set `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, etc.)*
+
+### Step 5: Whitelist Your Netlify Domain in Firebase
+1. Open the [Firebase Console](https://console.firebase.google.com/).
+2. Select your project: **admin-original-a0bcd**.
+3. Go to **Authentication** > **Settings** > **Authorized domains**.
+4. Click **Add domain** and enter your Netlify subdomain (e.g., `mkr-academy.netlify.app`) or your custom domain.
+
+### Step 6: Deploy!
+Click **Deploy site**. Netlify will build the frontend into `dist/` and compile the serverless API function in `netlify/functions/api.ts` to power order creation, Razorpay HMAC verification, and PDF streaming.
