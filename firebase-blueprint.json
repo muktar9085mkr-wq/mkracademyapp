@@ -1,0 +1,134 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Student or Admin user profile",
+      "type": "object",
+      "properties": {
+        "displayName": { "type": "string", "maxLength": 100 },
+        "email": { "type": "string", "maxLength": 150 },
+        "phoneNumber": { "type": "string", "maxLength": 20 },
+        "role": { "type": "string", "enum": ["student", "admin"] },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["email", "displayName"]
+    },
+    "Admin": {
+      "title": "Admin",
+      "description": "Authorized administrator record",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "maxLength": 150 },
+        "addedAt": { "type": "string" },
+        "role": { "type": "string", "enum": ["superadmin", "admin"] }
+      },
+      "required": ["email"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Educational notes or study material product",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "maxLength": 250 },
+        "slug": { "type": "string", "maxLength": 250 },
+        "shortDescription": { "type": "string", "maxLength": 500 },
+        "description": { "type": "string", "maxLength": 5000 },
+        "subject": { "type": "string", "maxLength": 100 },
+        "classLevel": { "type": "string", "maxLength": 50 },
+        "examTarget": { "type": "string", "maxLength": 100 },
+        "medium": { "type": "string", "maxLength": 50 },
+        "category": { "type": "string", "enum": ["Normal", "Premium", "Budget Friendly"] },
+        "tags": { "type": "array" },
+        "chapters": { "type": "array" },
+        "coverImagePath": { "type": "string", "maxLength": 1000 },
+        "pdfStoragePath": { "type": "string", "maxLength": 1000 },
+        "fileType": { "type": "string", "maxLength": 50 },
+        "pageCount": { "type": "number" },
+        "originalPricePaise": { "type": "number" },
+        "sellingPricePaise": { "type": "number" },
+        "featured": { "type": "boolean" },
+        "published": { "type": "boolean" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["title", "subject", "classLevel", "sellingPricePaise", "published"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Customer purchase transaction record",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128 },
+        "studentName": { "type": "string", "maxLength": 100 },
+        "studentEmail": { "type": "string", "maxLength": 150 },
+        "studentPhone": { "type": "string", "maxLength": 20 },
+        "productId": { "type": "string", "maxLength": 128 },
+        "productTitleSnapshot": { "type": "string", "maxLength": 250 },
+        "amountPaise": { "type": "number" },
+        "currency": { "type": "string", "maxLength": 10 },
+        "razorpayOrderId": { "type": "string", "maxLength": 128 },
+        "razorpayPaymentId": { "type": "string", "maxLength": 128 },
+        "status": { "type": "string", "enum": ["pending", "paid", "failed", "refunded"] },
+        "createdAt": { "type": "string" },
+        "verifiedAt": { "type": "string" },
+        "refundStatus": { "type": "string" }
+      },
+      "required": ["uid", "productId", "amountPaise", "status"]
+    },
+    "Purchase": {
+      "title": "Purchase",
+      "description": "Student entitlement to download a specific note product",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128 },
+        "productId": { "type": "string", "maxLength": 128 },
+        "orderId": { "type": "string", "maxLength": 128 },
+        "productTitle": { "type": "string", "maxLength": 250 },
+        "coverImagePath": { "type": "string", "maxLength": 1000 },
+        "entitlementStatus": { "type": "string", "enum": ["active", "revoked"] },
+        "purchasedAt": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["uid", "productId", "orderId", "entitlementStatus"]
+    },
+    "AppPublicSettings": {
+      "title": "AppPublicSettings",
+      "description": "Public branding, banner config, and social contact links",
+      "type": "object",
+      "properties": {
+        "banner": { "type": "object" },
+        "social": { "type": "object" },
+        "contact": { "type": "object" },
+        "announcement": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{uid}": {
+      "schema": "User",
+      "description": "Student profile data restricted to the profile owner and admins"
+    },
+    "/admins/{uid}": {
+      "schema": "Admin",
+      "description": "Authoritative list of administrative users"
+    },
+    "/products/{productId}": {
+      "schema": "Product",
+      "description": "Notes and study material catalog. Published products are publicly viewable."
+    },
+    "/orders/{orderId}": {
+      "schema": "Order",
+      "description": "Payment and order records owned by user or verified by server/admin"
+    },
+    "/purchases/{purchaseId}": {
+      "schema": "Purchase",
+      "description": "User purchase entitlements. Users can list their own purchases."
+    },
+    "/appSettings/public": {
+      "schema": "AppPublicSettings",
+      "description": "Public site banners, contact numbers, and social links"
+    }
+  }
+}

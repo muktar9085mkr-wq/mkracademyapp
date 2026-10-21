@@ -1,0 +1,1437 @@
+import React, { useState, useEffect } from 'react';
+import {
+  LayoutDashboard,
+  Package,
+  PlusCircle,
+  Users,
+  ShoppingBag,
+  Megaphone,
+  Share2,
+  CreditCard,
+  LogOut,
+  ArrowLeft,
+  Search,
+  Filter,
+  CheckCircle2,
+  Clock,
+  AlertCircle,
+  Eye,
+  Edit,
+  Trash2,
+  Save,
+  Loader2,
+  ExternalLink,
+  ChevronRight,
+  TrendingUp,
+  FileText
+} from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
+import { Product, Order, UserProfile, AppPublicSettings } from '../../types';
+import {
+  getAllProductsAdmin,
+  addProduct,
+  updateProduct,
+  deleteProduct,
+  deleteLegacySampleProductsAdmin
+} from '../../services/productService';
+import {
+  getAllOrdersAdmin,
+  getAllStudentsAdmin
+} from '../../services/orderService';
+import {
+  getPublicSettings,
+  updatePublicSettings
+} from '../../services/settingsService';
+
+interface AdminDashboardProps {
+  onBackToStore: () => void;
+  onProductsChanged?: () => void;
+}
+
+type AdminTab =
+  | 'dashboard'
+  | 'products'
+  | 'add-product'
+  | 'students'
+  | 'orders'
+  | 'banner'
+  | 'social'
+  | 'payment-config';
+
+export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, onProductsChanged }) => {
+  const { user, isAdmin, logout } = useAuth();
+
+  const [currentTab, setCurrentTab] = useState<AdminTab>('dashboard');
+  const [products, setProducts] = useState<Product[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [students, setStudents] = useState<UserProfile[]>([]);
+  const [settings, setSettings] = useState<AppPublicSettings | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Edit Product state
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+
+  // Product Form fields
+  const [prodTitle, setProdTitle] = useState('');
+  const [prodSlug, setProdSlug] = useState('');
+  const [prodShortDesc, setProdShortDesc] = useState('');
+  const [prodDesc, setProdDesc] = useState('');
+  const [prodSubject, setProdSubject] = useState('General Science');
+  const [prodClass, setProdClass] = useState('HSLC 2027');
+  const [prodExamTarget, setProdExamTarget] = useState('HSLC 2027 Board Exam');
+  const [prodMedium, setProdMedium] = useState('Assamese Medium');
+  const [prodCategory, setProdCategory] = useState<'Normal' | 'Premium' | 'Budget Friendly'>('Normal');
+  const [prodTags, setProdTags] = useState<string>('Important Questions, Chapter-wise Notes');
+  const [prodChapters, setProdChapters] = useState<string>('');
+  const [prodCoverUrl, setProdCoverUrl] = useState('');
+  const [prodPdfPath, setProdPdfPath] = useState('');
+  const [prodFileType, setProdFileType] = useState('PDF Document');
+  const [prodPageCount, setProdPageCount] = useState<number>(100);
+  const [prodOriginalPrice, setProdOriginalPrice] = useState<number>(199);
+  const [prodSellingPrice, setProdSellingPrice] = useState<number>(99);
+  const [prodFeatured, setProdFeatured] = useState(false);
+  const [prodPublished, setProdPublished] = useState(true);
+  const [formSaving, setFormSaving] = useState(false);
+  const [formMessage, setFormMessage] = useState<string | null>(null);
+
+  // Banner State
+  const [bannerEnabled, setBannerEnabled] = useState(true);
+  const [bannerTitle, setBannerTitle] = useState('');
+  const [bannerSubtitle, setBannerSubtitle] = useState('');
+  const [bannerBadge, setBannerBadge] = useState('');
+  const [bannerCta, setBannerCta] = useState('');
+  const [bannerSaving, setBannerSaving] = useState(false);
+
+  // Social Links State
+  const [socialWhatsapp, setSocialWhatsapp] = useState('');
+  const [socialTelegram, setSocialTelegram] = useState('');
+  const [socialYoutube, setSocialYoutube] = useState('');
+  const [socialInstagram, setSocialInstagram] = useState('');
+  const [socialEmail, setSocialEmail] = useState('');
+  const [socialSaving, setSocialSaving] = useState(false);
+
+  // Search in tables
+  const [productSearch, setProductSearch] = useState('');
+  const [orderSearch, setOrderSearch] = useState('');
+  const [studentSearch, setStudentSearch] = useState('');
+
+  useEffect(() => {
+    loadAllAdminData();
+  }, []);
+
+  const loadAllAdminData = async () => {
+    try {
+      setLoading(true);
+      // Automatically clean up any legacy sample documents from Firestore
+      await deleteLegacySampleProductsAdmin().catch(() => 0);
+
+      const [prods, ords, studs, setts] = await Promise.all([
+        getAllProductsAdmin(),
+        getAllOrdersAdmin(),
+        getAllStudentsAdmin(),
+        getPublicSettings()
+      ]);
+      setProducts(prods);
+      setOrders(ords);
+      setStudents(studs);
+      setSettings(setts);
+
+      if (setts) {
+        setBannerEnabled(setts.banner.enabled);
+        setBannerTitle(setts.banner.title || '');
+        setBannerSubtitle(setts.banner.subtitle || '');
+        setBannerBadge(setts.banner.badgeText || '');
+        setBannerCta(setts.banner.ctaText || '');
+
+        setSocialWhatsapp(setts.social.whatsapp || '');
+        setSocialTelegram(setts.social.telegram || '');
+        setSocialYoutube(setts.social.youtube || '');
+        setSocialInstagram(setts.social.instagram || '');
+        setSocialEmail(setts.social.email || '');
+      }
+    } catch (err) {
+      console.error('Failed to load admin dashboard data:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!isAdmin) {
+    return (
+      <div className="max-w-md mx-auto my-20 p-8 bg-white rounded-3xl border border-stone-200 shadow-xl text-center space-y-4">
+        <div className="w-16 h-16 rounded-2xl bg-red-100 text-red-700 flex items-center justify-center mx-auto">
+          <AlertCircle className="w-8 h-8" />
+        </div>
+        <h2 className="text-xl font-bold text-stone-900">Access Denied</h2>
+        <p className="text-stone-600 text-xs leading-relaxed">
+          The Admin Panel is strictly protected. Your current signed-in email ({user?.email || 'Guest'}) does not have verified administrator privileges.
+        </p>
+        <button
+          onClick={onBackToStore}
+          className="px-6 py-2.5 rounded-xl bg-stone-900 text-white font-bold text-xs"
+        >
+          Return to Store
+        </button>
+      </div>
+    );
+  }
+
+  // Calculated Metrics
+  const verifiedPaidOrders = orders.filter((o) => o.status === 'paid');
+  const pendingOrders = orders.filter((o) => o.status === 'pending');
+  const failedOrders = orders.filter((o) => o.status === 'failed');
+  const totalRevenue = verifiedPaidOrders.reduce((sum, o) => sum + (o.amountPaise || 0), 0) / 100;
+
+  const handleEditClick = (p: Product) => {
+    setEditingProduct(p);
+    setProdTitle(p.title);
+    setProdSlug(p.slug);
+    setProdShortDesc(p.shortDescription);
+    setProdDesc(p.description);
+    setProdSubject(p.subject);
+    setProdClass(p.classLevel);
+    setProdExamTarget(p.examTarget);
+    setProdMedium(p.medium);
+    setProdCategory(p.category);
+    setProdTags(p.tags?.join(', ') || '');
+    setProdChapters(p.chapters?.join('\n') || '');
+    setProdCoverUrl(p.coverImagePath);
+    setProdPdfPath(p.pdfStoragePath || '');
+    setProdFileType(p.fileType || 'PDF Document');
+    setProdPageCount(p.pageCount || 100);
+    setProdOriginalPrice(p.originalPricePaise / 100);
+    setProdSellingPrice(p.sellingPricePaise / 100);
+    setProdFeatured(p.featured);
+    setProdPublished(p.published);
+    setCurrentTab('add-product');
+  };
+
+  const handleResetProductForm = () => {
+    setEditingProduct(null);
+    setProdTitle('');
+    setProdSlug('');
+    setProdShortDesc('');
+    setProdDesc('');
+    setProdSubject('General Science');
+    setProdClass('HSLC 2027');
+    setProdExamTarget('HSLC 2027 Board Exam');
+    setProdMedium('Assamese Medium');
+    setProdCategory('Normal');
+    setProdTags('Important Questions, Chapter-wise Notes');
+    setProdChapters('');
+    setProdCoverUrl('');
+    setProdPdfPath('');
+    setProdFileType('PDF Document');
+    setProdPageCount(100);
+    setProdOriginalPrice(199);
+    setProdSellingPrice(99);
+    setProdFeatured(false);
+    setProdPublished(true);
+    setFormMessage(null);
+  };
+
+  const handleSaveProduct = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!prodTitle.trim()) {
+      setFormMessage('Product title is required');
+      return;
+    }
+    setFormSaving(true);
+    setFormMessage(null);
+
+    try {
+      const tagsArray = prodTags.split(',').map((t) => t.trim()).filter(Boolean);
+      const chaptersArray = prodChapters.split('\n').map((c) => c.trim()).filter(Boolean);
+      const generatedSlug = prodSlug.trim() || prodTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+
+      const payload = {
+        title: prodTitle.trim(),
+        slug: generatedSlug,
+        shortDescription: prodShortDesc.trim(),
+        description: prodDesc.trim(),
+        subject: prodSubject,
+        classLevel: prodClass,
+        examTarget: prodExamTarget,
+        medium: prodMedium,
+        category: prodCategory,
+        tags: tagsArray,
+        chapters: chaptersArray,
+        coverImagePath: prodCoverUrl.trim() || 'https://images.unsplash.com/photo-1532094349884-543bc11b234d?auto=format&fit=crop&w=800&q=80',
+        pdfStoragePath: prodPdfPath.trim() || `notes/${generatedSlug}.pdf`,
+        fileType: prodFileType,
+        pageCount: Number(prodPageCount) || 1,
+        originalPricePaise: Math.round(Number(prodOriginalPrice) * 100),
+        sellingPricePaise: Math.round(Number(prodSellingPrice) * 100),
+        featured: prodFeatured,
+        published: prodPublished
+      };
+
+      if (editingProduct) {
+        await updateProduct(editingProduct.id, payload);
+        setFormMessage('Product updated successfully!');
+      } else {
+        await addProduct(payload);
+        setFormMessage('New educational product created successfully!');
+      }
+
+      const refreshed = await getAllProductsAdmin();
+      setProducts(refreshed);
+      setTimeout(() => {
+        handleResetProductForm();
+        setCurrentTab('products');
+      }, 1200);
+    } catch (err: any) {
+      setFormMessage(err.message || 'Failed to save product');
+    } finally {
+      setFormSaving(false);
+    }
+  };
+
+  const handleDeleteProduct = async (id: string, title: string) => {
+    if (window.confirm(`Are you sure you want to delete or archive "${title}"? Existing student purchases will remain safely preserved.`)) {
+      try {
+        await deleteProduct(id);
+        setProducts(products.filter((p) => p.id !== id));
+      } catch (err: any) {
+        alert(err.message || 'Failed to delete product');
+      }
+    }
+  };
+
+  const handleTogglePublish = async (p: Product) => {
+    try {
+      const nextStatus = !p.published;
+      await updateProduct(p.id, { published: nextStatus });
+      setProducts(products.map((item) => (item.id === p.id ? { ...item, published: nextStatus } : item)));
+    } catch (err: any) {
+      alert(err.message || 'Failed to update publication status');
+    }
+  };
+
+  const handleSaveBanner = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBannerSaving(true);
+    try {
+      await updatePublicSettings({
+        banner: {
+          enabled: bannerEnabled,
+          title: bannerTitle,
+          subtitle: bannerSubtitle,
+          badgeText: bannerBadge,
+          ctaText: bannerCta,
+          destinationUrl: '#notes'
+        }
+      });
+      alert('Promotional banner updated in real-time for all students!');
+    } catch (err: any) {
+      alert(err.message || 'Failed to update banner');
+    } finally {
+      setBannerSaving(false);
+    }
+  };
+
+  const handleSaveSocial = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSocialSaving(true);
+    try {
+      await updatePublicSettings({
+        social: {
+          whatsapp: socialWhatsapp,
+          telegram: socialTelegram,
+          youtube: socialYoutube,
+          instagram: socialInstagram,
+          email: socialEmail
+        }
+      });
+      alert('Social links updated successfully!');
+    } catch (err: any) {
+      alert(err.message || 'Failed to update social links');
+    } finally {
+      setSocialSaving(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-stone-100 flex flex-col">
+      {/* Top Admin Bar */}
+      <header className="bg-stone-900 text-white border-b border-stone-800 sticky top-0 z-30 px-4 sm:px-8 py-3 flex items-center justify-between">
+        <div className="flex items-center space-x-3">
+          <button
+            onClick={onBackToStore}
+            className="p-1.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-300 hover:text-white transition-colors flex items-center space-x-1 text-xs"
+            title="Return to Student App"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span className="hidden sm:inline">Store View</span>
+          </button>
+          <div className="h-4 w-px bg-stone-700"></div>
+          <div>
+            <h1 className="font-extrabold text-sm sm:text-base tracking-tight font-sans">
+              MKR ACADEMY <span className="text-red-500 font-bold">ADMIN PANEL</span>
+            </h1>
+            <p className="text-[10px] text-stone-400">Authenticated: {user?.email}</p>
+          </div>
+        </div>
+
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={async () => {
+              await logout();
+              onBackToStore();
+            }}
+            className="px-3 py-1.5 bg-stone-800 hover:bg-red-950/60 hover:text-red-400 text-stone-300 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-colors"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            <span>Sign Out</span>
+          </button>
+        </div>
+      </header>
+
+      {/* Admin Layout */}
+      <div className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 flex flex-col md:flex-row gap-6">
+        
+        {/* Navigation Sidebar */}
+        <aside className="w-full md:w-60 shrink-0 space-y-1">
+          <button
+            onClick={() => setCurrentTab('dashboard')}
+            className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center space-x-2.5 transition-colors ${
+              currentTab === 'dashboard'
+                ? 'bg-red-700 text-white shadow-xs'
+                : 'bg-white text-stone-700 hover:bg-stone-50 border border-stone-200'
+            }`}
+          >
+            <LayoutDashboard className="w-4 h-4" />
+            <span>Dashboard Overview</span>
+          </button>
+
+          <button
+            onClick={() => setCurrentTab('products')}
+            className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center justify-between transition-colors ${
+              currentTab === 'products'
+                ? 'bg-red-700 text-white shadow-xs'
+                : 'bg-white text-stone-700 hover:bg-stone-50 border border-stone-200'
+            }`}
+          >
+            <div className="flex items-center space-x-2.5">
+              <Package className="w-4 h-4" />
+              <span>Products & Notes</span>
+            </div>
+            <span className="text-[11px] opacity-80">{products.length}</span>
+          </button>
+
+          <button
+            onClick={() => {
+              handleResetProductForm();
+              setCurrentTab('add-product');
+            }}
+            className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center space-x-2.5 transition-colors ${
+              currentTab === 'add-product'
+                ? 'bg-red-700 text-white shadow-xs'
+                : 'bg-white text-stone-700 hover:bg-stone-50 border border-stone-200'
+            }`}
+          >
+            <PlusCircle className="w-4 h-4" />
+            <span>Add New Product</span>
+          </button>
+
+          <button
+            onClick={() => setCurrentTab('orders')}
+            className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center justify-between transition-colors ${
+              currentTab === 'orders'
+                ? 'bg-red-700 text-white shadow-xs'
+                : 'bg-white text-stone-700 hover:bg-stone-50 border border-stone-200'
+            }`}
+          >
+            <div className="flex items-center space-x-2.5">
+              <ShoppingBag className="w-4 h-4" />
+              <span>Orders & Payments</span>
+            </div>
+            <span className="text-[11px] opacity-80">{orders.length}</span>
+          </button>
+
+          <button
+            onClick={() => setCurrentTab('students')}
+            className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center justify-between transition-colors ${
+              currentTab === 'students'
+                ? 'bg-red-700 text-white shadow-xs'
+                : 'bg-white text-stone-700 hover:bg-stone-50 border border-stone-200'
+            }`}
+          >
+            <div className="flex items-center space-x-2.5">
+              <Users className="w-4 h-4" />
+              <span>Registered Students</span>
+            </div>
+            <span className="text-[11px] opacity-80">{students.length}</span>
+          </button>
+
+          <button
+            onClick={() => setCurrentTab('banner')}
+            className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center space-x-2.5 transition-colors ${
+              currentTab === 'banner'
+                ? 'bg-red-700 text-white shadow-xs'
+                : 'bg-white text-stone-700 hover:bg-stone-50 border border-stone-200'
+            }`}
+          >
+            <Megaphone className="w-4 h-4" />
+            <span>Banner Management</span>
+          </button>
+
+          <button
+            onClick={() => setCurrentTab('social')}
+            className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center space-x-2.5 transition-colors ${
+              currentTab === 'social'
+                ? 'bg-red-700 text-white shadow-xs'
+                : 'bg-white text-stone-700 hover:bg-stone-50 border border-stone-200'
+            }`}
+          >
+            <Share2 className="w-4 h-4" />
+            <span>Social & Support Links</span>
+          </button>
+
+          <button
+            onClick={() => setCurrentTab('payment-config')}
+            className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center space-x-2.5 transition-colors ${
+              currentTab === 'payment-config'
+                ? 'bg-red-700 text-white shadow-xs'
+                : 'bg-white text-stone-700 hover:bg-stone-50 border border-stone-200'
+            }`}
+          >
+            <CreditCard className="w-4 h-4" />
+            <span>Payment Settings</span>
+          </button>
+        </aside>
+
+        {/* Tab Content Area */}
+        <main className="flex-1 bg-white rounded-3xl border border-stone-200 shadow-xs p-6 sm:p-8 overflow-x-auto">
+          {/* TAB: DASHBOARD OVERVIEW */}
+          {currentTab === 'dashboard' && (
+            <div className="space-y-8 animate-in fade-in">
+              <div>
+                <h2 className="text-xl font-extrabold text-stone-900 font-sans">
+                  Platform Performance Dashboard
+                </h2>
+                <p className="text-xs text-stone-500">
+                  Real-time analytics computed strictly from verified Firestore transactions.
+                </p>
+              </div>
+
+              {/* Metrics Grid */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-stone-50 p-4 rounded-2xl border border-stone-200 space-y-1">
+                  <span className="text-[11px] font-bold text-stone-500 uppercase tracking-wider">
+                    Total Revenue
+                  </span>
+                  <p className="text-2xl font-extrabold text-emerald-700">₹{totalRevenue.toLocaleString()}</p>
+                  <p className="text-[10px] text-stone-400">From {verifiedPaidOrders.length} verified orders</p>
+                </div>
+
+                <div className="bg-stone-50 p-4 rounded-2xl border border-stone-200 space-y-1">
+                  <span className="text-[11px] font-bold text-stone-500 uppercase tracking-wider">
+                    Active Products
+                  </span>
+                  <p className="text-2xl font-extrabold text-stone-900">{products.filter(p => p.published).length}</p>
+                  <p className="text-[10px] text-stone-400">{products.length} total in catalog</p>
+                </div>
+
+                <div className="bg-stone-50 p-4 rounded-2xl border border-stone-200 space-y-1">
+                  <span className="text-[11px] font-bold text-stone-500 uppercase tracking-wider">
+                    Registered Students
+                  </span>
+                  <p className="text-2xl font-extrabold text-stone-900">{students.length}</p>
+                  <p className="text-[10px] text-stone-400">Assamese & English Medium</p>
+                </div>
+
+                <div className="bg-stone-50 p-4 rounded-2xl border border-stone-200 space-y-1">
+                  <span className="text-[11px] font-bold text-stone-500 uppercase tracking-wider">
+                    Pending / Incomplete
+                  </span>
+                  <p className="text-2xl font-extrabold text-amber-700">{pendingOrders.length}</p>
+                  <p className="text-[10px] text-stone-400">{failedOrders.length} failed attempts</p>
+                </div>
+              </div>
+
+              {/* Recent Orders Overview */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-bold text-sm text-stone-900">Recent Customer Orders</h3>
+                  <button
+                    onClick={() => setCurrentTab('orders')}
+                    className="text-xs font-semibold text-red-700 hover:text-red-800"
+                  >
+                    View All Orders →
+                  </button>
+                </div>
+
+                <div className="border border-stone-200 rounded-2xl overflow-hidden">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-stone-50 border-b border-stone-200 text-stone-500 uppercase text-[10px] font-bold">
+                      <tr>
+                        <th className="py-2.5 px-3">Order ID</th>
+                        <th className="py-2.5 px-3">Student</th>
+                        <th className="py-2.5 px-3">Product</th>
+                        <th className="py-2.5 px-3">Amount</th>
+                        <th className="py-2.5 px-3">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-stone-100">
+                      {orders.slice(0, 5).map((ord) => (
+                        <tr key={ord.id} className="hover:bg-stone-50/50">
+                          <td className="py-2.5 px-3 font-mono font-medium">{ord.id}</td>
+                          <td className="py-2.5 px-3">
+                            <p className="font-semibold text-stone-900">{ord.studentName}</p>
+                            <p className="text-[10px] text-stone-400 font-mono">+91 {ord.studentPhone}</p>
+                          </td>
+                          <td className="py-2.5 px-3 max-w-[200px] truncate">{ord.productTitleSnapshot}</td>
+                          <td className="py-2.5 px-3 font-bold text-stone-900">₹{ord.amountPaise / 100}</td>
+                          <td className="py-2.5 px-3">
+                            <span
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                                ord.status === 'paid'
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : ord.status === 'pending'
+                                  ? 'bg-amber-100 text-amber-800'
+                                  : 'bg-red-100 text-red-800'
+                              }`}
+                            >
+                              {ord.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB: PRODUCTS CATALOG */}
+          {currentTab === 'products' && (
+            <div className="space-y-6 animate-in fade-in">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-xl font-extrabold text-stone-900 font-sans">
+                    Product & Notes Management
+                  </h2>
+                  <p className="text-xs text-stone-500">
+                    Publish, edit pricing, or replace PDF notes across the platform.
+                  </p>
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={async () => {
+                      if (window.confirm('Do you want to clean up and remove any remaining example or test products from the database?')) {
+                        const removed = await deleteLegacySampleProductsAdmin();
+                        const refreshed = await getAllProductsAdmin();
+                        setProducts(refreshed);
+                        alert(`Cleaned up ${removed} sample product(s). Catalog is now clean.`);
+                      }
+                    }}
+                    className="px-3 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 font-semibold text-xs rounded-xl flex items-center space-x-1 transition-colors cursor-pointer"
+                    title="Remove any sample or example products"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-stone-500" />
+                    <span>Clear Sample Data</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      handleResetProductForm();
+                      setCurrentTab('add-product');
+                    }}
+                    className="px-4 py-2 bg-red-700 hover:bg-red-800 text-white font-bold text-xs rounded-xl shadow-xs flex items-center space-x-1.5 cursor-pointer"
+                  >
+                    <PlusCircle className="w-4 h-4" />
+                    <span>Add New Product</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* If no products exist yet */}
+              {products.length === 0 ? (
+                <div className="bg-stone-50 border-2 border-dashed border-stone-200 rounded-3xl p-10 text-center space-y-4">
+                  <div className="w-14 h-14 bg-red-100 text-red-700 rounded-2xl flex items-center justify-center mx-auto">
+                    <Package className="w-7 h-7" />
+                  </div>
+                  <div className="space-y-1">
+                    <h3 className="text-base font-extrabold text-stone-900">
+                      Product Catalog is Empty
+                    </h3>
+                    <p className="text-xs text-stone-600 max-w-md mx-auto">
+                      All example and sample products have been cleared. No dummy data is being shown. You can now add your original educational notes and study materials.
+                    </p>
+                  </div>
+                  <div className="pt-2">
+                    <button
+                      onClick={() => {
+                        handleResetProductForm();
+                        setCurrentTab('add-product');
+                      }}
+                      className="px-5 py-2.5 bg-red-700 hover:bg-red-800 text-white font-bold text-xs rounded-xl shadow-md transition-all inline-flex items-center space-x-2 cursor-pointer"
+                    >
+                      <PlusCircle className="w-4 h-4" />
+                      <span>Add Your First Product Now</span>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* Product search */}
+                  <div className="relative max-w-sm">
+                    <input
+                      type="text"
+                      value={productSearch}
+                      onChange={(e) => setProductSearch(e.target.value)}
+                      placeholder="Filter products by title, subject, or class..."
+                      className="w-full bg-stone-50 border border-stone-200 rounded-xl pl-9 pr-3 py-2 text-xs text-stone-900 focus:bg-white focus:outline-none focus:border-red-600"
+                    />
+                    <Search className="w-3.5 h-3.5 text-stone-400 absolute left-3 top-2.5" />
+                  </div>
+
+                  {/* Products Table */}
+                  <div className="border border-stone-200 rounded-2xl overflow-hidden">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-stone-50 border-b border-stone-200 text-stone-500 uppercase text-[10px] font-bold">
+                        <tr>
+                          <th className="py-3 px-4">Title & Subject</th>
+                          <th className="py-3 px-4">Class & Medium</th>
+                          <th className="py-3 px-4">Price</th>
+                          <th className="py-3 px-4">Status</th>
+                          <th className="py-3 px-4 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                  <tbody className="divide-y divide-stone-100">
+                    {products
+                      .filter((p) =>
+                        p.title.toLowerCase().includes(productSearch.toLowerCase()) ||
+                        p.subject.toLowerCase().includes(productSearch.toLowerCase()) ||
+                        p.classLevel.toLowerCase().includes(productSearch.toLowerCase())
+                      )
+                      .map((p) => (
+                        <tr key={p.id} className="hover:bg-stone-50/50">
+                          <td className="py-3 px-4">
+                            <div className="flex items-center space-x-3">
+                              <img
+                                src={p.coverImagePath}
+                                alt={p.title}
+                                className="w-10 h-10 object-cover rounded-lg border border-stone-200"
+                              />
+                              <div className="max-w-xs">
+                                <p className="font-bold text-stone-900 truncate">{p.title}</p>
+                                <span className="text-[10px] text-red-700 font-semibold uppercase">
+                                  {p.subject} • {p.category}
+                                </span>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-3 px-4">
+                            <p className="font-semibold text-stone-800">{p.classLevel}</p>
+                            <p className="text-[11px] text-stone-500">{p.medium}</p>
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className="font-extrabold text-stone-900">
+                              ₹{p.sellingPricePaise / 100}
+                            </span>
+                            <span className="ml-1 text-stone-400 line-through text-[11px]">
+                              ₹{p.originalPricePaise / 100}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4">
+                            <button
+                              onClick={() => handleTogglePublish(p)}
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase transition-colors cursor-pointer ${
+                                p.published
+                                  ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
+                                  : 'bg-stone-200 text-stone-700 hover:bg-stone-300'
+                              }`}
+                            >
+                              {p.published ? 'Published' : 'Draft / Unpublished'}
+                            </button>
+                          </td>
+                          <td className="py-3 px-4 text-right">
+                            <div className="inline-flex items-center space-x-2">
+                              <button
+                                onClick={() => handleEditClick(p)}
+                                className="p-1.5 rounded-lg text-stone-600 hover:text-stone-900 hover:bg-stone-100"
+                                title="Edit product"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteProduct(p.id, p.title)}
+                                className="p-1.5 rounded-lg text-red-600 hover:text-red-800 hover:bg-red-50"
+                                title="Delete or Archive"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+          {/* TAB: ADD / EDIT PRODUCT */}
+          {currentTab === 'add-product' && (
+            <div className="space-y-6 animate-in fade-in">
+              <div className="flex items-center justify-between pb-3 border-b border-stone-200">
+                <div>
+                  <h2 className="text-xl font-extrabold text-stone-900 font-sans">
+                    {editingProduct ? 'Edit Educational Product' : 'Add New Educational Notes Product'}
+                  </h2>
+                  <p className="text-xs text-stone-500">
+                    Configure syllabus, chapter lists, Assamese & English medium targeting, and pricing.
+                  </p>
+                </div>
+                {editingProduct && (
+                  <button
+                    onClick={handleResetProductForm}
+                    className="text-xs font-semibold text-stone-500 hover:text-stone-800"
+                  >
+                    Cancel Edit
+                  </button>
+                )}
+              </div>
+
+              {formMessage && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-800 flex items-center space-x-2">
+                  <CheckCircle2 className="w-4 h-4 text-red-700" />
+                  <span>{formMessage}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleSaveProduct} className="space-y-5 text-xs">
+                {/* Title & Slug */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-stone-700 font-semibold mb-1">
+                      Product Title <span className="text-red-600">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={prodTitle}
+                      onChange={(e) => setProdTitle(e.target.value)}
+                      placeholder="e.g. HSLC 2027 General Science Complete Notes (অসমীয়া মাধ্যম)"
+                      className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-stone-900 focus:bg-white focus:outline-none focus:border-red-600"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-stone-700 font-semibold mb-1">
+                      Slug or Unique Identifier
+                    </label>
+                    <input
+                      type="text"
+                      value={prodSlug}
+                      onChange={(e) => setProdSlug(e.target.value)}
+                      placeholder="e.g. hslc-2027-general-science-assamese"
+                      className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 font-mono text-stone-900 focus:bg-white focus:outline-none focus:border-red-600"
+                    />
+                  </div>
+                </div>
+
+                {/* Subject, Class, Exam Target, Medium */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  <div>
+                    <label className="block text-stone-700 font-semibold mb-1">Subject</label>
+                    <select
+                      value={prodSubject}
+                      onChange={(e) => setProdSubject(e.target.value)}
+                      className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-stone-900"
+                    >
+                      <option value="General Science">General Science</option>
+                      <option value="Mathematics">Mathematics</option>
+                      <option value="Social Science">Social Science</option>
+                      <option value="English">English</option>
+                      <option value="Assamese">Assamese</option>
+                      <option value="Other Subjects">Other Subjects</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-stone-700 font-semibold mb-1">Class</label>
+                    <select
+                      value={prodClass}
+                      onChange={(e) => setProdClass(e.target.value)}
+                      className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-stone-900"
+                    >
+                      <option value="HSLC 2027">HSLC 2027</option>
+                      <option value="Class 10">Class 10</option>
+                      <option value="Class 9">Class 9</option>
+                      <option value="Class 8">Class 8</option>
+                      <option value="Class 7">Class 7</option>
+                      <option value="Class 6">Class 6</option>
+                      <option value="Other Examinations">Other Examinations</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-stone-700 font-semibold mb-1">Medium</label>
+                    <select
+                      value={prodMedium}
+                      onChange={(e) => setProdMedium(e.target.value)}
+                      className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-stone-900"
+                    >
+                      <option value="Assamese Medium">Assamese Medium</option>
+                      <option value="English Medium">English Medium</option>
+                      <option value="Both Mediums">Both Mediums</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-stone-700 font-semibold mb-1">Category</label>
+                    <select
+                      value={prodCategory}
+                      onChange={(e) => setProdCategory(e.target.value as any)}
+                      className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-stone-900"
+                    >
+                      <option value="Normal">Normal</option>
+                      <option value="Premium">Premium</option>
+                      <option value="Budget Friendly">Budget Friendly</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Pricing: Original and Selling (Automatic Discount Calculation) */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-stone-50 p-4 rounded-2xl border border-stone-200">
+                  <div>
+                    <label className="block text-stone-700 font-semibold mb-1">
+                      Original Price (₹)
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={prodOriginalPrice}
+                      onChange={(e) => setProdOriginalPrice(Number(e.target.value))}
+                      className="w-full bg-white border border-stone-300 rounded-xl px-3 py-2 text-stone-900 font-bold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-stone-700 font-semibold mb-1">
+                      Selling Price (₹) <span className="text-red-600">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={prodSellingPrice}
+                      onChange={(e) => setProdSellingPrice(Number(e.target.value))}
+                      className="w-full bg-white border border-stone-300 rounded-xl px-3 py-2 text-red-700 font-bold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-stone-500 font-medium mb-1">
+                      Calculated Discount %
+                    </label>
+                    <div className="bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl px-3 py-2 font-bold text-sm">
+                      {prodOriginalPrice > prodSellingPrice
+                        ? `${Math.round(((prodOriginalPrice - prodSellingPrice) / prodOriginalPrice) * 100)}% Discount`
+                        : '0% (No discount)'}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Short Description */}
+                <div>
+                  <label className="block text-stone-700 font-semibold mb-1">
+                    Short Description (Card preview)
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={prodShortDesc}
+                    onChange={(e) => setProdShortDesc(e.target.value)}
+                    placeholder="Brief highlights of notes for card previews..."
+                    className="w-full bg-stone-50 border border-stone-300 rounded-xl p-3 text-stone-900 focus:bg-white focus:outline-none"
+                  />
+                </div>
+
+                {/* Detailed Description */}
+                <div>
+                  <label className="block text-stone-700 font-semibold mb-1">
+                    Full Syllabus Description
+                  </label>
+                  <textarea
+                    rows={4}
+                    value={prodDesc}
+                    onChange={(e) => setProdDesc(e.target.value)}
+                    placeholder="Detailed explanation of curriculum, question patterns, and teacher preparation notes..."
+                    className="w-full bg-stone-50 border border-stone-300 rounded-xl p-3 text-stone-900 focus:bg-white focus:outline-none"
+                  />
+                </div>
+
+                {/* Chapters & Tags */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-stone-700 font-semibold mb-1">
+                      Included Chapters (One per line)
+                    </label>
+                    <textarea
+                      rows={5}
+                      value={prodChapters}
+                      onChange={(e) => setProdChapters(e.target.value)}
+                      placeholder="Chapter 1: Chemical Reactions&#10;Chapter 2: Acids and Bases&#10;Chapter 3: Metals and Non-Metals"
+                      className="w-full bg-stone-50 border border-stone-300 rounded-xl p-3 text-stone-900 focus:bg-white focus:outline-none font-mono text-[11px]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-stone-700 font-semibold mb-1">
+                      Tags (Comma separated)
+                    </label>
+                    <input
+                      type="text"
+                      value={prodTags}
+                      onChange={(e) => setProdTags(e.target.value)}
+                      placeholder="Important Questions, Chapter-wise Notes, Revision Notes"
+                      className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-stone-900 mb-3"
+                    />
+
+                    <label className="block text-stone-700 font-semibold mb-1">
+                      Cover Image URL
+                    </label>
+                    <input
+                      type="text"
+                      value={prodCoverUrl}
+                      onChange={(e) => setProdCoverUrl(e.target.value)}
+                      placeholder="https://images.unsplash.com/..."
+                      className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-stone-900"
+                    />
+                  </div>
+                </div>
+
+                {/* Toggles */}
+                <div className="flex items-center space-x-6 pt-2">
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={prodPublished}
+                      onChange={(e) => setProdPublished(e.target.checked)}
+                      className="w-4 h-4 text-red-600 rounded"
+                    />
+                    <span className="font-semibold text-stone-900">Publish Immediately to Store</span>
+                  </label>
+
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={prodFeatured}
+                      onChange={(e) => setProdFeatured(e.target.checked)}
+                      className="w-4 h-4 text-red-600 rounded"
+                    />
+                    <span className="font-semibold text-stone-900">Feature on Homepage</span>
+                  </label>
+                </div>
+
+                {/* Submit */}
+                <div className="pt-4 border-t border-stone-200 flex justify-end space-x-3">
+                  <button
+                    type="button"
+                    onClick={handleResetProductForm}
+                    className="py-2.5 px-4 rounded-xl border border-stone-300 text-stone-700 font-semibold"
+                  >
+                    Reset
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={formSaving}
+                    className="py-2.5 px-6 rounded-xl bg-red-700 hover:bg-red-800 disabled:bg-stone-300 text-white font-bold flex items-center space-x-2 shadow-md cursor-pointer"
+                  >
+                    {formSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                    <span>{editingProduct ? 'Update Product' : 'Create & Save Product'}</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {/* TAB: ORDERS & PAYMENTS */}
+          {currentTab === 'orders' && (
+            <div className="space-y-6 animate-in fade-in">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-xl font-extrabold text-stone-900 font-sans">
+                    Order Transactions & Verification Log
+                  </h2>
+                  <p className="text-xs text-stone-500">
+                    Track Razorpay payment IDs, student phone numbers, and download verification records.
+                  </p>
+                </div>
+
+                <div className="relative max-w-xs">
+                  <input
+                    type="text"
+                    value={orderSearch}
+                    onChange={(e) => setOrderSearch(e.target.value)}
+                    placeholder="Search by student, order ID, phone..."
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl pl-8 pr-3 py-1.5 text-xs text-stone-900 focus:outline-none focus:border-red-600"
+                  />
+                  <Search className="w-3.5 h-3.5 text-stone-400 absolute left-2.5 top-2" />
+                </div>
+              </div>
+
+              <div className="border border-stone-200 rounded-2xl overflow-hidden">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-stone-50 border-b border-stone-200 text-stone-500 uppercase text-[10px] font-bold">
+                    <tr>
+                      <th className="py-3 px-4">Order & Razorpay ID</th>
+                      <th className="py-3 px-4">Student & Contact</th>
+                      <th className="py-3 px-4">Product Snapshot</th>
+                      <th className="py-3 px-4">Amount</th>
+                      <th className="py-3 px-4">Status</th>
+                      <th className="py-3 px-4">Created Date</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-stone-100">
+                    {orders
+                      .filter((o) =>
+                        o.id.toLowerCase().includes(orderSearch.toLowerCase()) ||
+                        o.studentName?.toLowerCase().includes(orderSearch.toLowerCase()) ||
+                        o.studentPhone?.includes(orderSearch) ||
+                        o.studentEmail?.toLowerCase().includes(orderSearch.toLowerCase())
+                      )
+                      .map((o) => (
+                        <tr key={o.id} className="hover:bg-stone-50/50">
+                          <td className="py-3 px-4 font-mono">
+                            <p className="font-bold text-stone-900">{o.id}</p>
+                            {o.razorpayPaymentId && (
+                              <p className="text-[10px] text-stone-400 truncate max-w-[140px]">
+                                {o.razorpayPaymentId}
+                              </p>
+                            )}
+                          </td>
+                          <td className="py-3 px-4">
+                            <p className="font-bold text-stone-900">{o.studentName}</p>
+                            <p className="text-[11px] text-stone-500 font-mono">📱 +91 {o.studentPhone}</p>
+                            <p className="text-[10px] text-stone-400">{o.studentEmail}</p>
+                          </td>
+                          <td className="py-3 px-4 max-w-[220px]">
+                            <p className="font-medium text-stone-800 truncate" title={o.productTitleSnapshot}>
+                              {o.productTitleSnapshot}
+                            </p>
+                          </td>
+                          <td className="py-3 px-4 font-bold text-stone-900">
+                            ₹{o.amountPaise / 100}
+                          </td>
+                          <td className="py-3 px-4">
+                            <span
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                                o.status === 'paid'
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : o.status === 'pending'
+                                  ? 'bg-amber-100 text-amber-800'
+                                  : 'bg-red-100 text-red-800'
+                              }`}
+                            >
+                              {o.status}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-stone-500 text-[11px]">
+                            {new Date(o.createdAt).toLocaleDateString()}
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* TAB: REGISTERED STUDENTS */}
+          {currentTab === 'students' && (
+            <div className="space-y-6 animate-in fade-in">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-xl font-extrabold text-stone-900 font-sans">
+                    Registered Students Database
+                  </h2>
+                  <p className="text-xs text-stone-500">
+                    Official student accounts with validated Indian mobile contacts.
+                  </p>
+                </div>
+
+                <div className="relative max-w-xs">
+                  <input
+                    type="text"
+                    value={studentSearch}
+                    onChange={(e) => setStudentSearch(e.target.value)}
+                    placeholder="Search by student name or phone..."
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl pl-8 pr-3 py-1.5 text-xs text-stone-900 focus:outline-none focus:border-red-600"
+                  />
+                  <Search className="w-3.5 h-3.5 text-stone-400 absolute left-2.5 top-2" />
+                </div>
+              </div>
+
+              <div className="border border-stone-200 rounded-2xl overflow-hidden">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-stone-50 border-b border-stone-200 text-stone-500 uppercase text-[10px] font-bold">
+                    <tr>
+                      <th className="py-3 px-4">Student Name</th>
+                      <th className="py-3 px-4">Mobile Number</th>
+                      <th className="py-3 px-4">Email</th>
+                      <th className="py-3 px-4">Role</th>
+                      <th className="py-3 px-4">Joined Date</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-stone-100">
+                    {students
+                      .filter((s) =>
+                        s.displayName?.toLowerCase().includes(studentSearch.toLowerCase()) ||
+                        s.phoneNumber?.includes(studentSearch) ||
+                        s.email?.toLowerCase().includes(studentSearch.toLowerCase())
+                      )
+                      .map((s) => (
+                        <tr key={s.uid} className="hover:bg-stone-50/50">
+                          <td className="py-3 px-4 font-bold text-stone-900">
+                            {s.displayName || 'Student'}
+                          </td>
+                          <td className="py-3 px-4 font-mono font-medium text-stone-700">
+                            {s.phoneNumber ? `+91 ${s.phoneNumber}` : '—'}
+                          </td>
+                          <td className="py-3 px-4 text-stone-600">{s.email}</td>
+                          <td className="py-3 px-4">
+                            <span
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                                s.role === 'admin'
+                                  ? 'bg-red-100 text-red-800'
+                                  : 'bg-stone-100 text-stone-700'
+                              }`}
+                            >
+                              {s.role || 'student'}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-stone-500 text-[11px]">
+                            {s.createdAt ? new Date(s.createdAt).toLocaleDateString() : 'Active'}
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* TAB: BANNER MANAGEMENT */}
+          {currentTab === 'banner' && (
+            <div className="space-y-6 animate-in fade-in max-w-2xl">
+              <div>
+                <h2 className="text-xl font-extrabold text-stone-900 font-sans">
+                  Promotional Banner Management
+                </h2>
+                <p className="text-xs text-stone-500">
+                  Updates immediately appear on the student homepage without rebuilding or redeploying the app.
+                </p>
+              </div>
+
+              <form onSubmit={handleSaveBanner} className="space-y-4 text-xs">
+                <label className="flex items-center space-x-2 cursor-pointer bg-stone-50 p-3 rounded-xl border border-stone-200">
+                  <input
+                    type="checkbox"
+                    checked={bannerEnabled}
+                    onChange={(e) => setBannerEnabled(e.target.checked)}
+                    className="w-4 h-4 text-red-600 rounded"
+                  />
+                  <span className="font-bold text-stone-900">
+                    Enable Promotional Banner on Homepage
+                  </span>
+                </label>
+
+                <div>
+                  <label className="block text-stone-700 font-semibold mb-1">Badge Tag</label>
+                  <input
+                    type="text"
+                    value={bannerBadge}
+                    onChange={(e) => setBannerBadge(e.target.value)}
+                    placeholder="e.g. HSLC 2027 Admission & Notes Open"
+                    className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-stone-900 focus:bg-white focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-stone-700 font-semibold mb-1">Banner Title</label>
+                  <input
+                    type="text"
+                    required
+                    value={bannerTitle}
+                    onChange={(e) => setBannerTitle(e.target.value)}
+                    placeholder="e.g. HSLC 2027 Special Preparation Notes"
+                    className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-stone-900 focus:bg-white focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-stone-700 font-semibold mb-1">Banner Subtitle</label>
+                  <textarea
+                    rows={2}
+                    value={bannerSubtitle}
+                    onChange={(e) => setBannerSubtitle(e.target.value)}
+                    placeholder="High-scoring Chapter-wise Notes & Solved Papers in Assamese and English Mediums."
+                    className="w-full bg-stone-50 border border-stone-300 rounded-xl p-3 text-stone-900 focus:bg-white focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-stone-700 font-semibold mb-1">Call to Action Button Text</label>
+                  <input
+                    type="text"
+                    value={bannerCta}
+                    onChange={(e) => setBannerCta(e.target.value)}
+                    placeholder="Explore Notes"
+                    className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-stone-900 focus:bg-white focus:outline-none"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={bannerSaving}
+                  className="py-2.5 px-6 rounded-xl bg-red-700 hover:bg-red-800 disabled:bg-stone-300 text-white font-bold flex items-center space-x-2 shadow-sm cursor-pointer"
+                >
+                  {bannerSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  <span>Save & Publish Banner</span>
+                </button>
+              </form>
+            </div>
+          )}
+
+          {/* TAB: SOCIAL LINKS */}
+          {currentTab === 'social' && (
+            <div className="space-y-6 animate-in fade-in max-w-2xl">
+              <div>
+                <h2 className="text-xl font-extrabold text-stone-900 font-sans">
+                  Official Social & Student Support Links
+                </h2>
+                <p className="text-xs text-stone-500">
+                  Only configured links are displayed on the student store and footer.
+                </p>
+              </div>
+
+              <form onSubmit={handleSaveSocial} className="space-y-4 text-xs">
+                <div>
+                  <label className="block text-stone-700 font-semibold mb-1">
+                    WhatsApp Number (Indian format without +)
+                  </label>
+                  <input
+                    type="text"
+                    value={socialWhatsapp}
+                    onChange={(e) => setSocialWhatsapp(e.target.value)}
+                    placeholder="919864012345"
+                    className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-stone-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-stone-700 font-semibold mb-1">Telegram Channel URL</label>
+                  <input
+                    type="url"
+                    value={socialTelegram}
+                    onChange={(e) => setSocialTelegram(e.target.value)}
+                    placeholder="https://t.me/mkr_academy_official"
+                    className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-stone-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-stone-700 font-semibold mb-1">YouTube Channel URL</label>
+                  <input
+                    type="url"
+                    value={socialYoutube}
+                    onChange={(e) => setSocialYoutube(e.target.value)}
+                    placeholder="https://youtube.com/@mkr_academy"
+                    className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-stone-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-stone-700 font-semibold mb-1">Instagram Profile URL</label>
+                  <input
+                    type="url"
+                    value={socialInstagram}
+                    onChange={(e) => setSocialInstagram(e.target.value)}
+                    placeholder="https://instagram.com/mkr_academy"
+                    className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-stone-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-stone-700 font-semibold mb-1">Official Support Email</label>
+                  <input
+                    type="email"
+                    value={socialEmail}
+                    onChange={(e) => setSocialEmail(e.target.value)}
+                    placeholder="muktar9085mkr@gmail.com"
+                    className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-stone-900"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={socialSaving}
+                  className="py-2.5 px-6 rounded-xl bg-red-700 hover:bg-red-800 disabled:bg-stone-300 text-white font-bold flex items-center space-x-2 shadow-sm cursor-pointer"
+                >
+                  {socialSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  <span>Save Social Settings</span>
+                </button>
+              </form>
+            </div>
+          )}
+
+          {/* TAB: PAYMENT CONFIG */}
+          {currentTab === 'payment-config' && (
+            <div className="space-y-6 animate-in fade-in max-w-2xl">
+              <div>
+                <h2 className="text-xl font-extrabold text-stone-900 font-sans">
+                  Razorpay Payment Gateway Settings
+                </h2>
+                <p className="text-xs text-stone-500">
+                  Secure server-side payment configuration and webhook instructions.
+                </p>
+              </div>
+
+              <div className="space-y-4 text-xs">
+                {/* Status Box */}
+                <div className="bg-stone-50 p-4 rounded-2xl border border-stone-200 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-stone-700">Gateway Status:</span>
+                    <span className="bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded uppercase text-[10px]">
+                      Active & Configured (Test / Live Safe)
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-stone-700">Supported Currencies:</span>
+                    <span className="font-mono text-stone-800">INR (Indian Rupee - ₹)</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-stone-700">Supported Methods:</span>
+                    <span className="text-stone-800">UPI, Google Pay, PhonePe, Paytm, RuPay, Visa, NetBanking</span>
+                  </div>
+                </div>
+
+                {/* Instructions */}
+                <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-amber-900 space-y-2">
+                  <h4 className="font-bold text-xs uppercase tracking-wider text-amber-950 flex items-center space-x-1.5">
+                    <AlertCircle className="w-4 h-4 text-amber-700" />
+                    <span>How to set Live Razorpay Keys in AI Studio</span>
+                  </h4>
+                  <ol className="list-decimal pl-4 space-y-1.5 text-xs text-amber-900/90 leading-relaxed">
+                    <li>Log into your <strong>Razorpay Dashboard</strong> (https://dashboard.razorpay.com).</li>
+                    <li>Navigate to <strong>Account & Settings</strong> &gt; <strong>API Keys</strong>.</li>
+                    <li>Generate your Key ID (<code className="font-mono bg-amber-100 px-1 py-0.5 rounded">rzp_live_...</code>) and Key Secret.</li>
+                    <li>Set <code className="font-mono bg-amber-100 px-1 py-0.5 rounded">RAZORPAY_KEY_ID</code> and <code className="font-mono bg-amber-100 px-1 py-0.5 rounded">RAZORPAY_KEY_SECRET</code> in the project's Secrets panel.</li>
+                    <li>Configure the Webhook URL: <code className="font-mono bg-amber-100 px-1 py-0.5 rounded">https://&lt;your-app-domain&gt;/api/payment/webhook</code>.</li>
+                  </ol>
+                </div>
+              </div>
+            </div>
+          )}
+        </main>
+      </div>
+    </div>
+  );
+};
