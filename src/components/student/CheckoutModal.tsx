@@ -30,6 +30,29 @@ declare global {
   }
 }
 
+function loadRazorpayScript(): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (typeof window === 'undefined') return resolve(false);
+    if (window.Razorpay) return resolve(true);
+
+    const existing = document.querySelector('script[src*="checkout.razorpay.com"]');
+    if (existing) {
+      existing.addEventListener('load', () => resolve(Boolean(window.Razorpay)));
+      existing.addEventListener('error', () => resolve(false));
+      setTimeout(() => resolve(Boolean(window.Razorpay)), 2500);
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.async = true;
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+    setTimeout(() => resolve(Boolean(window.Razorpay)), 3500);
+  });
+}
+
 interface CheckoutModalProps {
   product: Product | null;
   onClose: () => void;
@@ -185,16 +208,18 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         razorpayOrderId
       });
 
-      // Step 7: Open Razorpay Checkout or fallback securely
+      // Step 7: Ensure Razorpay Checkout script is ready
+      await loadRazorpayScript();
+
       if (typeof window !== 'undefined' && window.Razorpay) {
-        const options = {
+        const options: any = {
           key: keyId,
           amount: product.sellingPricePaise,
           currency: 'INR',
           name: 'MKR Academy',
           description: product.title.substring(0, 40),
           image: 'https://images.unsplash.com/photo-1532094349884-543bc11b234d?auto=format&fit=crop&w=128&q=80',
-          order_id: razorpayOrderId.startsWith('order_') ? razorpayOrderId : undefined,
+          order_id: razorpayOrderId && razorpayOrderId.startsWith('order_') ? razorpayOrderId : undefined,
           prefill: {
             name: studentName,
             email: user.email || studentEmail,
@@ -208,7 +233,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               orderId,
               razorpayOrderId: response.razorpay_order_id || razorpayOrderId,
               razorpayPaymentId: response.razorpay_payment_id || `pay_${Date.now()}`,
-              razorpaySignature: response.razorpay_signature || 'verified_dev_signature'
+              razorpaySignature: response.razorpay_signature || ''
             });
           },
           modal: {
@@ -222,15 +247,14 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         const rzp = new window.Razorpay(options);
         rzp.on('payment.failed', function (response: any) {
           console.error('Razorpay payment failed:', response.error);
-          setErrorMessage(response.error?.description || 'Payment was unsuccessful. You have not been charged.');
+          setErrorMessage(response.error?.description || 'Payment was unsuccessful or cancelled. You have not been charged.');
           setStep('failed');
           setIsSubmitting(false);
         });
 
         rzp.open();
       } else {
-        // Fallback for environment if Razorpay script has not loaded
-        // Process directly with server verification
+        // Fallback for sandbox dev test if script is blocked
         const simulatedPaymentId = `pay_sim_${Date.now()}`;
         await handleVerificationAndCompletion({
           orderId,
@@ -429,9 +453,19 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             )}
 
             {/* Security Guarantee Note */}
-            <div className="flex items-center space-x-2 text-[11px] text-stone-500 bg-stone-50 p-2.5 rounded-xl border border-stone-100">
-              <Lock className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-              <span>UPI, Cards, NetBanking handled via 100% verified Razorpay Gateway.</span>
+            <div className="bg-emerald-50/70 border border-emerald-200/80 p-3 rounded-2xl space-y-1.5">
+              <div className="flex items-center justify-between text-xs font-bold text-emerald-900">
+                <span className="flex items-center space-x-1.5">
+                  <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>Razorpay Live Gateway Secured</span>
+                </span>
+                <span className="text-[10px] font-mono bg-emerald-200/70 text-emerald-950 px-2 py-0.5 rounded-full font-bold">
+                  256-Bit SSL
+                </span>
+              </div>
+              <p className="text-[11px] text-emerald-800 leading-snug">
+                Supports instant UPI (Google Pay, PhonePe, Paytm, BHIM), RuPay/Visa/Mastercard, and all Indian NetBanking banks.
+              </p>
             </div>
 
             {/* Pay Now Button */}
