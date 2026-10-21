@@ -53,6 +53,11 @@ export const HomeView: React.FC<HomeViewProps> = ({
   const publishedProducts = products.filter((p) => p.published);
 
   // Curated lists based on real database attributes
+  const freeNotes = publishedProducts.filter(
+    (p) => p.isFree === true || p.sellingPricePaise === 0 || (p.category as any) === 'Free'
+  ).sort(
+    (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+  );
   const hslc2027Notes = publishedProducts.filter((p) => p.classLevel === 'HSLC 2027');
   const featuredNotes = publishedProducts.filter((p) => p.featured || p.category === 'Premium');
   const latestNotes = [...publishedProducts].sort(
@@ -135,6 +140,26 @@ export const HomeView: React.FC<HomeViewProps> = ({
               Search
             </button>
           </form>
+
+          {/* Quick CTA Actions */}
+          <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+            <button
+              onClick={() => onNavigate('free-pdfs')}
+              className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs flex items-center space-x-2 shadow-lg shadow-emerald-950/40 transition-all cursor-pointer"
+            >
+              <Sparkles className="w-4 h-4 text-emerald-200" />
+              <span>Explore Free PDFs & Notes</span>
+              <span className="bg-emerald-800 text-white text-[10px] px-1.5 py-0.5 rounded-full font-black">
+                FREE
+              </span>
+            </button>
+            <button
+              onClick={() => onNavigate('browse')}
+              className="px-5 py-2.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 hover:text-white font-bold text-xs border border-stone-700 transition-all cursor-pointer"
+            >
+              <span>Browse All Paid Notes</span>
+            </button>
+          </div>
 
           {/* Highlights / Features Banner */}
           <div className="pt-4 grid grid-cols-2 md:grid-cols-4 gap-3 max-w-4xl mx-auto text-left text-xs">
@@ -331,6 +356,47 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                   {hslc2027Notes.slice(0, 3).map((p) => (
+                    <ProductCard
+                      key={p.id}
+                      product={p}
+                      isPurchased={purchasedProductIds.has(p.id)}
+                      onViewDetails={onViewDetails}
+                      onBuyNow={onBuyNow}
+                      onDownloadNotes={onDownloadNotes}
+                    />
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* 100% Free PDFs Section (Newest at Top) */}
+            {freeNotes.length > 0 && (
+              <section className="space-y-6 bg-gradient-to-br from-emerald-50/80 to-white p-6 sm:p-8 rounded-3xl border border-emerald-200 shadow-xs">
+                <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
+                  <div>
+                    <div className="inline-flex items-center space-x-1.5 bg-emerald-100 text-emerald-800 text-[11px] font-bold px-2.5 py-0.5 rounded-md uppercase">
+                      <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>100% Free Study Materials</span>
+                    </div>
+                    <h2 className="text-xl sm:text-2xl font-extrabold text-stone-900 font-sans mt-1">
+                      Free PDF Notes (বিনামূলীয়া অধ্যয়ন সামগ্ৰী)
+                    </h2>
+                    <p className="text-xs text-stone-600 mt-0.5">
+                      Newest PDFs are at the top. Open directly in Google Drive or download free!
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={() => onNavigate('free-pdfs')}
+                    className="text-xs font-bold text-white bg-emerald-700 hover:bg-emerald-800 px-4 py-2.5 rounded-xl flex items-center space-x-1.5 shadow-sm transition-all cursor-pointer self-start sm:self-auto"
+                  >
+                    <span>View All {freeNotes.length} Free Notes</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {freeNotes.slice(0, 3).map((p) => (
                     <ProductCard
                       key={p.id}
                       product={p}

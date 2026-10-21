@@ -12,7 +12,8 @@ import {
   Loader2,
   ArrowRight,
   RefreshCw,
-  HelpCircle
+  HelpCircle,
+  ExternalLink
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Product, Order, Purchase } from '../../types';
@@ -302,6 +303,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         productId: product.id,
         productTitle: product.title,
         coverImagePath: product.coverImagePath,
+        driveFileLink: product.driveFileLink || '',
+        pdfStoragePath: product.pdfStoragePath || '',
         razorpayPaymentId: params.razorpayPaymentId,
         razorpayOrderId: params.razorpayOrderId
       });
@@ -528,18 +531,34 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
             {/* Actions */}
             <div className="space-y-2 pt-2">
+              {product.driveFileLink && (
+                <a
+                  href={product.driveFileLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full py-3.5 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-sm shadow-md flex items-center justify-center space-x-2 transition-all"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  <span>Open in Google Drive (Direct Access)</span>
+                </a>
+              )}
+
               <a
                 href={`/api/notes/download/${completedPurchase?.id || 'sample'}`}
                 download={`MKR_Academy_${product.slug}.pdf`}
-                className="w-full py-3.5 px-4 rounded-xl bg-red-700 hover:bg-red-800 text-white font-bold text-sm shadow-md flex items-center justify-center space-x-2"
+                className={`w-full py-3 px-4 rounded-xl font-bold text-sm shadow-md flex items-center justify-center space-x-2 transition-all ${
+                  product.driveFileLink
+                    ? 'bg-stone-800 hover:bg-stone-900 text-white'
+                    : 'bg-red-700 hover:bg-red-800 text-white'
+                }`}
               >
                 <Download className="w-4 h-4" />
-                <span>Download Notes (PDF) Now</span>
+                <span>Download Notes (PDF)</span>
               </a>
 
               <button
                 onClick={onClose}
-                className="w-full py-2.5 px-4 rounded-xl border border-stone-300 font-semibold text-stone-700 text-xs hover:bg-stone-50"
+                className="w-full py-2.5 px-4 rounded-xl border border-stone-300 font-semibold text-stone-700 text-xs hover:bg-stone-50 cursor-pointer"
               >
                 Go to My Purchases
               </button>

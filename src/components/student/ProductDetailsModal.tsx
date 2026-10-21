@@ -74,6 +74,12 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
               <span className="bg-stone-800 text-stone-200 text-xs font-semibold px-3 py-1 rounded-full">
                 {product.subject}
               </span>
+              {product.driveFileLink && (
+                <span className="bg-blue-600 text-white text-xs font-bold px-2.5 py-1 rounded-full flex items-center space-x-1">
+                  <ExternalLink className="w-3 h-3" />
+                  <span>Google Drive File</span>
+                </span>
+              )}
               {discountPercent > 0 && (
                 <span className="bg-emerald-600 text-white text-xs font-bold px-2.5 py-1 rounded-full">
                   {discountPercent}% DISCOUNT
@@ -187,16 +193,23 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
         <div className="sticky bottom-0 bg-white border-t border-stone-200 p-4 sm:p-6 rounded-b-3xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-lg">
           <div className="flex items-baseline space-x-3 text-center sm:text-left">
             <div>
-              <span className="text-2xl sm:text-3xl font-extrabold text-stone-900 font-sans">
-                ₹{sellingPrice}
-              </span>
-              {originalPrice > sellingPrice && (
+              {product.isFree || sellingPrice === 0 ? (
+                <span className="text-2xl sm:text-3xl font-black text-emerald-700 font-sans flex items-center space-x-1.5">
+                  <span>FREE</span>
+                  <span className="text-xs font-bold text-emerald-800 bg-emerald-100 px-2.5 py-1 rounded-full uppercase">100% Free Note</span>
+                </span>
+              ) : (
+                <span className="text-2xl sm:text-3xl font-extrabold text-stone-900 font-sans">
+                  ₹{sellingPrice}
+                </span>
+              )}
+              {originalPrice > sellingPrice && !product.isFree && sellingPrice > 0 && (
                 <span className="ml-2 text-sm text-stone-400 line-through">
                   ₹{originalPrice}
                 </span>
               )}
             </div>
-            {discountPercent > 0 && (
+            {discountPercent > 0 && !product.isFree && sellingPrice > 0 && (
               <span className="text-xs font-bold text-emerald-700 bg-emerald-100 px-2.5 py-0.5 rounded-full">
                 Save ₹{originalPrice - sellingPrice} ({discountPercent}%)
               </span>
@@ -205,16 +218,51 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
 
           <div className="flex items-center space-x-3 w-full sm:w-auto">
             {isPurchased ? (
-              <button
-                onClick={() => {
-                  onClose();
-                  if (onDownloadNotes) onDownloadNotes(product);
-                }}
-                className="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-sm flex items-center justify-center space-x-2 shadow-md cursor-pointer"
-              >
-                <Download className="w-4 h-4" />
-                <span>Download Notes (PDF)</span>
-              </button>
+              product.driveFileLink ? (
+                <a
+                  href={product.driveFileLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-bold text-sm flex items-center justify-center space-x-2 shadow-md shadow-blue-800/20 cursor-pointer transition-all"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  <span>Open Drive PDF (Purchased)</span>
+                </a>
+              ) : (
+                <button
+                  onClick={() => {
+                    onClose();
+                    if (onDownloadNotes) onDownloadNotes(product);
+                  }}
+                  className="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-sm flex items-center justify-center space-x-2 shadow-md cursor-pointer"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Open Drive PDF</span>
+                </button>
+              )
+            ) : product.isFree || sellingPrice === 0 ? (
+              product.driveFileLink ? (
+                <a
+                  href={product.driveFileLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-sm flex items-center justify-center space-x-2 shadow-lg shadow-emerald-800/20 hover:shadow-xl transition-all cursor-pointer"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  <span>Open Free PDF in Google Drive</span>
+                </a>
+              ) : (
+                <button
+                  onClick={() => {
+                    onClose();
+                    if (onDownloadNotes) onDownloadNotes(product);
+                  }}
+                  className="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-sm flex items-center justify-center space-x-2 shadow-lg shadow-emerald-800/20 hover:shadow-xl transition-all cursor-pointer"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Access Free PDF</span>
+                </button>
+              )
             ) : (
               <button
                 onClick={() => {
@@ -224,7 +272,7 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
                 className="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-red-700 hover:bg-red-800 text-white font-bold text-sm flex items-center justify-center space-x-2 shadow-lg shadow-red-800/30 hover:shadow-xl transition-all cursor-pointer"
               >
                 <Download className="w-4 h-4" />
-                <span>Buy Now & Download PDF</span>
+                <span>Buy Now (₹{sellingPrice}) & Access Drive File</span>
               </button>
             )}
           </div>

@@ -9,7 +9,8 @@ import {
   X,
   LogOut,
   ChevronDown,
-  GraduationCap
+  GraduationCap,
+  Sparkles
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -141,6 +142,20 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               <span className="w-2 h-2 rounded-full bg-red-600 animate-pulse"></span>
               <span>HSLC 2027</span>
+            </button>
+            <button
+              onClick={() => onNavigate('free-pdfs')}
+              className={`px-3 py-2 rounded-lg text-sm font-bold flex items-center space-x-1.5 transition-colors cursor-pointer ${
+                currentView === 'free-pdfs'
+                  ? 'text-emerald-800 bg-emerald-100 shadow-xs'
+                  : 'text-emerald-700 hover:text-emerald-900 hover:bg-emerald-50'
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Free PDFs</span>
+              <span className="bg-emerald-600 text-white text-[10px] font-black px-1.5 py-0.2 rounded-full uppercase">
+                FREE
+              </span>
             </button>
             <button
               onClick={() => onNavigate('browse', { medium: 'Assamese Medium' })}
@@ -335,6 +350,20 @@ export const Navbar: React.FC<NavbarProps> = ({
               className="p-2.5 rounded-lg text-sm font-semibold bg-red-100 text-red-800"
             >
               HSLC 2027 Notes
+            </button>
+            <button
+              onClick={() => {
+                onNavigate('free-pdfs');
+                setMobileMenuOpen(false);
+              }}
+              className={`col-span-2 p-2.5 rounded-lg text-sm font-extrabold flex items-center justify-center space-x-2 border transition-colors ${
+                currentView === 'free-pdfs'
+                  ? 'bg-emerald-700 text-white border-emerald-700'
+                  : 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100'
+              }`}
+            >
+              <Sparkles className="w-4 h-4 text-emerald-500" />
+              <span>Free PDFs & Notes (100% Free • বিনামূল্যে)</span>
             </button>
             <button
               onClick={() => {

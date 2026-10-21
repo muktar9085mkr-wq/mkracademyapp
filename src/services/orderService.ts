@@ -98,6 +98,8 @@ export async function fulfillVerifiedPurchase(params: {
   coverImagePath: string;
   razorpayPaymentId: string;
   razorpayOrderId?: string;
+  driveFileLink?: string;
+  pdfStoragePath?: string;
 }): Promise<Purchase> {
   const now = new Date().toISOString();
   const purchaseId = `pur_${params.uid}_${params.productId}`.replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -108,6 +110,8 @@ export async function fulfillVerifiedPurchase(params: {
     orderId: params.orderId,
     productTitle: params.productTitle,
     coverImagePath: params.coverImagePath,
+    driveFileLink: params.driveFileLink || '',
+    pdfStoragePath: params.pdfStoragePath || '',
     entitlementStatus: 'active',
     purchasedAt: now,
     createdAt: now

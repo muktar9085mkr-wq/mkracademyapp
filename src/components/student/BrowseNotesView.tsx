@@ -48,7 +48,7 @@ export const BrowseNotesView: React.FC<BrowseNotesViewProps> = ({
   const subjects = ['All', 'General Science', 'Mathematics', 'Social Science', 'English', 'Assamese', 'Other Subjects'];
   const classes = ['All', 'HSLC 2027', 'Class 10', 'Class 9', 'Class 8', 'Class 7', 'Class 6'];
   const mediums = ['All', 'Assamese Medium', 'English Medium', 'Both Mediums'];
-  const categories = ['All', 'Premium', 'Normal', 'Budget Friendly'];
+  const categories = ['All', 'Free PDFs', 'Premium', 'Normal', 'Budget Friendly'];
   const tags = [
     'All',
     'Important Questions',
@@ -96,7 +96,11 @@ export const BrowseNotesView: React.FC<BrowseNotesViewProps> = ({
         }
 
         // Category filter
-        if (selectedCategory !== 'All' && p.category !== selectedCategory) {
+        if (selectedCategory === 'Free PDFs') {
+          if (!p.isFree && p.sellingPricePaise !== 0 && (p.category as any) !== 'Free') {
+            return false;
+          }
+        } else if (selectedCategory !== 'All' && p.category !== selectedCategory) {
           return false;
         }
 

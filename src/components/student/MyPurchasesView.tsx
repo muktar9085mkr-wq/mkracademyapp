@@ -26,6 +26,24 @@ interface MyPurchasesViewProps {
   onOpenAuth: () => void;
 }
 
+function getGoogleDriveEmbedUrl(url?: string): string | null {
+  if (!url) return null;
+  const match = url.match(/\/d\/([a-zA-Z0-9_-]+)/) || url.match(/id=([a-zA-Z0-9_-]+)/);
+  if (match && match[1]) {
+    return `https://drive.google.com/file/d/${match[1]}/preview`;
+  }
+  return null;
+}
+
+function getGoogleDriveDownloadUrl(url?: string): string | null {
+  if (!url) return null;
+  const match = url.match(/\/d\/([a-zA-Z0-9_-]+)/) || url.match(/id=([a-zA-Z0-9_-]+)/);
+  if (match && match[1]) {
+    return `https://drive.google.com/uc?export=download&id=${match[1]}`;
+  }
+  return null;
+}
+
 export const MyPurchasesView: React.FC<MyPurchasesViewProps> = ({
   onBrowseNotes,
   onOpenAuth
@@ -198,7 +216,19 @@ export const MyPurchasesView: React.FC<MyPurchasesViewProps> = ({
 
                 {/* Actions */}
                 <div className="p-4 sm:p-5 pt-0 border-t border-stone-100 space-y-2 mt-2">
-                  <div className="grid grid-cols-2 gap-2 pt-2">
+                  {purchase.driveFileLink ? (
+                    <a
+                      href={purchase.driveFileLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full py-2.5 px-3 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-extrabold text-xs flex items-center justify-center space-x-2 shadow-md shadow-blue-800/20 transition-all cursor-pointer"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                      <span>Open Note in Google Drive</span>
+                    </a>
+                  ) : null}
+
+                  <div className="grid grid-cols-2 gap-2 pt-1">
                     {/* In-App Reader */}
                     <button
                       onClick={() => setSelectedReaderPurchase(purchase)}
@@ -210,12 +240,13 @@ export const MyPurchasesView: React.FC<MyPurchasesViewProps> = ({
 
                     {/* PDF Download Direct */}
                     <a
-                      href={`/api/notes/download/${purchase.id}`}
-                      download={`MKR_Academy_${purchase.id}.pdf`}
-                      className="w-full py-2.5 px-3 rounded-xl bg-red-700 hover:bg-red-800 text-white font-bold text-xs flex items-center justify-center space-x-1.5 shadow-md shadow-red-800/20 transition-all cursor-pointer text-center"
+                      href={purchase.driveFileLink ? (getGoogleDriveDownloadUrl(purchase.driveFileLink) || purchase.driveFileLink) : `https://drive.google.com`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full py-2.5 px-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center justify-center space-x-1.5 shadow-md shadow-emerald-800/20 transition-all cursor-pointer text-center"
                     >
                       <Download className="w-3.5 h-3.5" />
-                      <span>Download PDF</span>
+                      <span>Download Drive</span>
                     </a>
                   </div>
                 </div>
@@ -240,9 +271,22 @@ export const MyPurchasesView: React.FC<MyPurchasesViewProps> = ({
               </div>
 
               <div className="flex items-center space-x-2 shrink-0">
+                {selectedReaderPurchase.driveFileLink && (
+                  <a
+                    href={selectedReaderPurchase.driveFileLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-semibold flex items-center space-x-1"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Google Drive</span>
+                  </a>
+                )}
                 <a
-                  href={`/api/notes/download/${selectedReaderPurchase.id}`}
-                  download
+                  href={selectedReaderPurchase.driveFileLink ? (getGoogleDriveDownloadUrl(selectedReaderPurchase.driveFileLink) || selectedReaderPurchase.driveFileLink) : `/api/notes/download/${selectedReaderPurchase.id}`}
+                  target={selectedReaderPurchase.driveFileLink ? '_blank' : undefined}
+                  rel={selectedReaderPurchase.driveFileLink ? 'noopener noreferrer' : undefined}
+                  download={!selectedReaderPurchase.driveFileLink}
                   className="px-3 py-1.5 bg-red-700 hover:bg-red-800 text-white rounded-lg text-xs font-semibold flex items-center space-x-1"
                 >
                   <Download className="w-3.5 h-3.5" />
@@ -250,59 +294,69 @@ export const MyPurchasesView: React.FC<MyPurchasesViewProps> = ({
                 </a>
                 <button
                   onClick={() => setSelectedReaderPurchase(null)}
-                  className="w-8 h-8 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-300 flex items-center justify-center"
+                  className="w-8 h-8 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-300 flex items-center justify-center cursor-pointer"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
             </div>
 
-            {/* Reader Canvas / Document Simulation */}
-            <div className="flex-1 bg-stone-950 p-4 sm:p-8 overflow-y-auto flex justify-center">
-              <div className="bg-white text-stone-900 rounded-xl max-w-2xl w-full min-h-[600px] p-8 sm:p-12 shadow-2xl space-y-6">
-                
-                {/* Note Document Header */}
-                <div className="border-b-2 border-red-700 pb-4 text-center space-y-1">
-                  <div className="inline-block bg-red-700 text-white text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded">
-                    Official Student Study Material
-                  </div>
-                  <h2 className="text-xl font-extrabold text-stone-950 font-sans">
-                    {selectedReaderPurchase.productTitle}
-                  </h2>
-                  <p className="text-xs text-stone-500">
-                    MKR Academy • Quality Notes • Better Preparation • Better Results
-                  </p>
+            {/* Reader Canvas / Document View */}
+            <div className="flex-1 bg-stone-950 p-2 sm:p-4 overflow-y-auto flex justify-center">
+              {selectedReaderPurchase.driveFileLink && getGoogleDriveEmbedUrl(selectedReaderPurchase.driveFileLink) ? (
+                <div className="w-full h-full min-h-[500px] flex flex-col rounded-2xl overflow-hidden border border-stone-800 bg-stone-900">
+                  <iframe
+                    src={getGoogleDriveEmbedUrl(selectedReaderPurchase.driveFileLink)!}
+                    title={selectedReaderPurchase.productTitle}
+                    className="w-full h-full flex-1 border-0 rounded-2xl"
+                    allow="autoplay"
+                  />
                 </div>
-
-                {/* Document Security License Strip */}
-                <div className="bg-stone-50 border border-stone-200 p-3 rounded-lg text-xs text-stone-600 flex justify-between items-center">
-                  <span>Licensed to: <strong>{user?.displayName || user?.email}</strong></span>
-                  <span className="font-mono text-[11px] text-stone-400">Order #{selectedReaderPurchase.orderId}</span>
-                </div>
-
-                {/* Sample Content / Syllabus Preview */}
-                <div className="space-y-4 text-sm leading-relaxed text-stone-800">
-                  <h3 className="text-base font-bold text-red-800 border-l-4 border-red-700 pl-2">
-                    Chapter 1: Key Concepts & Exam Revision Summary
-                  </h3>
-                  <p>
-                    This verified educational material has been compiled and reviewed under the curriculum standards of the Secondary Education Board of Assam (SEBA) and relevant state examination frameworks for HSLC 2027 and secondary classes.
-                  </p>
-                  
-                  <div className="bg-amber-50 p-4 rounded-xl border border-amber-200 text-xs space-y-2">
-                    <p className="font-bold text-amber-900">Important Board Exam Points:</p>
-                    <ul className="list-disc pl-5 space-y-1 text-amber-800">
-                      <li>Revise definitions, formula applications, and chemical equations daily.</li>
-                      <li>Diagrams must be neatly labelled using a sharp pencil.</li>
-                      <li>Solve all previous year question patterns included in the appendix.</li>
-                    </ul>
+              ) : (
+                <div className="bg-white text-stone-900 rounded-xl max-w-2xl w-full min-h-[600px] p-8 sm:p-12 shadow-2xl space-y-6">
+                  {/* Note Document Header */}
+                  <div className="border-b-2 border-red-700 pb-4 text-center space-y-1">
+                    <div className="inline-block bg-red-700 text-white text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded">
+                      Official Student Study Material
+                    </div>
+                    <h2 className="text-xl font-extrabold text-stone-950 font-sans">
+                      {selectedReaderPurchase.productTitle}
+                    </h2>
+                    <p className="text-xs text-stone-500">
+                      MKR Academy • Quality Notes • Better Preparation • Better Results
+                    </p>
                   </div>
 
-                  <p className="text-xs text-stone-500 italic pt-4">
-                    Full printable PDF with all chapters, diagrams, and question banks is ready for download above.
-                  </p>
+                  {/* Document Security License Strip */}
+                  <div className="bg-stone-50 border border-stone-200 p-3 rounded-lg text-xs text-stone-600 flex justify-between items-center">
+                    <span>Licensed to: <strong>{user?.displayName || user?.email}</strong></span>
+                    <span className="font-mono text-[11px] text-stone-400">Order #{selectedReaderPurchase.orderId}</span>
+                  </div>
+
+                  {/* Sample Content / Syllabus Preview */}
+                  <div className="space-y-4 text-sm leading-relaxed text-stone-800">
+                    <h3 className="text-base font-bold text-red-800 border-l-4 border-red-700 pl-2">
+                      Chapter 1: Key Concepts & Exam Revision Summary
+                    </h3>
+                    <p>
+                      This verified educational material has been compiled and reviewed under the curriculum standards of the Secondary Education Board of Assam (SEBA) and relevant state examination frameworks for HSLC 2027 and secondary classes.
+                    </p>
+                    
+                    <div className="bg-amber-50 p-4 rounded-xl border border-amber-200 text-xs space-y-2">
+                      <p className="font-bold text-amber-900">Important Board Exam Points:</p>
+                      <ul className="list-disc pl-5 space-y-1 text-amber-800">
+                        <li>Revise definitions, formula applications, and chemical equations daily.</li>
+                        <li>Diagrams must be neatly labelled using a sharp pencil.</li>
+                        <li>Solve all previous year question patterns included in the appendix.</li>
+                      </ul>
+                    </div>
+
+                    <p className="text-xs text-stone-500 italic pt-4">
+                      Full printable PDF with all chapters, diagrams, and question banks is ready for download above.
+                    </p>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
         </div>

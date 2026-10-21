@@ -14,6 +14,7 @@ import { Navbar } from './components/common/Navbar';
 import { Footer } from './components/common/Footer';
 import { HomeView } from './components/student/HomeView';
 import { BrowseNotesView } from './components/student/BrowseNotesView';
+import { FreePdfsView } from './components/student/FreePdfsView';
 import { MyPurchasesView } from './components/student/MyPurchasesView';
 import { ProductDetailsModal } from './components/student/ProductDetailsModal';
 import { CheckoutModal } from './components/student/CheckoutModal';
@@ -26,7 +27,7 @@ function AppContent() {
   const { user, isAdmin } = useAuth();
 
   // Navigation State
-  const [currentView, setCurrentView] = useState<'home' | 'browse' | 'purchases' | 'admin'>('home');
+  const [currentView, setCurrentView] = useState<'home' | 'browse' | 'free-pdfs' | 'purchases' | 'admin'>('home');
   const [browseFilters, setBrowseFilters] = useState<any>({});
 
   // Global Data
@@ -92,7 +93,9 @@ function AppContent() {
       return;
     }
 
-    if (view === 'browse') {
+    if (view === 'free-pdfs') {
+      setCurrentView('free-pdfs');
+    } else if (view === 'browse') {
       setBrowseFilters(filterParam || {});
       setCurrentView('browse');
     } else if (view === 'purchases') {
@@ -113,9 +116,15 @@ function AppContent() {
   };
 
   const handleDownloadNotes = (product: Product) => {
+    // Har EK PDF student kharidne ke bad actual Google Drive file link hi open hoga
     const purchase = purchases.find((p) => p.productId === product.id);
-    const purchaseId = purchase ? purchase.id : `pur_${user?.uid || 'temp'}_${product.id}`;
-    window.location.href = `/api/notes/download/${purchaseId}`;
+    const driveUrl = product.driveFileLink || purchase?.driveFileLink;
+    if (driveUrl) {
+      window.open(driveUrl, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    // Fallback: If no direct drive link stored, redirect to Google Drive
+    window.open('https://drive.google.com', '_blank');
   };
 
   const handleExecuteSearch = () => {
@@ -170,6 +179,12 @@ function AppContent() {
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
             onExecuteSearch={handleExecuteSearch}
+          />
+        ) : currentView === 'free-pdfs' ? (
+          <FreePdfsView
+            products={products}
+            onViewDetails={(prod) => setSelectedProduct(prod)}
+            onNavigateToAdmin={() => handleNavigate('admin')}
           />
         ) : currentView === 'browse' ? (
           <BrowseNotesView

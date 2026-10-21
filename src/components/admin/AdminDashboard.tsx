@@ -90,15 +90,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
   const [prodTags, setProdTags] = useState<string>('Important Questions, Chapter-wise Notes');
   const [prodChapters, setProdChapters] = useState<string>('');
   const [prodCoverUrl, setProdCoverUrl] = useState('');
+  const [prodDriveLink, setProdDriveLink] = useState('');
   const [prodPdfPath, setProdPdfPath] = useState('');
+  const [prodPdfFileName, setProdPdfFileName] = useState('');
   const [prodFileType, setProdFileType] = useState('PDF Document');
   const [prodPageCount, setProdPageCount] = useState<number>(100);
   const [prodOriginalPrice, setProdOriginalPrice] = useState<number>(199);
   const [prodSellingPrice, setProdSellingPrice] = useState<number>(99);
+  const [prodIsFree, setProdIsFree] = useState(false);
   const [prodFeatured, setProdFeatured] = useState(false);
   const [prodPublished, setProdPublished] = useState(true);
   const [formSaving, setFormSaving] = useState(false);
   const [formMessage, setFormMessage] = useState<string | null>(null);
+
+  // Quick Price Edit Modal State (Edit price in paise / rupees anytime)
+  const [quickPriceModalProduct, setQuickPriceModalProduct] = useState<Product | null>(null);
+  const [quickSellingPrice, setQuickSellingPrice] = useState<number>(0);
+  const [quickOriginalPrice, setQuickOriginalPrice] = useState<number>(0);
+  const [quickPriceSaving, setQuickPriceSaving] = useState(false);
+  const [quickPriceMessage, setQuickPriceMessage] = useState<string | null>(null);
 
   // Banner State
   const [bannerEnabled, setBannerEnabled] = useState(true);
@@ -139,7 +149,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
   const [copiedWebhook, setCopiedWebhook] = useState(false);
 
   // Revenue Analytics View States
-  const [revenueViewTab, setRevenueViewTab] = useState<'monthly' | 'yearly'>('monthly');
+  const [revenueViewTab, setRevenueViewTab] = useState<'monthly' | 'yearly' | 'product'>('monthly');
   const [revenueYearFilter, setRevenueYearFilter] = useState<string>('all');
   const [orderYearFilter, setOrderYearFilter] = useState<string>('all');
   const [orderMonthFilter, setOrderMonthFilter] = useState<string>('all');
@@ -394,31 +404,101 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
     return matchesSearch && matchesStatus && matchesYear && matchesMonth;
   });
 
+  // Product-wise revenue stats
+  const productStatsMap = new Map<string, {
+    productId: string;
+    productTitle: string;
+    orderCount: number;
+    revenue: number;
+  }>();
+
+  verifiedPaidOrders.forEach((o) => {
+    const pId = o.productId || 'unknown';
+    const title = o.productTitleSnapshot || 'Study Notes';
+    const existing = productStatsMap.get(pId) || {
+      productId: pId,
+      productTitle: title,
+      orderCount: 0,
+      revenue: 0
+    };
+    existing.orderCount += 1;
+    existing.revenue += (o.amountPaise || 0) / 100;
+    productStatsMap.set(pId, existing);
+  });
+
+  const productBreakdown = Array.from(productStatsMap.values()).sort((a, b) => b.revenue - a.revenue);
+
   const filteredOrdersRevenue = filteredOrdersList
     .filter((o) => o.status === 'paid')
     .reduce((sum, o) => sum + (o.amountPaise || 0), 0) / 100;
+
+  // Open Quick Price Editor (Paise & Rupees)
+  const openQuickPriceEdit = (p: Product) => {
+    setQuickPriceModalProduct(p);
+    setQuickSellingPrice(p.sellingPricePaise / 100);
+    setQuickOriginalPrice(p.originalPricePaise / 100);
+    setQuickPriceMessage(null);
+  };
+
+  const handleSaveQuickPrice = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quickPriceModalProduct) return;
+    setQuickPriceSaving(true);
+    setQuickPriceMessage(null);
+    try {
+      const sellingPaise = Math.round(Number(quickSellingPrice) * 100);
+      const originalPaise = Math.round(Number(quickOriginalPrice) * 100);
+
+      await updateProduct(quickPriceModalProduct.id, {
+        sellingPricePaise: sellingPaise,
+        originalPricePaise: originalPaise
+      });
+
+      setProducts((prev) =>
+        prev.map((item) =>
+          item.id === quickPriceModalProduct.id
+            ? { ...item, sellingPricePaise: sellingPaise, originalPricePaise: originalPaise }
+            : item
+        )
+      );
+
+      setQuickPriceMessage(`Price successfully saved: ₹${quickSellingPrice} (${sellingPaise} paise)!`);
+      setTimeout(() => {
+        setQuickPriceModalProduct(null);
+        setQuickPriceMessage(null);
+      }, 1000);
+    } catch (err: any) {
+      setQuickPriceMessage(err.message || 'Failed to update price');
+    } finally {
+      setQuickPriceSaving(false);
+    }
+  };
 
   const handleEditClick = (p: Product) => {
     setEditingProduct(p);
     setProdTitle(p.title);
     setProdSlug(p.slug);
-    setProdShortDesc(p.shortDescription);
-    setProdDesc(p.description);
-    setProdSubject(p.subject);
-    setProdClass(p.classLevel);
-    setProdExamTarget(p.examTarget);
-    setProdMedium(p.medium);
-    setProdCategory(p.category);
+    setProdShortDesc(p.shortDescription || '');
+    setProdDesc(p.description || '');
+    setProdSubject(p.subject || 'General Science');
+    setProdClass(p.classLevel || 'HSLC 2027');
+    setProdExamTarget(p.examTarget || 'HSLC 2027 Board Exam');
+    setProdMedium(p.medium || 'Assamese Medium');
+    setProdCategory(p.category || 'Normal');
     setProdTags(p.tags?.join(', ') || '');
     setProdChapters(p.chapters?.join('\n') || '');
-    setProdCoverUrl(p.coverImagePath);
+    setProdCoverUrl(p.coverImagePath || '');
+    setProdDriveLink(p.driveFileLink || '');
     setProdPdfPath(p.pdfStoragePath || '');
+    setProdPdfFileName(p.pdfFileName || '');
     setProdFileType(p.fileType || 'PDF Document');
     setProdPageCount(p.pageCount || 100);
     setProdOriginalPrice(p.originalPricePaise / 100);
     setProdSellingPrice(p.sellingPricePaise / 100);
-    setProdFeatured(p.featured);
-    setProdPublished(p.published);
+    setProdIsFree(p.isFree || p.sellingPricePaise === 0);
+    setProdFeatured(p.featured || false);
+    setProdPublished(p.published !== false);
+    setFormMessage(null);
     setCurrentTab('add-product');
   };
 
@@ -436,11 +516,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
     setProdTags('Important Questions, Chapter-wise Notes');
     setProdChapters('');
     setProdCoverUrl('');
+    setProdDriveLink('');
     setProdPdfPath('');
+    setProdPdfFileName('');
     setProdFileType('PDF Document');
     setProdPageCount(100);
     setProdOriginalPrice(199);
     setProdSellingPrice(99);
+    setProdIsFree(false);
     setProdFeatured(false);
     setProdPublished(true);
     setFormMessage(null);
@@ -460,34 +543,37 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
       const chaptersArray = prodChapters.split('\n').map((c) => c.trim()).filter(Boolean);
       const generatedSlug = prodSlug.trim() || prodTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 
-      const payload = {
+      const payload: Partial<Product> = {
         title: prodTitle.trim(),
         slug: generatedSlug,
         shortDescription: prodShortDesc.trim(),
         description: prodDesc.trim(),
         subject: prodSubject,
         classLevel: prodClass,
-        examTarget: prodExamTarget,
+        examTarget: prodExamTarget.trim() || 'HSLC 2027 Board Exam',
         medium: prodMedium,
         category: prodCategory,
         tags: tagsArray,
         chapters: chaptersArray,
         coverImagePath: prodCoverUrl.trim() || 'https://images.unsplash.com/photo-1532094349884-543bc11b234d?auto=format&fit=crop&w=800&q=80',
-        pdfStoragePath: prodPdfPath.trim() || `notes/${generatedSlug}.pdf`,
-        fileType: prodFileType,
+        driveFileLink: prodDriveLink.trim(),
+        pdfStoragePath: prodPdfPath.trim() || (prodDriveLink.trim() ? '' : `notes/${generatedSlug}.pdf`),
+        pdfFileName: prodPdfFileName.trim() || `${generatedSlug}.pdf`,
+        fileType: prodFileType.trim() || 'PDF Document',
         pageCount: Number(prodPageCount) || 1,
         originalPricePaise: Math.round(Number(prodOriginalPrice) * 100),
         sellingPricePaise: Math.round(Number(prodSellingPrice) * 100),
+        isFree: prodIsFree || Number(prodSellingPrice) === 0,
         featured: prodFeatured,
         published: prodPublished
       };
 
       if (editingProduct) {
         await updateProduct(editingProduct.id, payload);
-        setFormMessage('Product updated successfully!');
+        setFormMessage('Product and all information updated successfully!');
       } else {
-        await addProduct(payload);
-        setFormMessage('New educational product created successfully!');
+        await addProduct(payload as any);
+        setFormMessage('New educational product created successfully with Google Drive link!');
       }
 
       const refreshed = await getAllProductsAdmin();
@@ -806,7 +892,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
                   </div>
 
                   <div className="flex items-center space-x-2">
-                    {/* View Switcher: Monthly vs Yearly */}
+                    {/* View Switcher: Monthly vs Yearly vs By Notes */}
                     <div className="bg-white p-1 rounded-xl border border-stone-200 flex items-center shadow-2xs">
                       <button
                         type="button"
@@ -829,6 +915,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
                         }`}
                       >
                         Yearly Revenue
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setRevenueViewTab('product')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          revenueViewTab === 'product'
+                            ? 'bg-red-700 text-white shadow-xs'
+                            : 'text-stone-600 hover:text-stone-900 hover:bg-stone-50'
+                        }`}
+                      >
+                        Revenue by Notes
                       </button>
                     </div>
 
@@ -1005,6 +1102,84 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
                     </div>
                   </div>
                 )}
+
+                {/* PRODUCT / NOTES VIEW CONTENT */}
+                {revenueViewTab === 'product' && (
+                  <div className="space-y-4">
+                    {/* Quick highlights */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                      <div className="bg-white p-3.5 rounded-2xl border border-stone-200 space-y-1">
+                        <span className="text-[10px] uppercase font-bold text-stone-400">Total Educational Notes</span>
+                        <p className="text-xl font-extrabold text-stone-900">{products.length} Products</p>
+                        <p className="text-[10px] text-stone-500">{products.filter((p) => p.published).length} published live</p>
+                      </div>
+                      <div className="bg-white p-3.5 rounded-2xl border border-stone-200 space-y-1">
+                        <span className="text-[10px] uppercase font-bold text-stone-400">Monetized Note Sets</span>
+                        <p className="text-xl font-extrabold text-emerald-700">{productBreakdown.length}</p>
+                        <p className="text-[10px] text-stone-500">With at least 1 verified purchase</p>
+                      </div>
+                      <div className="bg-white p-3.5 rounded-2xl border border-stone-200 space-y-1">
+                        <span className="text-[10px] uppercase font-bold text-stone-400">Top Grossing Subject</span>
+                        <p className="text-xl font-extrabold text-red-700 truncate">
+                          {productBreakdown.length > 0 ? productBreakdown[0].productTitle.split(' ')[0] + ' Notes' : 'General Science'}
+                        </p>
+                        <p className="text-[10px] text-stone-500">Highest student sales demand</p>
+                      </div>
+                    </div>
+
+                    {/* Product Revenue List */}
+                    <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden divide-y divide-stone-100">
+                      {productBreakdown.length === 0 ? (
+                        <div className="p-8 text-center text-xs text-stone-500">
+                          No verified sales recorded yet for notes. Once students purchase, real revenue per product will appear here.
+                        </div>
+                      ) : (
+                        productBreakdown.map((item, idx) => {
+                          const progressPercent = totalRevenue > 0 ? Math.min(100, Math.round((item.revenue / totalRevenue) * 100)) : 0;
+                          return (
+                            <div key={item.productId} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-stone-50/50 transition-colors">
+                              <div className="flex items-center space-x-3 min-w-[220px]">
+                                <div className="w-10 h-10 rounded-xl bg-red-100 text-red-800 flex items-center justify-center font-bold text-xs shrink-0 border border-red-200">
+                                  #{idx + 1}
+                                </div>
+                                <div>
+                                  <h4 className="font-bold text-sm text-stone-900 line-clamp-1">{item.productTitle}</h4>
+                                  <p className="text-[11px] text-stone-500">
+                                    {item.orderCount} student {item.orderCount === 1 ? 'purchase' : 'purchases'}
+                                  </p>
+                                </div>
+                              </div>
+
+                              {/* Progress bar visual */}
+                              <div className="flex-1 max-w-xs hidden md:block">
+                                <div className="flex justify-between text-[10px] text-stone-400 mb-1">
+                                  <span>Share of Total Revenue</span>
+                                  <span className="font-bold text-stone-700">{progressPercent}%</span>
+                                </div>
+                                <div className="w-full bg-stone-100 rounded-full h-2 overflow-hidden">
+                                  <div
+                                    className="bg-red-600 h-2 rounded-full transition-all duration-500"
+                                    style={{ width: `${Math.max(progressPercent, 5)}%` }}
+                                  ></div>
+                                </div>
+                              </div>
+
+                              {/* Revenue values */}
+                              <div className="text-left sm:text-right">
+                                <p className="text-base font-extrabold text-stone-900">
+                                  ₹{item.revenue.toLocaleString()}
+                                </p>
+                                <p className="text-[10px] text-stone-500">
+                                  Total collected earnings
+                                </p>
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Recent Orders Overview */}
@@ -1172,13 +1347,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
                               <img
                                 src={p.coverImagePath}
                                 alt={p.title}
-                                className="w-10 h-10 object-cover rounded-lg border border-stone-200"
+                                className="w-11 h-11 object-cover rounded-xl border border-stone-200 shrink-0"
                               />
-                              <div className="max-w-xs">
+                              <div className="max-w-xs space-y-0.5">
                                 <p className="font-bold text-stone-900 truncate">{p.title}</p>
-                                <span className="text-[10px] text-red-700 font-semibold uppercase">
-                                  {p.subject} • {p.category}
-                                </span>
+                                <div className="flex items-center space-x-1.5 flex-wrap">
+                                  <span className="text-[10px] text-red-700 font-semibold uppercase">
+                                    {p.subject} • {p.category}
+                                  </span>
+                                  {p.driveFileLink ? (
+                                    <a
+                                      href={p.driveFileLink}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center space-x-1 text-[9px] text-blue-700 bg-blue-50 hover:bg-blue-100 font-bold px-1.5 py-0.5 rounded border border-blue-200"
+                                      title="Open attached Google Drive file"
+                                    >
+                                      <ExternalLink className="w-2.5 h-2.5" />
+                                      <span>Drive Attached</span>
+                                    </a>
+                                  ) : (
+                                    <span className="text-[9px] text-stone-400 font-medium">
+                                      Storage: {p.pdfFileName || 'PDF'}
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                             </div>
                           </td>
@@ -1187,12 +1380,35 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
                             <p className="text-[11px] text-stone-500">{p.medium}</p>
                           </td>
                           <td className="py-3 px-4">
-                            <span className="font-extrabold text-stone-900">
-                              ₹{p.sellingPricePaise / 100}
-                            </span>
-                            <span className="ml-1 text-stone-400 line-through text-[11px]">
-                              ₹{p.originalPricePaise / 100}
-                            </span>
+                            <div className="space-y-0.5">
+                              <div className="flex items-center space-x-1.5 flex-wrap gap-1">
+                                {p.isFree || p.sellingPricePaise === 0 ? (
+                                  <span className="bg-emerald-600 text-white font-black text-[10px] px-2 py-0.5 rounded shadow-xs">
+                                    FREE PDF
+                                  </span>
+                                ) : (
+                                  <span className="font-extrabold text-stone-900 text-sm">
+                                    ₹{p.sellingPricePaise / 100}
+                                  </span>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => openQuickPriceEdit(p)}
+                                  className="text-[10px] bg-red-50 hover:bg-red-100 text-red-700 font-bold px-1.5 py-0.5 rounded border border-red-200 cursor-pointer transition-colors"
+                                  title="Edit price anytime"
+                                >
+                                  Edit ₹
+                                </button>
+                              </div>
+                              <div className="text-[10px] text-stone-400 font-mono">
+                                <span>{p.sellingPricePaise.toLocaleString()} paise</span>
+                                {p.originalPricePaise > p.sellingPricePaise && (
+                                  <span className="ml-1 text-stone-400 line-through">
+                                    ₹{p.originalPricePaise / 100}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
                           </td>
                           <td className="py-3 px-4">
                             <button
@@ -1207,17 +1423,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
                             </button>
                           </td>
                           <td className="py-3 px-4 text-right">
-                            <div className="inline-flex items-center space-x-2">
+                            <div className="inline-flex items-center space-x-1.5">
                               <button
                                 onClick={() => handleEditClick(p)}
-                                className="p-1.5 rounded-lg text-stone-600 hover:text-stone-900 hover:bg-stone-100"
-                                title="Edit product"
+                                className="px-2.5 py-1.5 rounded-lg text-stone-700 hover:text-stone-900 bg-stone-100 hover:bg-stone-200 font-semibold text-[11px] flex items-center space-x-1 cursor-pointer transition-colors"
+                                title="Edit all information for this product"
                               >
-                                <Edit className="w-4 h-4" />
+                                <Edit className="w-3.5 h-3.5" />
+                                <span>Edit All</span>
                               </button>
                               <button
                                 onClick={() => handleDeleteProduct(p.id, p.title)}
-                                className="p-1.5 rounded-lg text-red-600 hover:text-red-800 hover:bg-red-50"
+                                className="p-1.5 rounded-lg text-red-600 hover:text-red-800 hover:bg-red-50 cursor-pointer transition-colors"
                                 title="Delete or Archive"
                               >
                                 <Trash2 className="w-4 h-4" />
@@ -1236,273 +1453,546 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
 
           {/* TAB: ADD / EDIT PRODUCT */}
           {currentTab === 'add-product' && (
-            <div className="space-y-6 animate-in fade-in">
-              <div className="flex items-center justify-between pb-3 border-b border-stone-200">
+            <div className="space-y-6 animate-in fade-in max-w-4xl">
+              {/* Header */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-stone-200">
                 <div>
-                  <h2 className="text-xl font-extrabold text-stone-900 font-sans">
-                    {editingProduct ? 'Edit Educational Product' : 'Add New Educational Notes Product'}
+                  <h2 className="text-xl font-extrabold text-stone-900 font-sans flex items-center space-x-2">
+                    {editingProduct ? (
+                      <>
+                        <Edit className="w-5 h-5 text-red-700" />
+                        <span>Edit Educational Product</span>
+                      </>
+                    ) : (
+                      <>
+                        <PlusCircle className="w-5 h-5 text-red-700" />
+                        <span>Add New Educational Notes Product</span>
+                      </>
+                    )}
                   </h2>
                   <p className="text-xs text-stone-500">
-                    Configure syllabus, chapter lists, Assamese & English medium targeting, and pricing.
+                    Har EK information editable hai — Google Drive link, PDF pricing in rupees & paise, syllabus, and covers.
                   </p>
                 </div>
                 {editingProduct && (
                   <button
                     onClick={handleResetProductForm}
-                    className="text-xs font-semibold text-stone-500 hover:text-stone-800"
+                    className="px-3.5 py-1.5 rounded-xl border border-stone-300 text-stone-700 hover:bg-stone-50 text-xs font-bold transition-colors cursor-pointer"
                   >
-                    Cancel Edit
+                    ✕ Cancel Edit & Create New
                   </button>
                 )}
               </div>
 
+              {/* Active Edit Mode Banner */}
+              {editingProduct && (
+                <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center font-bold shrink-0">
+                      <Edit className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <p className="font-extrabold text-xs text-stone-900">
+                        Editing: <span className="text-amber-900">{editingProduct.title}</span>
+                      </p>
+                      <p className="text-[11px] text-stone-500">
+                        Product ID: <span className="font-mono text-stone-700">{editingProduct.id}</span> • Sabhi fields ko abhi update kar sakte hain
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-bold uppercase tracking-wider bg-amber-200 text-amber-900 px-2.5 py-1 rounded-full self-start sm:self-auto">
+                    Live Edit Mode
+                  </span>
+                </div>
+              )}
+
               {formMessage && (
                 <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-800 flex items-center space-x-2">
-                  <CheckCircle2 className="w-4 h-4 text-red-700" />
+                  <CheckCircle2 className="w-4 h-4 text-red-700 shrink-0" />
                   <span>{formMessage}</span>
                 </div>
               )}
 
-              <form onSubmit={handleSaveProduct} className="space-y-5 text-xs">
-                {/* Title & Slug */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-stone-700 font-semibold mb-1">
-                      Product Title <span className="text-red-600">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={prodTitle}
-                      onChange={(e) => setProdTitle(e.target.value)}
-                      placeholder="e.g. HSLC 2027 General Science Complete Notes (অসমীয়া মাধ্যম)"
-                      className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-stone-900 focus:bg-white focus:outline-none focus:border-red-600"
-                    />
-                  </div>
+              <form onSubmit={handleSaveProduct} className="space-y-6 text-xs">
+                {/* 1. Title & Slug */}
+                <div className="bg-stone-50 p-4 sm:p-5 rounded-2xl border border-stone-200 space-y-4">
+                  <h3 className="text-xs font-bold text-stone-700 uppercase tracking-wider flex items-center space-x-1.5">
+                    <span>1. Title & URL Identifier</span>
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-stone-700 font-semibold mb-1">
+                        Product Title <span className="text-red-600">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={prodTitle}
+                        onChange={(e) => setProdTitle(e.target.value)}
+                        placeholder="e.g. HSLC 2027 General Science Complete Notes (অসমীয়া মাধ্যম)"
+                        className="w-full bg-white border border-stone-300 rounded-xl px-3 py-2 text-stone-900 focus:outline-none focus:border-red-600"
+                      />
+                    </div>
 
-                  <div>
-                    <label className="block text-stone-700 font-semibold mb-1">
-                      Slug or Unique Identifier
-                    </label>
-                    <input
-                      type="text"
-                      value={prodSlug}
-                      onChange={(e) => setProdSlug(e.target.value)}
-                      placeholder="e.g. hslc-2027-general-science-assamese"
-                      className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 font-mono text-stone-900 focus:bg-white focus:outline-none focus:border-red-600"
-                    />
-                  </div>
-                </div>
-
-                {/* Subject, Class, Exam Target, Medium */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                  <div>
-                    <label className="block text-stone-700 font-semibold mb-1">Subject</label>
-                    <select
-                      value={prodSubject}
-                      onChange={(e) => setProdSubject(e.target.value)}
-                      className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-stone-900"
-                    >
-                      <option value="General Science">General Science</option>
-                      <option value="Mathematics">Mathematics</option>
-                      <option value="Social Science">Social Science</option>
-                      <option value="English">English</option>
-                      <option value="Assamese">Assamese</option>
-                      <option value="Other Subjects">Other Subjects</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-stone-700 font-semibold mb-1">Class</label>
-                    <select
-                      value={prodClass}
-                      onChange={(e) => setProdClass(e.target.value)}
-                      className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-stone-900"
-                    >
-                      <option value="HSLC 2027">HSLC 2027</option>
-                      <option value="Class 10">Class 10</option>
-                      <option value="Class 9">Class 9</option>
-                      <option value="Class 8">Class 8</option>
-                      <option value="Class 7">Class 7</option>
-                      <option value="Class 6">Class 6</option>
-                      <option value="Other Examinations">Other Examinations</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-stone-700 font-semibold mb-1">Medium</label>
-                    <select
-                      value={prodMedium}
-                      onChange={(e) => setProdMedium(e.target.value)}
-                      className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-stone-900"
-                    >
-                      <option value="Assamese Medium">Assamese Medium</option>
-                      <option value="English Medium">English Medium</option>
-                      <option value="Both Mediums">Both Mediums</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-stone-700 font-semibold mb-1">Category</label>
-                    <select
-                      value={prodCategory}
-                      onChange={(e) => setProdCategory(e.target.value as any)}
-                      className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-stone-900"
-                    >
-                      <option value="Normal">Normal</option>
-                      <option value="Premium">Premium</option>
-                      <option value="Budget Friendly">Budget Friendly</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* Pricing: Original and Selling (Automatic Discount Calculation) */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-stone-50 p-4 rounded-2xl border border-stone-200">
-                  <div>
-                    <label className="block text-stone-700 font-semibold mb-1">
-                      Original Price (₹)
-                    </label>
-                    <input
-                      type="number"
-                      min={0}
-                      value={prodOriginalPrice}
-                      onChange={(e) => setProdOriginalPrice(Number(e.target.value))}
-                      className="w-full bg-white border border-stone-300 rounded-xl px-3 py-2 text-stone-900 font-bold"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-stone-700 font-semibold mb-1">
-                      Selling Price (₹) <span className="text-red-600">*</span>
-                    </label>
-                    <input
-                      type="number"
-                      min={0}
-                      value={prodSellingPrice}
-                      onChange={(e) => setProdSellingPrice(Number(e.target.value))}
-                      className="w-full bg-white border border-stone-300 rounded-xl px-3 py-2 text-red-700 font-bold"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-stone-500 font-medium mb-1">
-                      Calculated Discount %
-                    </label>
-                    <div className="bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl px-3 py-2 font-bold text-sm">
-                      {prodOriginalPrice > prodSellingPrice
-                        ? `${Math.round(((prodOriginalPrice - prodSellingPrice) / prodOriginalPrice) * 100)}% Discount`
-                        : '0% (No discount)'}
+                    <div>
+                      <label className="block text-stone-700 font-semibold mb-1">
+                        Slug or Unique Identifier
+                      </label>
+                      <input
+                        type="text"
+                        value={prodSlug}
+                        onChange={(e) => setProdSlug(e.target.value)}
+                        placeholder="e.g. hslc-2027-general-science-assamese"
+                        className="w-full bg-white border border-stone-300 rounded-xl px-3 py-2 font-mono text-stone-900 focus:outline-none focus:border-red-600"
+                      />
                     </div>
                   </div>
                 </div>
 
-                {/* Short Description */}
-                <div>
-                  <label className="block text-stone-700 font-semibold mb-1">
-                    Short Description (Card preview)
-                  </label>
-                  <textarea
-                    rows={2}
-                    value={prodShortDesc}
-                    onChange={(e) => setProdShortDesc(e.target.value)}
-                    placeholder="Brief highlights of notes for card previews..."
-                    className="w-full bg-stone-50 border border-stone-300 rounded-xl p-3 text-stone-900 focus:bg-white focus:outline-none"
-                  />
+                {/* 2. Target Curriculum, Subject, Class & Medium */}
+                <div className="bg-stone-50 p-4 sm:p-5 rounded-2xl border border-stone-200 space-y-4">
+                  <h3 className="text-xs font-bold text-stone-700 uppercase tracking-wider">
+                    2. Subject, Class & Examination Target
+                  </h3>
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                    <div>
+                      <label className="block text-stone-700 font-semibold mb-1">Subject</label>
+                      <select
+                        value={prodSubject}
+                        onChange={(e) => setProdSubject(e.target.value)}
+                        className="w-full bg-white border border-stone-300 rounded-xl px-3 py-2 text-stone-900"
+                      >
+                        <option value="General Science">General Science</option>
+                        <option value="Mathematics">Mathematics</option>
+                        <option value="Social Science">Social Science</option>
+                        <option value="English">English</option>
+                        <option value="Assamese">Assamese</option>
+                        <option value="Other Subjects">Other Subjects</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-stone-700 font-semibold mb-1">Class Level</label>
+                      <select
+                        value={prodClass}
+                        onChange={(e) => setProdClass(e.target.value)}
+                        className="w-full bg-white border border-stone-300 rounded-xl px-3 py-2 text-stone-900"
+                      >
+                        <option value="HSLC 2027">HSLC 2027</option>
+                        <option value="Class 10">Class 10</option>
+                        <option value="Class 9">Class 9</option>
+                        <option value="Class 8">Class 8</option>
+                        <option value="Class 7">Class 7</option>
+                        <option value="Class 6">Class 6</option>
+                        <option value="Other Examinations">Other Examinations</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-stone-700 font-semibold mb-1">Medium</label>
+                      <select
+                        value={prodMedium}
+                        onChange={(e) => setProdMedium(e.target.value)}
+                        className="w-full bg-white border border-stone-300 rounded-xl px-3 py-2 text-stone-900"
+                      >
+                        <option value="Assamese Medium">Assamese Medium</option>
+                        <option value="English Medium">English Medium</option>
+                        <option value="Both Mediums">Both Mediums</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-stone-700 font-semibold mb-1">Category</label>
+                      <select
+                        value={prodCategory}
+                        onChange={(e) => setProdCategory(e.target.value as any)}
+                        className="w-full bg-white border border-stone-300 rounded-xl px-3 py-2 text-stone-900"
+                      >
+                        <option value="Normal">Normal</option>
+                        <option value="Premium">Premium</option>
+                        <option value="Budget Friendly">Budget Friendly</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-stone-700 font-semibold mb-1">Exam Target</label>
+                      <input
+                        type="text"
+                        value={prodExamTarget}
+                        onChange={(e) => setProdExamTarget(e.target.value)}
+                        placeholder="HSLC 2027 Board Exam"
+                        className="w-full bg-white border border-stone-300 rounded-xl px-3 py-2 text-stone-900"
+                      />
+                    </div>
+                  </div>
                 </div>
 
-                {/* Detailed Description */}
-                <div>
-                  <label className="block text-stone-700 font-semibold mb-1">
-                    Full Syllabus Description
-                  </label>
-                  <textarea
-                    rows={4}
-                    value={prodDesc}
-                    onChange={(e) => setProdDesc(e.target.value)}
-                    placeholder="Detailed explanation of curriculum, question patterns, and teacher preparation notes..."
-                    className="w-full bg-stone-50 border border-stone-300 rounded-xl p-3 text-stone-900 focus:bg-white focus:outline-none"
-                  />
+                {/* 3. Pricing in Rupees & Paise (Editable Anytime) */}
+                <div className="bg-stone-50 p-4 sm:p-5 rounded-2xl border border-stone-200 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-bold text-stone-700 uppercase tracking-wider">
+                      3. Pricing (In ₹ Rupees & Paise - Editable Anytime)
+                    </h3>
+                    <span className="text-[11px] text-emerald-800 font-semibold bg-emerald-100 px-2.5 py-0.5 rounded-full">
+                      Stored accurately in paise (1 ₹ = 100 paise)
+                    </span>
+                  </div>
+
+                  {/* Free PDF Toggle Option */}
+                  <div className="bg-emerald-50 border border-emerald-200 p-3.5 rounded-xl flex items-center justify-between">
+                    <label className="flex items-center space-x-2.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={prodIsFree}
+                        onChange={(e) => {
+                          const val = e.target.checked;
+                          setProdIsFree(val);
+                          if (val) {
+                            setProdSellingPrice(0);
+                          } else if (prodSellingPrice === 0) {
+                            setProdSellingPrice(99);
+                          }
+                        }}
+                        className="w-4 h-4 text-emerald-600 rounded"
+                      />
+                      <div>
+                        <span className="font-extrabold text-stone-900 text-xs">
+                          Free PDF Option (100% Free Note — Students get direct Drive access without payment)
+                        </span>
+                        <p className="text-[11px] text-stone-500">
+                          Tick this box to add this note to the website's dedicated Free PDFs section.
+                        </p>
+                      </div>
+                    </label>
+                    {prodIsFree && (
+                      <span className="bg-emerald-600 text-white font-black text-[10px] px-2 py-0.5 rounded-full uppercase shrink-0">
+                        Free PDF Active
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="bg-white p-3.5 rounded-xl border border-stone-300 space-y-1">
+                      <label className="block text-stone-700 font-semibold">
+                        Selling Price (₹) <span className="text-red-600">*</span>
+                      </label>
+                      <input
+                        type="number"
+                        min={0}
+                        step={1}
+                        value={prodSellingPrice}
+                        onChange={(e) => setProdSellingPrice(Number(e.target.value))}
+                        className="w-full text-lg font-black text-red-700 focus:outline-none"
+                      />
+                      <div className="text-[11px] text-stone-500 font-mono">
+                        Equals: <strong className="text-stone-800">{Math.round(Number(prodSellingPrice) * 100).toLocaleString()} paise</strong>
+                      </div>
+                    </div>
+
+                    <div className="bg-white p-3.5 rounded-xl border border-stone-300 space-y-1">
+                      <label className="block text-stone-700 font-semibold">
+                        Original / MRP Price (₹)
+                      </label>
+                      <input
+                        type="number"
+                        min={0}
+                        step={1}
+                        value={prodOriginalPrice}
+                        onChange={(e) => setProdOriginalPrice(Number(e.target.value))}
+                        className="w-full text-lg font-bold text-stone-800 focus:outline-none"
+                      />
+                      <div className="text-[11px] text-stone-500 font-mono">
+                        Equals: <strong className="text-stone-800">{Math.round(Number(prodOriginalPrice) * 100).toLocaleString()} paise</strong>
+                      </div>
+                    </div>
+
+                    <div className="bg-white p-3.5 rounded-xl border border-stone-300 flex flex-col justify-between">
+                      <span className="text-stone-500 font-medium">Automatic Discount %</span>
+                      <div className="bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl px-3 py-2 font-bold text-sm text-center">
+                        {prodOriginalPrice > prodSellingPrice
+                          ? `${Math.round(((prodOriginalPrice - prodSellingPrice) / prodOriginalPrice) * 100)}% DISCOUNT`
+                          : '0% (Standard Price)'}
+                      </div>
+                      <span className="text-[10px] text-stone-400 text-center">
+                        Student saves ₹{Math.max(0, prodOriginalPrice - prodSellingPrice)}
+                      </span>
+                    </div>
+                  </div>
                 </div>
 
-                {/* Chapters & Tags */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* 4. Google Drive Link & PDF Delivery (NEW & CRITICAL) */}
+                <div className="bg-blue-50/70 p-4 sm:p-5 rounded-2xl border border-blue-200 space-y-4">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center space-x-2">
+                      <div className="w-6 h-6 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold text-xs">
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </div>
+                      <h3 className="text-xs font-bold text-blue-900 uppercase tracking-wider">
+                        4. Google Drive File Link & PDF File Settings
+                      </h3>
+                    </div>
+                    <span className="text-[10px] font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full">
+                      Direct Student Access
+                    </span>
+                  </div>
+
+                  {/* Google Drive Link Input */}
+                  <div className="bg-white p-3.5 rounded-xl border border-blue-200 space-y-2">
+                    <label className="block text-stone-800 font-bold">
+                      Google Drive File Link (Share / View Link)
+                    </label>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <input
+                        type="url"
+                        value={prodDriveLink}
+                        onChange={(e) => setProdDriveLink(e.target.value)}
+                        placeholder="https://drive.google.com/file/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs/view?usp=sharing"
+                        className="flex-1 bg-stone-50 border border-stone-300 rounded-xl px-3 py-2.5 font-mono text-stone-900 focus:bg-white focus:outline-none focus:border-blue-600 text-xs"
+                      />
+                      {prodDriveLink.trim() && (
+                        <a
+                          href={prodDriveLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-4 py-2.5 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-bold flex items-center justify-center space-x-1.5 shrink-0 transition-colors"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          <span>Test Drive Link</span>
+                        </a>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-stone-500 leading-relaxed">
+                      💡 <strong>Tip:</strong> In Google Drive, click <em>Share &gt; Anyone with the link can view</em>. Paste that link here. Once verified students purchase notes, they get instant Google Drive access, download links, and an in-app viewer!
+                    </p>
+                  </div>
+
+                  {/* PDF Meta details */}
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 bg-white/80 p-3.5 rounded-xl border border-blue-100">
+                    <div>
+                      <label className="block text-stone-700 font-semibold mb-1">
+                        PDF File Name
+                      </label>
+                      <input
+                        type="text"
+                        value={prodPdfFileName}
+                        onChange={(e) => setProdPdfFileName(e.target.value)}
+                        placeholder="MKR_HSLC_2027_Science.pdf"
+                        className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-stone-900"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-stone-700 font-semibold mb-1">
+                        File Format Type
+                      </label>
+                      <input
+                        type="text"
+                        value={prodFileType}
+                        onChange={(e) => setProdFileType(e.target.value)}
+                        placeholder="PDF Document"
+                        className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-stone-900"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-stone-700 font-semibold mb-1">
+                        Total Page Count
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={prodPageCount}
+                        onChange={(e) => setProdPageCount(Number(e.target.value))}
+                        className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-stone-900"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-stone-700 font-semibold mb-1">
+                        PDF Cloud Storage Path
+                      </label>
+                      <input
+                        type="text"
+                        value={prodPdfPath}
+                        onChange={(e) => setProdPdfPath(e.target.value)}
+                        placeholder="notes/science-2027.pdf"
+                        className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 font-mono text-stone-900"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 5. Cover Image & Visuals */}
+                <div className="bg-stone-50 p-4 sm:p-5 rounded-2xl border border-stone-200 space-y-3">
+                  <h3 className="text-xs font-bold text-stone-700 uppercase tracking-wider">
+                    5. Cover Image & Preview
+                  </h3>
+                  <div className="flex flex-col sm:flex-row items-center gap-4">
+                    <div className="w-24 h-24 rounded-2xl bg-stone-200 overflow-hidden border border-stone-300 shrink-0">
+                      <img
+                        src={prodCoverUrl || 'https://images.unsplash.com/photo-1532094349884-543bc11b234d?auto=format&fit=crop&w=400&q=80'}
+                        alt="Cover preview"
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    <div className="flex-1 space-y-2 w-full">
+                      <label className="block text-stone-700 font-semibold">Cover Image URL</label>
+                      <input
+                        type="url"
+                        value={prodCoverUrl}
+                        onChange={(e) => setProdCoverUrl(e.target.value)}
+                        placeholder="https://images.unsplash.com/photo-..."
+                        className="w-full bg-white border border-stone-300 rounded-xl px-3 py-2 text-stone-900"
+                      />
+                      <div className="flex items-center space-x-2 flex-wrap gap-1 pt-1">
+                        <span className="text-[10px] text-stone-400 font-bold uppercase">Presets:</span>
+                        <button
+                          type="button"
+                          onClick={() => setProdCoverUrl('https://images.unsplash.com/photo-1532094349884-543bc11b234d?auto=format&fit=crop&w=800&q=80')}
+                          className="text-[10px] bg-white border border-stone-200 hover:bg-stone-100 px-2 py-0.5 rounded text-stone-700"
+                        >
+                          Science
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setProdCoverUrl('https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=800&q=80')}
+                          className="text-[10px] bg-white border border-stone-200 hover:bg-stone-100 px-2 py-0.5 rounded text-stone-700"
+                        >
+                          Mathematics
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setProdCoverUrl('https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=800&q=80')}
+                          className="text-[10px] bg-white border border-stone-200 hover:bg-stone-100 px-2 py-0.5 rounded text-stone-700"
+                        >
+                          Study Books
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setProdCoverUrl('https://images.unsplash.com/photo-1497633762265-9d179a990aa6?auto=format&fit=crop&w=800&q=80')}
+                          className="text-[10px] bg-white border border-stone-200 hover:bg-stone-100 px-2 py-0.5 rounded text-stone-700"
+                        >
+                          Library Notes
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 6. Descriptions */}
+                <div className="bg-stone-50 p-4 sm:p-5 rounded-2xl border border-stone-200 space-y-4">
+                  <h3 className="text-xs font-bold text-stone-700 uppercase tracking-wider">
+                    6. Descriptions & Highlights
+                  </h3>
                   <div>
                     <label className="block text-stone-700 font-semibold mb-1">
-                      Included Chapters (One per line)
+                      Short Description (Card preview)
                     </label>
                     <textarea
-                      rows={5}
-                      value={prodChapters}
-                      onChange={(e) => setProdChapters(e.target.value)}
-                      placeholder="Chapter 1: Chemical Reactions&#10;Chapter 2: Acids and Bases&#10;Chapter 3: Metals and Non-Metals"
-                      className="w-full bg-stone-50 border border-stone-300 rounded-xl p-3 text-stone-900 focus:bg-white focus:outline-none font-mono text-[11px]"
+                      rows={2}
+                      value={prodShortDesc}
+                      onChange={(e) => setProdShortDesc(e.target.value)}
+                      placeholder="Brief highlights of notes for card previews..."
+                      className="w-full bg-white border border-stone-300 rounded-xl p-3 text-stone-900 focus:outline-none"
                     />
                   </div>
 
                   <div>
                     <label className="block text-stone-700 font-semibold mb-1">
-                      Tags (Comma separated)
+                      Full Syllabus Description
                     </label>
-                    <input
-                      type="text"
-                      value={prodTags}
-                      onChange={(e) => setProdTags(e.target.value)}
-                      placeholder="Important Questions, Chapter-wise Notes, Revision Notes"
-                      className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-stone-900 mb-3"
-                    />
-
-                    <label className="block text-stone-700 font-semibold mb-1">
-                      Cover Image URL
-                    </label>
-                    <input
-                      type="text"
-                      value={prodCoverUrl}
-                      onChange={(e) => setProdCoverUrl(e.target.value)}
-                      placeholder="https://images.unsplash.com/..."
-                      className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-stone-900"
+                    <textarea
+                      rows={4}
+                      value={prodDesc}
+                      onChange={(e) => setProdDesc(e.target.value)}
+                      placeholder="Detailed explanation of curriculum, question patterns, and teacher preparation notes..."
+                      className="w-full bg-white border border-stone-300 rounded-xl p-3 text-stone-900 focus:outline-none"
                     />
                   </div>
                 </div>
 
-                {/* Toggles */}
-                <div className="flex items-center space-x-6 pt-2">
-                  <label className="flex items-center space-x-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={prodPublished}
-                      onChange={(e) => setProdPublished(e.target.checked)}
-                      className="w-4 h-4 text-red-600 rounded"
-                    />
-                    <span className="font-semibold text-stone-900">Publish Immediately to Store</span>
-                  </label>
+                {/* 7. Chapters & Tags */}
+                <div className="bg-stone-50 p-4 sm:p-5 rounded-2xl border border-stone-200 space-y-4">
+                  <h3 className="text-xs font-bold text-stone-700 uppercase tracking-wider">
+                    7. Syllabus Chapters & Feature Tags
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-stone-700 font-semibold mb-1">
+                        Included Chapters (One chapter per line)
+                      </label>
+                      <textarea
+                        rows={5}
+                        value={prodChapters}
+                        onChange={(e) => setProdChapters(e.target.value)}
+                        placeholder="Chapter 1: Chemical Reactions&#10;Chapter 2: Acids, Bases and Salts&#10;Chapter 3: Metals and Non-Metals"
+                        className="w-full bg-white border border-stone-300 rounded-xl p-3 text-stone-900 focus:outline-none font-mono text-[11px]"
+                      />
+                    </div>
 
-                  <label className="flex items-center space-x-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={prodFeatured}
-                      onChange={(e) => setProdFeatured(e.target.checked)}
-                      className="w-4 h-4 text-red-600 rounded"
-                    />
-                    <span className="font-semibold text-stone-900">Feature on Homepage</span>
-                  </label>
+                    <div>
+                      <label className="block text-stone-700 font-semibold mb-1">
+                        Tags (Comma separated)
+                      </label>
+                      <input
+                        type="text"
+                        value={prodTags}
+                        onChange={(e) => setProdTags(e.target.value)}
+                        placeholder="Important Questions, Chapter-wise Notes, Revision Notes"
+                        className="w-full bg-white border border-stone-300 rounded-xl px-3 py-2 text-stone-900 mb-2"
+                      />
+                      <p className="text-[11px] text-stone-500">
+                        E.g.: <em>Important Questions, Previous Year Questions, Complete Syllabus, Revision Notes</em>
+                      </p>
+                    </div>
+                  </div>
                 </div>
 
-                {/* Submit */}
-                <div className="pt-4 border-t border-stone-200 flex justify-end space-x-3">
+                {/* 8. Visibility Toggles */}
+                <div className="bg-stone-50 p-4 sm:p-5 rounded-2xl border border-stone-200 flex flex-col sm:flex-row items-center justify-between gap-4">
+                  <div className="flex items-center space-x-6">
+                    <label className="flex items-center space-x-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={prodPublished}
+                        onChange={(e) => setProdPublished(e.target.checked)}
+                        className="w-4 h-4 text-red-600 rounded"
+                      />
+                      <span className="font-bold text-stone-900">Publish Immediately to Store</span>
+                    </label>
+
+                    <label className="flex items-center space-x-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={prodFeatured}
+                        onChange={(e) => setProdFeatured(e.target.checked)}
+                        className="w-4 h-4 text-red-600 rounded"
+                      />
+                      <span className="font-bold text-stone-900">Feature on Homepage</span>
+                    </label>
+                  </div>
+
+                  <span className="text-[11px] text-stone-500">
+                    Status: <strong className={prodPublished ? 'text-emerald-700' : 'text-stone-500'}>{prodPublished ? 'Published' : 'Draft / Unpublished'}</strong>
+                  </span>
+                </div>
+
+                {/* Submit & Reset Buttons */}
+                <div className="pt-4 border-t border-stone-200 flex items-center justify-end space-x-3">
                   <button
                     type="button"
                     onClick={handleResetProductForm}
-                    className="py-2.5 px-4 rounded-xl border border-stone-300 text-stone-700 font-semibold"
+                    className="py-2.5 px-4 rounded-xl border border-stone-300 text-stone-700 hover:bg-stone-50 font-bold transition-colors cursor-pointer"
                   >
-                    Reset
+                    Reset Form
                   </button>
                   <button
                     type="submit"
                     disabled={formSaving}
-                    className="py-2.5 px-6 rounded-xl bg-red-700 hover:bg-red-800 disabled:bg-stone-300 text-white font-bold flex items-center space-x-2 shadow-md cursor-pointer"
+                    className="py-3 px-8 rounded-xl bg-red-700 hover:bg-red-800 disabled:bg-stone-300 text-white font-extrabold flex items-center space-x-2 shadow-lg shadow-red-800/25 transition-all cursor-pointer"
                   >
                     {formSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                    <span>{editingProduct ? 'Update Product' : 'Create & Save Product'}</span>
+                    <span>{editingProduct ? 'Save All Product Updates' : 'Create Educational Product'}</span>
                   </button>
                 </div>
               </form>
@@ -1672,7 +2162,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
                           <td className="py-3 px-4 text-stone-500 text-[11px]">
                             {new Date(o.createdAt).toLocaleDateString()}
                           </td>
-                      )))
+                        </tr>
+                      ))
                     )}
                   </tbody>
                 </table>
@@ -2070,6 +2561,113 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
           )}
         </main>
       </div>
+
+      {/* Quick Price Edit Modal (Allows changing price in paise / rupees anytime) */}
+      {quickPriceModalProduct && (
+        <div className="fixed inset-0 z-50 bg-stone-950/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-stone-200 space-y-5">
+            <div className="flex items-center justify-between pb-3 border-b border-stone-100">
+              <div className="flex items-center space-x-2">
+                <div className="w-8 h-8 rounded-xl bg-red-100 text-red-700 flex items-center justify-center font-bold">
+                  ₹
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-sm text-stone-900">
+                    Quick Edit Price (Har Time Editable)
+                  </h3>
+                  <p className="text-[11px] text-stone-500 truncate max-w-[240px]">
+                    {quickPriceModalProduct.title}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setQuickPriceModalProduct(null)}
+                className="w-7 h-7 rounded-lg text-stone-400 hover:text-stone-700 hover:bg-stone-100 flex items-center justify-center cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {quickPriceMessage && (
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 flex items-center space-x-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0" />
+                <span>{quickPriceMessage}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveQuickPrice} className="space-y-4 text-xs">
+              <div>
+                <label className="block text-stone-700 font-bold mb-1">
+                  Selling Price (₹ Rupees) <span className="text-red-600">*</span>
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-2.5 text-stone-400 font-bold">₹</span>
+                  <input
+                    type="number"
+                    min={0}
+                    step={1}
+                    required
+                    value={quickSellingPrice}
+                    onChange={(e) => setQuickSellingPrice(Number(e.target.value))}
+                    className="w-full bg-stone-50 border border-stone-300 rounded-xl pl-8 pr-3 py-2 text-base font-extrabold text-red-700 focus:bg-white focus:outline-none focus:border-red-600"
+                  />
+                </div>
+                <p className="text-[11px] text-stone-500 mt-1 font-mono">
+                  Stored as: <strong className="text-stone-900">{Math.round(Number(quickSellingPrice) * 100).toLocaleString()} paise</strong>
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-stone-700 font-bold mb-1">
+                  Original / MRP Price (₹ Rupees)
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-2.5 text-stone-400 font-bold">₹</span>
+                  <input
+                    type="number"
+                    min={0}
+                    step={1}
+                    value={quickOriginalPrice}
+                    onChange={(e) => setQuickOriginalPrice(Number(e.target.value))}
+                    className="w-full bg-stone-50 border border-stone-300 rounded-xl pl-8 pr-3 py-2 text-stone-900 font-bold focus:bg-white focus:outline-none focus:border-red-600"
+                  />
+                </div>
+                <p className="text-[11px] text-stone-500 mt-1 font-mono">
+                  Stored as: <strong className="text-stone-900">{Math.round(Number(quickOriginalPrice) * 100).toLocaleString()} paise</strong>
+                </p>
+              </div>
+
+              <div className="bg-stone-50 p-3 rounded-xl border border-stone-200 flex items-center justify-between">
+                <span className="text-stone-500 font-medium">Calculated Discount:</span>
+                <span className="font-extrabold text-emerald-700">
+                  {quickOriginalPrice > quickSellingPrice
+                    ? `${Math.round(((quickOriginalPrice - quickSellingPrice) / quickOriginalPrice) * 100)}% Discount`
+                    : 'No Discount'}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-end space-x-2 pt-2 border-t border-stone-100">
+                <button
+                  type="button"
+                  onClick={() => setQuickPriceModalProduct(null)}
+                  className="px-4 py-2 rounded-xl border border-stone-300 text-stone-700 hover:bg-stone-50 font-bold transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={quickPriceSaving}
+                  className="px-5 py-2 rounded-xl bg-red-700 hover:bg-red-800 disabled:bg-stone-300 text-white font-bold flex items-center space-x-1.5 shadow-md transition-all cursor-pointer"
+                >
+                  {quickPriceSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                  <span>Save New Price</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -44,10 +44,12 @@ export interface Product {
   coverImagePath: string;
   pdfStoragePath?: string;
   pdfFileName?: string;
+  driveFileLink?: string; // Google Drive share/view/preview link
   fileType: string;
   pageCount?: number;
   originalPricePaise: number; // Stored in paise (e.g. 19900 = ₹199)
-  sellingPricePaise: number;  // Stored in paise (e.g. 9900 = ₹99)
+  sellingPricePaise: number;  // Stored in paise (e.g. 9900 = ₹99, 0 for Free)
+  isFree?: boolean;           // True if product is a Free PDF note
   featured: boolean;
   published: boolean;
   createdAt: string;
@@ -91,6 +93,8 @@ export interface Purchase {
   orderId: string;
   productTitle: string;
   coverImagePath: string;
+  driveFileLink?: string;
+  pdfStoragePath?: string;
   entitlementStatus: 'active' | 'revoked';
   purchasedAt: string;
   createdAt: string;

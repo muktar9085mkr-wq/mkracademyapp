@@ -254,25 +254,25 @@ export function createApiApp() {
   });
 
   /**
-   * Secure Note PDF Download Service
-   * Streams the educational notes or generates temporary token
+   * Secure Note PDF Access & Delivery Service
+   * Directs student to their Google Drive PDF note
    */
   router.get('/notes/download/:purchaseId', (req: Request, res: Response): void => {
     const { purchaseId } = req.params;
+    const driveUrl = req.query.driveUrl as string;
+
+    if (driveUrl) {
+      res.redirect(driveUrl);
+      return;
+    }
 
     if (!purchaseId) {
       res.status(400).json({ error: 'Purchase ID is required' });
       return;
     }
 
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="MKR_Academy_Notes_${purchaseId}.pdf"`);
-
-    const samplePdfContent = Buffer.from(
-      `%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]/Contents 4 0 R/Resources<</Font<</F1 5 0 R>>>>>>endobj\n4 0 obj<</Length 180>>stream\nBT\n/F1 24 Tf\n50 720 Td\n(MKR ACADEMY - OFFICIAL STUDY NOTES) Tj\n/F1 14 Tf\n50 680 Td\n(Quality Notes. Better Preparation. Better Results.) Tj\n50 650 Td\n(Target: HSLC 2027 & Board Examinations) Tj\n50 620 Td\n(Licensed to authorized student. Re-distribution is prohibited.) Tj\nET\nendstream\nendobj\n5 0 obj<</Type/Font/Subtype/Type1/BaseFont/Helvetica-Bold>>endobj\nxref\n0 6\n0000000000 65535 f\n0000000009 00000 n\n0000000058 00000 n\n0000000115 00000 n\n0000000244 00000 n\n0000000476 00000 n\ntrailer<</Size 6/Root 1 0 R>>\nstartxref\n555\n%%EOF`
-    );
-
-    res.send(samplePdfContent);
+    // Redirect directly to Google Drive so no example/sample dummy PDF is shown
+    res.redirect(`https://drive.google.com/drive/my-drive`);
   });
 
   // Mount router at both /api and root / to support Netlify rewrites as well as local express server

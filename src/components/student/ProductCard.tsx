@@ -6,7 +6,8 @@ import {
   CheckCircle2,
   Sparkles,
   BookMarked,
-  Tag
+  Tag,
+  ExternalLink
 } from 'lucide-react';
 import { Product } from '../../types';
 
@@ -81,11 +82,16 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               {product.classLevel}
             </span>
 
-            {discountPercent > 0 && (
+            {product.isFree || sellingPrice === 0 ? (
+              <span className="bg-emerald-600 text-white text-[11px] font-extrabold px-2.5 py-1 rounded-md shadow-xs flex items-center space-x-1">
+                <Sparkles className="w-3 h-3 text-emerald-100" />
+                <span>100% FREE</span>
+              </span>
+            ) : discountPercent > 0 ? (
               <span className="bg-emerald-600 text-white text-[11px] font-bold px-2 py-0.5 rounded-md shadow-xs">
                 {discountPercent}% OFF
               </span>
-            )}
+            ) : null}
           </div>
 
           {/* Bottom Overlay Info */}
@@ -149,10 +155,17 @@ export const ProductCard: React.FC<ProductCardProps> = ({
       <div className="p-4 sm:p-5 pt-0 border-t border-stone-100 mt-2 space-y-3">
         <div className="flex items-baseline justify-between pt-2">
           <div>
-            <span className="text-xl sm:text-2xl font-extrabold text-stone-900 font-sans">
-              ₹{sellingPrice}
-            </span>
-            {originalPrice > sellingPrice && (
+            {product.isFree || sellingPrice === 0 ? (
+              <span className="text-xl sm:text-2xl font-black text-emerald-700 font-sans flex items-center space-x-1">
+                <span>FREE</span>
+                <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded ml-1 uppercase">100% Free</span>
+              </span>
+            ) : (
+              <span className="text-xl sm:text-2xl font-extrabold text-stone-900 font-sans">
+                ₹{sellingPrice}
+              </span>
+            )}
+            {originalPrice > sellingPrice && !product.isFree && sellingPrice > 0 && (
               <span className="ml-2 text-xs text-stone-400 line-through">
                 ₹{originalPrice}
               </span>
@@ -170,17 +183,50 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             className="w-full py-2.5 px-3 rounded-xl border border-stone-300 hover:border-stone-400 hover:bg-stone-50 text-stone-700 font-bold text-xs flex items-center justify-center space-x-1.5 transition-colors cursor-pointer"
           >
             <Eye className="w-3.5 h-3.5 text-stone-500" />
-            <span>View Details</span>
+            <span>Details</span>
           </button>
 
           {isPurchased ? (
-            <button
-              onClick={() => onDownloadNotes ? onDownloadNotes(product) : onViewDetails(product)}
-              className="w-full py-2.5 px-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center justify-center space-x-1.5 shadow-sm transition-colors cursor-pointer"
-            >
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              <span>Purchased</span>
-            </button>
+            product.driveFileLink ? (
+              <a
+                href={product.driveFileLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full py-2.5 px-3 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs flex items-center justify-center space-x-1.5 shadow-md shadow-blue-800/20 transition-all cursor-pointer"
+                title="Student purchased: Open Drive PDF in new tab"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span>Open Drive</span>
+              </a>
+            ) : (
+              <button
+                onClick={() => (onDownloadNotes ? onDownloadNotes(product) : onViewDetails(product))}
+                className="w-full py-2.5 px-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center justify-center space-x-1.5 shadow-sm transition-colors cursor-pointer"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>Purchased</span>
+              </button>
+            )
+          ) : product.isFree || sellingPrice === 0 ? (
+            product.driveFileLink ? (
+              <a
+                href={product.driveFileLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full py-2.5 px-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center justify-center space-x-1.5 shadow-md shadow-emerald-800/20 transition-all cursor-pointer"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span>Free PDF</span>
+              </a>
+            ) : (
+              <button
+                onClick={() => onViewDetails(product)}
+                className="w-full py-2.5 px-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center justify-center space-x-1.5 shadow-md transition-all cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Get Free</span>
+              </button>
+            )
           ) : (
             <button
               onClick={() => onBuyNow(product)}
