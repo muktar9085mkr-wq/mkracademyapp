@@ -26,7 +26,10 @@ import {
   FileText,
   ShieldCheck,
   Copy,
-  Check
+  Check,
+  Calendar,
+  DollarSign,
+  BarChart3
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { Product, Order, UserProfile, AppPublicSettings } from '../../types';
@@ -135,6 +138,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
   } | null>(null);
   const [copiedWebhook, setCopiedWebhook] = useState(false);
 
+  // Revenue Analytics View States
+  const [revenueViewTab, setRevenueViewTab] = useState<'monthly' | 'yearly'>('monthly');
+  const [revenueYearFilter, setRevenueYearFilter] = useState<string>('all');
+  const [orderYearFilter, setOrderYearFilter] = useState<string>('all');
+  const [orderMonthFilter, setOrderMonthFilter] = useState<string>('all');
+  const [orderStatusFilter, setOrderStatusFilter] = useState<string>('all');
+
   useEffect(() => {
     loadAllAdminData();
     fetchGatewayConfig();
@@ -239,11 +249,154 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
     );
   }
 
+  // Helper to safely parse order date
+  const parseOrderDate = (order: Order): Date => {
+    const raw = order.verifiedAt || order.createdAt;
+    if (!raw) return new Date();
+    const d = new Date(raw);
+    return isNaN(d.getTime()) ? new Date() : d;
+  };
+
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth(); // 0-indexed: 0 = Jan, 9 = Oct
+
+  const monthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+
   // Calculated Metrics
   const verifiedPaidOrders = orders.filter((o) => o.status === 'paid');
   const pendingOrders = orders.filter((o) => o.status === 'pending');
   const failedOrders = orders.filter((o) => o.status === 'failed');
+
+  // 1. Total Lifetime Revenue
   const totalRevenue = verifiedPaidOrders.reduce((sum, o) => sum + (o.amountPaise || 0), 0) / 100;
+
+  // 2. This Year's Revenue
+  const thisYearPaidOrders = verifiedPaidOrders.filter((o) => {
+    return parseOrderDate(o).getFullYear() === currentYear;
+  });
+  const currentYearRevenue = thisYearPaidOrders.reduce((sum, o) => sum + (o.amountPaise || 0), 0) / 100;
+
+  // 3. This Month's Revenue
+  const thisMonthPaidOrders = verifiedPaidOrders.filter((o) => {
+    const d = parseOrderDate(o);
+    return d.getFullYear() === currentYear && d.getMonth() === currentMonth;
+  });
+  const currentMonthRevenue = thisMonthPaidOrders.reduce((sum, o) => sum + (o.amountPaise || 0), 0) / 100;
+
+  // 4. Today's Revenue
+  const todayStr = now.toDateString();
+  const todayPaidOrders = verifiedPaidOrders.filter((o) => {
+    return parseOrderDate(o).toDateString() === todayStr;
+  });
+  const todayRevenue = todayPaidOrders.reduce((sum, o) => sum + (o.amountPaise || 0), 0) / 100;
+
+  // 5. Monthly Breakdown Grouping
+  const monthlyStatsMap = new Map<string, {
+    key: string;
+    year: number;
+    month: number;
+    monthName: string;
+    shortName: string;
+    revenue: number;
+    orderCount: number;
+    isCurrentMonth: boolean;
+  }>();
+
+  // Always seed current month
+  const currentMonthKey = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
+  monthlyStatsMap.set(currentMonthKey, {
+    key: currentMonthKey,
+    year: currentYear,
+    month: currentMonth,
+    monthName: `${monthNames[currentMonth]} ${currentYear}`,
+    shortName: `${monthNames[currentMonth].substring(0, 3)} ${currentYear}`,
+    revenue: 0,
+    orderCount: 0,
+    isCurrentMonth: true
+  });
+
+  verifiedPaidOrders.forEach((o) => {
+    const d = parseOrderDate(o);
+    const yr = d.getFullYear();
+    const m = d.getMonth();
+    const key = `${yr}-${String(m + 1).padStart(2, '0')}`;
+    const existing = monthlyStatsMap.get(key) || {
+      key,
+      year: yr,
+      month: m,
+      monthName: `${monthNames[m]} ${yr}`,
+      shortName: `${monthNames[m].substring(0, 3)} ${yr}`,
+      revenue: 0,
+      orderCount: 0,
+      isCurrentMonth: yr === currentYear && m === currentMonth
+    };
+    existing.revenue += (o.amountPaise || 0) / 100;
+    existing.orderCount += 1;
+    monthlyStatsMap.set(key, existing);
+  });
+
+  const monthlyBreakdown = Array.from(monthlyStatsMap.values()).sort((a, b) => b.key.localeCompare(a.key));
+
+  // 6. Yearly Breakdown Grouping
+  const yearlyStatsMap = new Map<number, {
+    year: number;
+    revenue: number;
+    orderCount: number;
+    isCurrentYear: boolean;
+  }>();
+
+  // Always seed current year
+  yearlyStatsMap.set(currentYear, {
+    year: currentYear,
+    revenue: 0,
+    orderCount: 0,
+    isCurrentYear: true
+  });
+
+  verifiedPaidOrders.forEach((o) => {
+    const yr = parseOrderDate(o).getFullYear();
+    const existing = yearlyStatsMap.get(yr) || {
+      year: yr,
+      revenue: 0,
+      orderCount: 0,
+      isCurrentYear: yr === currentYear
+    };
+    existing.revenue += (o.amountPaise || 0) / 100;
+    existing.orderCount += 1;
+    yearlyStatsMap.set(yr, existing);
+  });
+
+  const yearlyBreakdown = Array.from(yearlyStatsMap.values()).sort((a, b) => b.year - a.year);
+
+  // Available distinct years
+  const availableYears = Array.from(new Set([currentYear, ...yearlyBreakdown.map((y) => y.year)])).sort((a, b) => b - a);
+
+  // Filtered orders for Orders & Payments tab
+  const filteredOrdersList = orders.filter((o) => {
+    const matchesSearch =
+      !orderSearch ||
+      o.id.toLowerCase().includes(orderSearch.toLowerCase()) ||
+      o.studentName?.toLowerCase().includes(orderSearch.toLowerCase()) ||
+      o.studentPhone?.includes(orderSearch) ||
+      o.studentEmail?.toLowerCase().includes(orderSearch.toLowerCase()) ||
+      o.productTitleSnapshot?.toLowerCase().includes(orderSearch.toLowerCase());
+
+    const matchesStatus = orderStatusFilter === 'all' || o.status === orderStatusFilter;
+
+    const orderDate = parseOrderDate(o);
+    const matchesYear = orderYearFilter === 'all' || String(orderDate.getFullYear()) === orderYearFilter;
+    const matchesMonth = orderMonthFilter === 'all' || String(orderDate.getMonth()) === orderMonthFilter;
+
+    return matchesSearch && matchesStatus && matchesYear && matchesMonth;
+  });
+
+  const filteredOrdersRevenue = filteredOrdersList
+    .filter((o) => o.status === 'paid')
+    .reduce((sum, o) => sum + (o.amountPaise || 0), 0) / 100;
 
   const handleEditClick = (p: Product) => {
     setEditingProduct(p);
@@ -578,39 +731,280 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
                 </p>
               </div>
 
-              {/* Metrics Grid */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="bg-stone-50 p-4 rounded-2xl border border-stone-200 space-y-1">
-                  <span className="text-[11px] font-bold text-stone-500 uppercase tracking-wider">
-                    Total Revenue
-                  </span>
+              {/* Top Revenue & Performance Metrics Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* 1. Total Lifetime Revenue */}
+                <div className="bg-stone-50 p-4 rounded-2xl border border-stone-200 space-y-1.5 relative overflow-hidden">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-stone-500 uppercase tracking-wider">
+                      Total Revenue (Lifetime)
+                    </span>
+                    <span className="text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                      All Time
+                    </span>
+                  </div>
                   <p className="text-2xl font-extrabold text-emerald-700">₹{totalRevenue.toLocaleString()}</p>
-                  <p className="text-[10px] text-stone-400">From {verifiedPaidOrders.length} verified orders</p>
+                  <p className="text-[10px] text-stone-400">From {verifiedPaidOrders.length} verified paid orders</p>
                 </div>
 
-                <div className="bg-stone-50 p-4 rounded-2xl border border-stone-200 space-y-1">
-                  <span className="text-[11px] font-bold text-stone-500 uppercase tracking-wider">
-                    Active Products
-                  </span>
-                  <p className="text-2xl font-extrabold text-stone-900">{products.filter(p => p.published).length}</p>
-                  <p className="text-[10px] text-stone-400">{products.length} total in catalog</p>
+                {/* 2. Yearly Revenue */}
+                <div className="bg-stone-50 p-4 rounded-2xl border border-stone-200 space-y-1.5 relative overflow-hidden">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-stone-500 uppercase tracking-wider">
+                      Yearly Revenue ({currentYear})
+                    </span>
+                    <span className="text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-red-100 text-red-800">
+                      Year {currentYear}
+                    </span>
+                  </div>
+                  <p className="text-2xl font-extrabold text-stone-900">₹{currentYearRevenue.toLocaleString()}</p>
+                  <p className="text-[10px] text-stone-400">{thisYearPaidOrders.length} paid orders in {currentYear}</p>
                 </div>
 
-                <div className="bg-stone-50 p-4 rounded-2xl border border-stone-200 space-y-1">
-                  <span className="text-[11px] font-bold text-stone-500 uppercase tracking-wider">
-                    Registered Students
-                  </span>
-                  <p className="text-2xl font-extrabold text-stone-900">{students.length}</p>
-                  <p className="text-[10px] text-stone-400">Assamese & English Medium</p>
+                {/* 3. Monthly Revenue */}
+                <div className="bg-stone-50 p-4 rounded-2xl border border-stone-200 space-y-1.5 relative overflow-hidden">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-stone-500 uppercase tracking-wider">
+                      Monthly Revenue ({monthNames[currentMonth].substring(0, 3)} {currentYear})
+                    </span>
+                    <span className="text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">
+                      This Month
+                    </span>
+                  </div>
+                  <p className="text-2xl font-extrabold text-blue-700">₹{currentMonthRevenue.toLocaleString()}</p>
+                  <p className="text-[10px] text-stone-400">{thisMonthPaidOrders.length} paid orders in {monthNames[currentMonth]}</p>
                 </div>
 
-                <div className="bg-stone-50 p-4 rounded-2xl border border-stone-200 space-y-1">
-                  <span className="text-[11px] font-bold text-stone-500 uppercase tracking-wider">
-                    Pending / Incomplete
-                  </span>
-                  <p className="text-2xl font-extrabold text-amber-700">{pendingOrders.length}</p>
-                  <p className="text-[10px] text-stone-400">{failedOrders.length} failed attempts</p>
+                {/* 4. Today's Revenue & Students */}
+                <div className="bg-stone-50 p-4 rounded-2xl border border-stone-200 space-y-1.5 relative overflow-hidden">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-stone-500 uppercase tracking-wider">
+                      Today's Sales
+                    </span>
+                    <span className="text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
+                      Today
+                    </span>
+                  </div>
+                  <p className="text-2xl font-extrabold text-stone-900">₹{todayRevenue.toLocaleString()}</p>
+                  <p className="text-[10px] text-stone-400">{todayPaidOrders.length} sales today • {students.length} students</p>
                 </div>
+              </div>
+
+              {/* REVENUE & EARNINGS ANALYTICS: MONTHLY & YEARLY BREAKDOWN */}
+              <div className="bg-stone-50 border border-stone-200 rounded-3xl p-6 space-y-5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <div className="flex items-center space-x-2">
+                      <BarChart3 className="w-5 h-5 text-red-700" />
+                      <h3 className="font-extrabold text-base text-stone-900">
+                        Earnings & Revenue Analytics
+                      </h3>
+                    </div>
+                    <p className="text-xs text-stone-500 mt-0.5">
+                      Detailed Monthly and Yearly income breakdown from verified student notes sales.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center space-x-2">
+                    {/* View Switcher: Monthly vs Yearly */}
+                    <div className="bg-white p-1 rounded-xl border border-stone-200 flex items-center shadow-2xs">
+                      <button
+                        type="button"
+                        onClick={() => setRevenueViewTab('monthly')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          revenueViewTab === 'monthly'
+                            ? 'bg-red-700 text-white shadow-xs'
+                            : 'text-stone-600 hover:text-stone-900 hover:bg-stone-50'
+                        }`}
+                      >
+                        Monthly Revenue
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setRevenueViewTab('yearly')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          revenueViewTab === 'yearly'
+                            ? 'bg-red-700 text-white shadow-xs'
+                            : 'text-stone-600 hover:text-stone-900 hover:bg-stone-50'
+                        }`}
+                      >
+                        Yearly Revenue
+                      </button>
+                    </div>
+
+                    {/* If in monthly view, optional year filter */}
+                    {revenueViewTab === 'monthly' && (
+                      <select
+                        value={revenueYearFilter}
+                        onChange={(e) => setRevenueYearFilter(e.target.value)}
+                        className="bg-white border border-stone-200 text-stone-800 text-xs font-semibold rounded-xl px-2.5 py-1.5 shadow-2xs focus:outline-none focus:border-red-600 cursor-pointer"
+                      >
+                        <option value="all">All Years</option>
+                        {availableYears.map((yr) => (
+                          <option key={yr} value={String(yr)}>
+                            Year {yr}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                </div>
+
+                {/* MONTHLY VIEW CONTENT */}
+                {revenueViewTab === 'monthly' && (
+                  <div className="space-y-4">
+                    {/* Quick Highlights */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                      <div className="bg-white p-3.5 rounded-2xl border border-stone-200 space-y-1">
+                        <span className="text-[10px] uppercase font-bold text-stone-400">This Month ({monthNames[currentMonth].substring(0, 3)} {currentYear})</span>
+                        <p className="text-xl font-extrabold text-blue-700">₹{currentMonthRevenue.toLocaleString()}</p>
+                        <p className="text-[10px] text-stone-500">{thisMonthPaidOrders.length} verified purchases</p>
+                      </div>
+                      <div className="bg-white p-3.5 rounded-2xl border border-stone-200 space-y-1">
+                        <span className="text-[10px] uppercase font-bold text-stone-400">Total Recorded Months</span>
+                        <p className="text-xl font-extrabold text-stone-900">{monthlyBreakdown.length}</p>
+                        <p className="text-[10px] text-stone-500">Active monthly intervals</p>
+                      </div>
+                      <div className="bg-white p-3.5 rounded-2xl border border-stone-200 space-y-1">
+                        <span className="text-[10px] uppercase font-bold text-stone-400">Monthly Avg (Active)</span>
+                        <p className="text-xl font-extrabold text-emerald-700">
+                          ₹{monthlyBreakdown.length > 0 ? Math.round(totalRevenue / Math.max(1, monthlyBreakdown.filter(m => m.orderCount > 0).length || 1)).toLocaleString() : 0}
+                        </p>
+                        <p className="text-[10px] text-stone-500">Per active month</p>
+                      </div>
+                    </div>
+
+                    {/* Monthly Cards / Breakdown */}
+                    <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden divide-y divide-stone-100">
+                      {monthlyBreakdown
+                        .filter((m) => revenueYearFilter === 'all' || String(m.year) === revenueYearFilter)
+                        .map((m) => {
+                          const progressPercent = totalRevenue > 0 ? Math.min(100, Math.round((m.revenue / totalRevenue) * 100)) : 0;
+                          return (
+                            <div key={m.key} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-stone-50/50 transition-colors">
+                              <div className="flex items-center space-x-3 min-w-[200px]">
+                                <div className="w-10 h-10 rounded-xl bg-red-50 text-red-700 flex flex-col items-center justify-center font-bold text-xs shrink-0 border border-red-100">
+                                  <span className="text-[9px] uppercase font-semibold text-red-500">{m.shortName.split(' ')[0]}</span>
+                                  <span className="text-xs font-black">{m.shortName.split(' ')[1]}</span>
+                                </div>
+                                <div>
+                                  <div className="flex items-center space-x-1.5">
+                                    <h4 className="font-bold text-sm text-stone-900">{m.monthName}</h4>
+                                    {m.isCurrentMonth && (
+                                      <span className="bg-emerald-100 text-emerald-800 text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded-full">
+                                        Current Month
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-[11px] text-stone-500">{m.orderCount} paid {m.orderCount === 1 ? 'order' : 'orders'}</p>
+                                </div>
+                              </div>
+
+                              {/* Progress bar visual */}
+                              <div className="flex-1 max-w-xs hidden md:block">
+                                <div className="flex justify-between text-[10px] text-stone-400 mb-1">
+                                  <span>Share of Lifetime Revenue</span>
+                                  <span className="font-bold text-stone-700">{progressPercent}%</span>
+                                </div>
+                                <div className="w-full bg-stone-100 rounded-full h-2 overflow-hidden">
+                                  <div
+                                    className="bg-emerald-600 h-2 rounded-full transition-all duration-500"
+                                    style={{ width: `${Math.max(progressPercent, m.revenue > 0 ? 5 : 0)}%` }}
+                                  ></div>
+                                </div>
+                              </div>
+
+                              {/* Revenue values */}
+                              <div className="text-left sm:text-right">
+                                <p className="text-base font-extrabold text-stone-900">
+                                  ₹{m.revenue.toLocaleString()}
+                                </p>
+                                <p className="text-[10px] text-stone-500">
+                                  {m.orderCount > 0 ? `Avg ₹${Math.round(m.revenue / m.orderCount)}/order` : 'No orders yet'}
+                                </p>
+                              </div>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  </div>
+                )}
+
+                {/* YEARLY VIEW CONTENT */}
+                {revenueViewTab === 'yearly' && (
+                  <div className="space-y-4">
+                    {/* Quick highlights */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                      <div className="bg-white p-3.5 rounded-2xl border border-stone-200 space-y-1">
+                        <span className="text-[10px] uppercase font-bold text-stone-400">Current Year ({currentYear})</span>
+                        <p className="text-xl font-extrabold text-red-700">₹{currentYearRevenue.toLocaleString()}</p>
+                        <p className="text-[10px] text-stone-500">{thisYearPaidOrders.length} verified purchases</p>
+                      </div>
+                      <div className="bg-white p-3.5 rounded-2xl border border-stone-200 space-y-1">
+                        <span className="text-[10px] uppercase font-bold text-stone-400">Total Lifetime Revenue</span>
+                        <p className="text-xl font-extrabold text-emerald-700">₹{totalRevenue.toLocaleString()}</p>
+                        <p className="text-[10px] text-stone-500">Across {yearlyBreakdown.length} academic {yearlyBreakdown.length === 1 ? 'year' : 'years'}</p>
+                      </div>
+                      <div className="bg-white p-3.5 rounded-2xl border border-stone-200 space-y-1">
+                        <span className="text-[10px] uppercase font-bold text-stone-400">Target Benchmark</span>
+                        <p className="text-xl font-extrabold text-stone-900">HSLC 2027</p>
+                        <p className="text-[10px] text-stone-500">Assam Board Curriculum</p>
+                      </div>
+                    </div>
+
+                    {/* Yearly Breakdown List */}
+                    <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden divide-y divide-stone-100">
+                      {yearlyBreakdown.map((y) => {
+                        const progressPercent = totalRevenue > 0 ? Math.min(100, Math.round((y.revenue / totalRevenue) * 100)) : 0;
+                        return (
+                          <div key={y.year} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-stone-50/50 transition-colors">
+                            <div className="flex items-center space-x-3 min-w-[200px]">
+                              <div className="w-10 h-10 rounded-xl bg-stone-900 text-white flex flex-col items-center justify-center font-bold text-xs shrink-0">
+                                <span className="text-[9px] uppercase font-semibold text-red-400">Year</span>
+                                <span className="text-xs font-black">{y.year}</span>
+                              </div>
+                              <div>
+                                <div className="flex items-center space-x-1.5">
+                                  <h4 className="font-bold text-sm text-stone-900">Academic Year {y.year}</h4>
+                                  {y.isCurrentYear && (
+                                    <span className="bg-emerald-100 text-emerald-800 text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded-full">
+                                      Current Year
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-[11px] text-stone-500">{y.orderCount} paid orders completed</p>
+                              </div>
+                            </div>
+
+                            {/* Progress bar visual */}
+                            <div className="flex-1 max-w-xs hidden md:block">
+                              <div className="flex justify-between text-[10px] text-stone-400 mb-1">
+                                <span>Share of Total Revenue</span>
+                                <span className="font-bold text-stone-700">{progressPercent}%</span>
+                              </div>
+                              <div className="w-full bg-stone-100 rounded-full h-2 overflow-hidden">
+                                <div
+                                  className="bg-red-700 h-2 rounded-full transition-all duration-500"
+                                  style={{ width: `${Math.max(progressPercent, y.revenue > 0 ? 5 : 0)}%` }}
+                                ></div>
+                              </div>
+                            </div>
+
+                            {/* Revenue values */}
+                            <div className="text-left sm:text-right">
+                              <p className="text-base font-extrabold text-stone-900">
+                                ₹{y.revenue.toLocaleString()}
+                              </p>
+                              <p className="text-[10px] text-stone-500">
+                                {y.orderCount > 0 ? `Avg ₹${Math.round(y.revenue / 12)} / month` : 'No orders yet'}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Recent Orders Overview */}
@@ -1140,6 +1534,83 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
                 </div>
               </div>
 
+              {/* Order Filters Bar (Year, Month, Status, Revenue Summary) */}
+              <div className="bg-stone-50 border border-stone-200 rounded-2xl p-3.5 flex flex-wrap items-center justify-between gap-3 text-xs">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-bold text-stone-700 flex items-center space-x-1">
+                    <Filter className="w-3.5 h-3.5 text-stone-400" />
+                    <span>Filter:</span>
+                  </span>
+
+                  {/* Year Filter */}
+                  <select
+                    value={orderYearFilter}
+                    onChange={(e) => setOrderYearFilter(e.target.value)}
+                    className="bg-white border border-stone-200 text-stone-800 rounded-xl px-2.5 py-1.5 font-semibold focus:outline-none focus:border-red-600 cursor-pointer shadow-2xs"
+                  >
+                    <option value="all">All Years</option>
+                    {availableYears.map((yr) => (
+                      <option key={yr} value={String(yr)}>
+                        Year {yr}
+                      </option>
+                    ))}
+                  </select>
+
+                  {/* Month Filter */}
+                  <select
+                    value={orderMonthFilter}
+                    onChange={(e) => setOrderMonthFilter(e.target.value)}
+                    className="bg-white border border-stone-200 text-stone-800 rounded-xl px-2.5 py-1.5 font-semibold focus:outline-none focus:border-red-600 cursor-pointer shadow-2xs"
+                  >
+                    <option value="all">All Months</option>
+                    {monthNames.map((mName, idx) => (
+                      <option key={mName} value={String(idx)}>
+                        {mName}
+                      </option>
+                    ))}
+                  </select>
+
+                  {/* Status Filter */}
+                  <select
+                    value={orderStatusFilter}
+                    onChange={(e) => setOrderStatusFilter(e.target.value)}
+                    className="bg-white border border-stone-200 text-stone-800 rounded-xl px-2.5 py-1.5 font-semibold focus:outline-none focus:border-red-600 cursor-pointer shadow-2xs"
+                  >
+                    <option value="all">All Statuses</option>
+                    <option value="paid">Paid & Verified</option>
+                    <option value="pending">Pending</option>
+                    <option value="failed">Failed</option>
+                  </select>
+
+                  {(orderYearFilter !== 'all' || orderMonthFilter !== 'all' || orderStatusFilter !== 'all' || orderSearch) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOrderYearFilter('all');
+                        setOrderMonthFilter('all');
+                        setOrderStatusFilter('all');
+                        setOrderSearch('');
+                      }}
+                      className="text-red-700 hover:text-red-800 font-bold px-2 py-1 text-[11px] underline cursor-pointer"
+                    >
+                      Clear Filters
+                    </button>
+                  )}
+                </div>
+
+                {/* Filtered Revenue Metric */}
+                <div className="flex items-center space-x-3 text-xs">
+                  <span className="text-stone-500">
+                    Showing <strong className="text-stone-900">{filteredOrdersList.length}</strong> orders
+                  </span>
+                  <div className="h-4 w-px bg-stone-300"></div>
+                  <span className="bg-emerald-100 text-emerald-800 px-3 py-1 rounded-xl font-bold flex items-center space-x-1.5">
+                    <span>Period Revenue:</span>
+                    <strong className="text-emerald-900">₹{filteredOrdersRevenue.toLocaleString()}</strong>
+                  </span>
+                </div>
+              </div>
+
               <div className="border border-stone-200 rounded-2xl overflow-hidden">
                 <table className="w-full text-left text-xs">
                   <thead className="bg-stone-50 border-b border-stone-200 text-stone-500 uppercase text-[10px] font-bold">
@@ -1153,14 +1624,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-stone-100">
-                    {orders
-                      .filter((o) =>
-                        o.id.toLowerCase().includes(orderSearch.toLowerCase()) ||
-                        o.studentName?.toLowerCase().includes(orderSearch.toLowerCase()) ||
-                        o.studentPhone?.includes(orderSearch) ||
-                        o.studentEmail?.toLowerCase().includes(orderSearch.toLowerCase())
-                      )
-                      .map((o) => (
+                    {filteredOrdersList.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="py-12 text-center text-stone-500">
+                          <ShoppingBag className="w-8 h-8 text-stone-300 mx-auto mb-2" />
+                          <p className="font-semibold text-stone-700">No orders found for this period</p>
+                          <p className="text-[11px] text-stone-400">Try adjusting the year or month filter.</p>
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredOrdersList.map((o) => (
                         <tr key={o.id} className="hover:bg-stone-50/50">
                           <td className="py-3 px-4 font-mono">
                             <p className="font-bold text-stone-900">{o.id}</p>
@@ -1199,8 +1672,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
                           <td className="py-3 px-4 text-stone-500 text-[11px]">
                             {new Date(o.createdAt).toLocaleDateString()}
                           </td>
-                        </tr>
-                      ))}
+                      )))
+                    )}
                   </tbody>
                 </table>
               </div>
