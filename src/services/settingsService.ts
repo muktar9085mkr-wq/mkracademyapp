@@ -23,17 +23,17 @@ export const DEFAULT_SETTINGS: AppPublicSettings = {
     destinationUrl: '#notes'
   },
   social: {
-    whatsapp: '919864012345',
+    whatsapp: '7002958511',
     whatsappEnabled: true,
     telegram: 'https://t.me/mkr_academy_official',
-    telegramEnabled: true,
-    youtube: 'https://youtube.com/@mkr_academy',
+    telegramEnabled: false,
+    youtube: 'https://youtube.com/@mkracademy01',
     youtubeEnabled: true,
-    instagram: 'https://instagram.com/mkr_academy',
+    instagram: 'https://instagram.com/mkr__academy',
     instagramEnabled: true,
     email: 'muktar9085mkr@gmail.com',
     emailEnabled: true,
-    supportPhone: '+91 98640 12345',
+    supportPhone: '+91 7002958511',
     supportPhoneEnabled: true
   },
   announcement: '🔥 Special Launch: Get up to 50% discount on all HSLC 2027 Assamese & English medium note sets!',
