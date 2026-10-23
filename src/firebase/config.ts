@@ -14,10 +14,15 @@ const resolvedFirebaseConfig = {
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || firebaseConfig.measurementId,
 };
 
+// Provisioned Firestore Database ID from configuration
+export const firestoreDatabaseId =
+  import.meta.env.VITE_FIREBASE_DATABASE_ID ||
+  (firebaseConfig as any).firestoreDatabaseId;
+
 // Initialize Firebase
 export const app = getApps().length === 0 ? initializeApp(resolvedFirebaseConfig) : getApp();
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+export const db = firestoreDatabaseId ? getFirestore(app, firestoreDatabaseId) : getFirestore(app);
 export const storage = getStorage(app);
 
 // Authorized Super Admin Email

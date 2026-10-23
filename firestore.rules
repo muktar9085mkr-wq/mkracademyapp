@@ -51,7 +51,8 @@ service cloud.firestore {
     match /purchases/{purchaseId} {
       allow get: if isSignedIn() && (resource.data.uid == request.auth.uid || isAdmin());
       allow list: if isSignedIn() && (resource.data.uid == request.auth.uid || isAdmin());
-      allow write: if isAdmin();
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if isAdmin();
     }
 
     // Public app settings (banners, social links, contact info)
