@@ -29,10 +29,23 @@ import {
   Check,
   Calendar,
   DollarSign,
-  BarChart3
+  BarChart3,
+  Sparkles,
+  Image as ImageIcon,
+  MessageCircle,
+  Send,
+  Youtube,
+  Instagram,
+  Phone,
+  Mail,
+  GraduationCap,
+  BookOpen,
+  Award,
+  School
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { Product, Order, UserProfile, AppPublicSettings } from '../../types';
+import { Product, Order, UserProfile, AppPublicSettings, AppLogoSettings } from '../../types';
+import { BrandLogo } from '../common/BrandLogo';
 import {
   getAllProductsAdmin,
   addProduct,
@@ -61,6 +74,7 @@ type AdminTab =
   | 'students'
   | 'orders'
   | 'banner'
+  | 'logo'
   | 'social'
   | 'payment-config';
 
@@ -118,13 +132,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
   const [bannerCta, setBannerCta] = useState('');
   const [bannerSaving, setBannerSaving] = useState(false);
 
-  // Social Links State
+  // Logo & Branding State
+  const [logoImageUrl, setLogoImageUrl] = useState('');
+  const [logoText, setLogoText] = useState('MKR');
+  const [logoHighlightText, setLogoHighlightText] = useState('ACADEMY');
+  const [logoSubtitle, setLogoSubtitle] = useState('Quality Notes • Better Results');
+  const [logoIconPreset, setLogoIconPreset] = useState<'graduation' | 'book' | 'sparkles' | 'award' | 'school'>('graduation');
+  const [logoShowImageOnly, setLogoShowImageOnly] = useState(false);
+  const [logoSaving, setLogoSaving] = useState(false);
+  const [logoMessage, setLogoMessage] = useState<string | null>(null);
+
+  // Social Links & Enable/Disable State
   const [socialWhatsapp, setSocialWhatsapp] = useState('');
+  const [socialWhatsappEnabled, setSocialWhatsappEnabled] = useState(true);
   const [socialTelegram, setSocialTelegram] = useState('');
+  const [socialTelegramEnabled, setSocialTelegramEnabled] = useState(true);
   const [socialYoutube, setSocialYoutube] = useState('');
+  const [socialYoutubeEnabled, setSocialYoutubeEnabled] = useState(true);
   const [socialInstagram, setSocialInstagram] = useState('');
+  const [socialInstagramEnabled, setSocialInstagramEnabled] = useState(true);
   const [socialEmail, setSocialEmail] = useState('');
+  const [socialEmailEnabled, setSocialEmailEnabled] = useState(true);
+  const [socialPhone, setSocialPhone] = useState('+91 98640 12345');
+  const [socialPhoneEnabled, setSocialPhoneEnabled] = useState(true);
   const [socialSaving, setSocialSaving] = useState(false);
+  const [socialMessage, setSocialMessage] = useState<string | null>(null);
 
   // Search in tables
   const [productSearch, setProductSearch] = useState('');
@@ -226,11 +258,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
         setBannerBadge(setts.banner.badgeText || '');
         setBannerCta(setts.banner.ctaText || '');
 
-        setSocialWhatsapp(setts.social.whatsapp || '');
-        setSocialTelegram(setts.social.telegram || '');
-        setSocialYoutube(setts.social.youtube || '');
-        setSocialInstagram(setts.social.instagram || '');
-        setSocialEmail(setts.social.email || '');
+        if (setts.logo) {
+          setLogoImageUrl(setts.logo.imageUrl || '');
+          setLogoText(setts.logo.text || 'MKR');
+          setLogoHighlightText(setts.logo.highlightText || 'ACADEMY');
+          setLogoSubtitle(setts.logo.subtitle || 'Quality Notes • Better Results');
+          setLogoIconPreset(setts.logo.iconPreset || 'graduation');
+          setLogoShowImageOnly(Boolean(setts.logo.showImageOnly));
+        }
+
+        setSocialWhatsapp(setts.social?.whatsapp || '');
+        setSocialWhatsappEnabled(setts.social?.whatsappEnabled !== false);
+        setSocialTelegram(setts.social?.telegram || '');
+        setSocialTelegramEnabled(setts.social?.telegramEnabled !== false);
+        setSocialYoutube(setts.social?.youtube || '');
+        setSocialYoutubeEnabled(setts.social?.youtubeEnabled !== false);
+        setSocialInstagram(setts.social?.instagram || '');
+        setSocialInstagramEnabled(setts.social?.instagramEnabled !== false);
+        setSocialEmail(setts.social?.email || '');
+        setSocialEmailEnabled(setts.social?.emailEnabled !== false);
+        setSocialPhone(setts.social?.supportPhone || '+91 98640 12345');
+        setSocialPhoneEnabled(setts.social?.supportPhoneEnabled !== false);
       }
     } catch (err) {
       console.error('Failed to load admin dashboard data:', err);
@@ -632,22 +680,58 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
     }
   };
 
+  const handleSaveLogo = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLogoSaving(true);
+    setLogoMessage(null);
+    try {
+      await updatePublicSettings({
+        logo: {
+          imageUrl: logoImageUrl.trim(),
+          text: logoText.trim() || 'MKR',
+          highlightText: logoHighlightText.trim() || 'ACADEMY',
+          subtitle: logoSubtitle.trim() || 'Quality Notes • Better Results',
+          iconPreset: logoIconPreset,
+          showImageOnly: logoShowImageOnly
+        }
+      });
+      setLogoMessage('Website Logo & Branding updated successfully! Changes are live across the store.');
+      // Refresh local settings
+      const refreshed = await getPublicSettings();
+      setSettings(refreshed);
+    } catch (err: any) {
+      setLogoMessage(err.message || 'Failed to update website logo');
+    } finally {
+      setLogoSaving(false);
+    }
+  };
+
   const handleSaveSocial = async (e: React.FormEvent) => {
     e.preventDefault();
     setSocialSaving(true);
+    setSocialMessage(null);
     try {
       await updatePublicSettings({
         social: {
-          whatsapp: socialWhatsapp,
-          telegram: socialTelegram,
-          youtube: socialYoutube,
-          instagram: socialInstagram,
-          email: socialEmail
+          whatsapp: socialWhatsapp.trim(),
+          whatsappEnabled: socialWhatsappEnabled,
+          telegram: socialTelegram.trim(),
+          telegramEnabled: socialTelegramEnabled,
+          youtube: socialYoutube.trim(),
+          youtubeEnabled: socialYoutubeEnabled,
+          instagram: socialInstagram.trim(),
+          instagramEnabled: socialInstagramEnabled,
+          email: socialEmail.trim(),
+          emailEnabled: socialEmailEnabled,
+          supportPhone: socialPhone.trim(),
+          supportPhoneEnabled: socialPhoneEnabled
         }
       });
-      alert('Social links updated successfully!');
+      setSocialMessage('Social platform links and visibility toggles saved successfully!');
+      const refreshed = await getPublicSettings();
+      setSettings(refreshed);
     } catch (err: any) {
-      alert(err.message || 'Failed to update social links');
+      setSocialMessage(err.message || 'Failed to update social links');
     } finally {
       setSocialSaving(false);
     }
@@ -693,7 +777,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
       <div className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 flex flex-col md:flex-row gap-6">
         
         {/* Navigation Sidebar */}
-        <aside className="w-full md:w-60 shrink-0 space-y-1">
+        <aside className="w-full md:w-60 shrink-0 flex md:flex-col overflow-x-auto md:overflow-visible gap-1.5 pb-2 md:pb-0">
           <button
             onClick={() => setCurrentTab('dashboard')}
             className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center space-x-2.5 transition-colors ${
@@ -776,6 +860,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
           >
             <Megaphone className="w-4 h-4" />
             <span>Banner Management</span>
+          </button>
+
+          <button
+            onClick={() => setCurrentTab('logo')}
+            className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center space-x-2.5 transition-colors ${
+              currentTab === 'logo'
+                ? 'bg-red-700 text-white shadow-xs'
+                : 'bg-white text-stone-700 hover:bg-stone-50 border border-stone-200'
+            }`}
+          >
+            <Sparkles className="w-4 h-4 text-amber-500" />
+            <span>Logo & Branding</span>
           </button>
 
           <button
@@ -1578,13 +1674,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
                         onChange={(e) => setProdClass(e.target.value)}
                         className="w-full bg-white border border-stone-300 rounded-xl px-3 py-2 text-stone-900"
                       >
-                        <option value="HSLC 2027">HSLC 2027</option>
+                        <option value="HSLC 2027">HSLC 2027 (Class 10 Board)</option>
                         <option value="Class 10">Class 10</option>
                         <option value="Class 9">Class 9</option>
-                        <option value="Class 8">Class 8</option>
-                        <option value="Class 7">Class 7</option>
-                        <option value="Class 6">Class 6</option>
-                        <option value="Other Examinations">Other Examinations</option>
                       </select>
                     </div>
 
@@ -2327,84 +2419,453 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
             </div>
           )}
 
-          {/* TAB: SOCIAL LINKS */}
-          {currentTab === 'social' && (
-            <div className="space-y-6 animate-in fade-in max-w-2xl">
+          {/* TAB: LOGO MANAGEMENT */}
+          {currentTab === 'logo' && (
+            <div className="space-y-6 animate-in fade-in max-w-3xl">
               <div>
-                <h2 className="text-xl font-extrabold text-stone-900 font-sans">
-                  Official Social & Student Support Links
+                <h2 className="text-xl font-extrabold text-stone-900 font-sans flex items-center space-x-2">
+                  <Sparkles className="w-5 h-5 text-amber-500" />
+                  <span>Website Logo & Brand Customization</span>
                 </h2>
                 <p className="text-xs text-stone-500">
-                  Only configured links are displayed on the student store and footer.
+                  Update the website logo, title text, highlight color, and subtitle live across Header, Footer, and Receipts.
                 </p>
               </div>
 
-              <form onSubmit={handleSaveSocial} className="space-y-4 text-xs">
+              {logoMessage && (
+                <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs text-emerald-800 flex items-center space-x-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span className="font-semibold">{logoMessage}</span>
+                </div>
+              )}
+
+              {/* Live Preview Card */}
+              <div className="bg-stone-50 p-5 rounded-3xl border border-stone-200 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-bold text-stone-700 uppercase tracking-wider">
+                    Live Logo Preview
+                  </h3>
+                  <span className="text-[10px] text-stone-500 font-medium">
+                    Shows real-time appearance on both light and dark headers
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Light Header Preview (Navbar) */}
+                  <div className="bg-white p-4 rounded-2xl border border-stone-200 shadow-xs">
+                    <span className="text-[10px] font-bold uppercase text-stone-400 block mb-2">
+                      Header / Navbar (Light Theme)
+                    </span>
+                    <div className="py-2">
+                      <BrandLogo
+                        settings={{
+                          imageUrl: logoImageUrl,
+                          text: logoText || 'MKR',
+                          highlightText: logoHighlightText || 'ACADEMY',
+                          subtitle: logoSubtitle || 'Quality Notes • Better Results',
+                          iconPreset: logoIconPreset,
+                          showImageOnly: logoShowImageOnly
+                        }}
+                        variant="dark"
+                        size="md"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Dark Theme Preview (Footer / Hero) */}
+                  <div className="bg-stone-900 p-4 rounded-2xl border border-stone-800 shadow-xs">
+                    <span className="text-[10px] font-bold uppercase text-stone-400 block mb-2">
+                      Footer / Hero (Dark Theme)
+                    </span>
+                    <div className="py-2">
+                      <BrandLogo
+                        settings={{
+                          imageUrl: logoImageUrl,
+                          text: logoText || 'MKR',
+                          highlightText: logoHighlightText || 'ACADEMY',
+                          subtitle: logoSubtitle || 'Quality Notes • Better Results',
+                          iconPreset: logoIconPreset,
+                          showImageOnly: logoShowImageOnly
+                        }}
+                        variant="light"
+                        size="md"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Logo Settings Form */}
+              <form onSubmit={handleSaveLogo} className="bg-white p-5 rounded-3xl border border-stone-200 space-y-5 text-xs">
+                {/* 1. Custom Image URL */}
+                <div className="space-y-1.5">
+                  <label className="block text-stone-800 font-bold">
+                    Custom Logo Image URL (Optional)
+                  </label>
+                  <input
+                    type="url"
+                    value={logoImageUrl}
+                    onChange={(e) => setLogoImageUrl(e.target.value)}
+                    placeholder="https://example.com/logo.png or Google Drive direct image URL"
+                    className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3.5 py-2.5 text-stone-900 focus:bg-white focus:outline-none focus:border-red-600 font-mono text-xs"
+                  />
+                  <p className="text-[11px] text-stone-500">
+                    Paste any public image URL (PNG, SVG, JPG). If left blank or if an error occurs, the stylish preset icon and brand text will be rendered automatically.
+                  </p>
+                </div>
+
+                {/* Show Image Only toggle */}
+                {logoImageUrl.trim() && (
+                  <div className="flex items-center space-x-2.5 bg-stone-50 p-3 rounded-xl border border-stone-200">
+                    <input
+                      type="checkbox"
+                      id="showImageOnly"
+                      checked={logoShowImageOnly}
+                      onChange={(e) => setLogoShowImageOnly(e.target.checked)}
+                      className="w-4 h-4 accent-red-700 rounded cursor-pointer"
+                    />
+                    <label htmlFor="showImageOnly" className="text-stone-800 font-semibold cursor-pointer">
+                      Display Logo Image only (hide the text title next to it)
+                    </label>
+                  </div>
+                )}
+
+                {/* 2. Brand Text Fields */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-stone-100">
+                  <div>
+                    <label className="block text-stone-700 font-semibold mb-1">
+                      Primary Brand Name
+                    </label>
+                    <input
+                      type="text"
+                      value={logoText}
+                      onChange={(e) => setLogoText(e.target.value)}
+                      placeholder="MKR"
+                      className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-stone-900 font-bold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-stone-700 font-semibold mb-1">
+                      Highlight Accent Name (Red text)
+                    </label>
+                    <input
+                      type="text"
+                      value={logoHighlightText}
+                      onChange={(e) => setLogoHighlightText(e.target.value)}
+                      placeholder="ACADEMY"
+                      className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-red-700 font-bold"
+                    />
+                  </div>
+                </div>
+
+                {/* 3. Subtitle / Slogan */}
                 <div>
                   <label className="block text-stone-700 font-semibold mb-1">
-                    WhatsApp Number (Indian format without +)
+                    Tagline / Subtitle
                   </label>
                   <input
                     type="text"
-                    value={socialWhatsapp}
-                    onChange={(e) => setSocialWhatsapp(e.target.value)}
-                    placeholder="919864012345"
+                    value={logoSubtitle}
+                    onChange={(e) => setLogoSubtitle(e.target.value)}
+                    placeholder="Quality Notes • Better Results"
                     className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-stone-900"
                   />
                 </div>
 
+                {/* 4. Preset Icon Selection */}
                 <div>
-                  <label className="block text-stone-700 font-semibold mb-1">Telegram Channel URL</label>
+                  <label className="block text-stone-700 font-semibold mb-2">
+                    Fallback Preset Icon
+                  </label>
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+                    {[
+                      { id: 'graduation', label: 'Graduation Cap', icon: GraduationCap },
+                      { id: 'book', label: 'Book Open', icon: BookOpen },
+                      { id: 'sparkles', label: 'Sparkles', icon: Sparkles },
+                      { id: 'award', label: 'Award', icon: Award },
+                      { id: 'school', label: 'School', icon: School }
+                    ].map((preset) => {
+                      const IconComp = preset.icon;
+                      const isSelected = logoIconPreset === preset.id;
+                      return (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          onClick={() => setLogoIconPreset(preset.id as any)}
+                          className={`p-3 rounded-xl border flex flex-col items-center justify-center space-y-1.5 transition-all cursor-pointer ${
+                            isSelected
+                              ? 'bg-red-50 border-red-600 text-red-700 font-bold shadow-xs'
+                              : 'bg-stone-50 border-stone-200 text-stone-600 hover:bg-stone-100'
+                          }`}
+                        >
+                          <IconComp className="w-5 h-5" />
+                          <span className="text-[10px]">{preset.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Submit button */}
+                <div className="pt-2">
+                  <button
+                    type="submit"
+                    disabled={logoSaving}
+                    className="py-2.5 px-6 rounded-xl bg-red-700 hover:bg-red-800 disabled:bg-stone-300 text-white font-bold flex items-center space-x-2 shadow-xs cursor-pointer"
+                  >
+                    {logoSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                    <span>{logoSaving ? 'Saving Logo...' : 'Save & Update Website Logo'}</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {/* TAB: SOCIAL & SUPPORT LINKS (WITH ENABLE/DISABLE TOGGLES) */}
+          {currentTab === 'social' && (
+            <div className="space-y-6 animate-in fade-in max-w-3xl">
+              <div>
+                <h2 className="text-xl font-extrabold text-stone-900 font-sans flex items-center space-x-2">
+                  <Share2 className="w-5 h-5 text-red-700" />
+                  <span>Official Social Links & Platform Toggles</span>
+                </h2>
+                <p className="text-xs text-stone-500">
+                  Easily enable or disable any social platform link. Only enabled platforms are shown to students in the header, footer, and community cards.
+                </p>
+              </div>
+
+              {socialMessage && (
+                <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs text-emerald-800 flex items-center space-x-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span className="font-semibold">{socialMessage}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleSaveSocial} className="space-y-4 text-xs">
+                {/* 1. WhatsApp */}
+                <div className={`p-4 rounded-2xl border transition-all ${
+                  socialWhatsappEnabled ? 'bg-white border-emerald-200' : 'bg-stone-50 border-stone-200 opacity-75'
+                }`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center space-x-2">
+                      <div className="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center">
+                        <MessageCircle className="w-4 h-4" />
+                      </div>
+                      <span className="font-bold text-stone-900 text-sm">WhatsApp Community / Support</span>
+                    </div>
+
+                    <label className="flex items-center space-x-2 cursor-pointer select-none">
+                      <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
+                        socialWhatsappEnabled ? 'bg-emerald-100 text-emerald-800' : 'bg-stone-200 text-stone-600'
+                      }`}>
+                        {socialWhatsappEnabled ? 'Enabled' : 'Disabled'}
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={socialWhatsappEnabled}
+                        onChange={(e) => setSocialWhatsappEnabled(e.target.checked)}
+                        className="w-4 h-4 accent-emerald-600 rounded cursor-pointer"
+                      />
+                    </label>
+                  </div>
+                  <input
+                    type="text"
+                    value={socialWhatsapp}
+                    onChange={(e) => setSocialWhatsapp(e.target.value)}
+                    placeholder="919864012345 (Country code 91 + 10-digit number)"
+                    className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-stone-900 focus:bg-white focus:outline-none focus:border-emerald-600"
+                  />
+                  <p className="text-[10px] text-stone-400 mt-1">
+                    Direct WhatsApp link used for instant student query support and WhatsApp community join button.
+                  </p>
+                </div>
+
+                {/* 2. Telegram */}
+                <div className={`p-4 rounded-2xl border transition-all ${
+                  socialTelegramEnabled ? 'bg-white border-sky-200' : 'bg-stone-50 border-stone-200 opacity-75'
+                }`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center space-x-2">
+                      <div className="w-7 h-7 rounded-lg bg-sky-600 text-white flex items-center justify-center">
+                        <Send className="w-4 h-4" />
+                      </div>
+                      <span className="font-bold text-stone-900 text-sm">Telegram Channel</span>
+                    </div>
+
+                    <label className="flex items-center space-x-2 cursor-pointer select-none">
+                      <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
+                        socialTelegramEnabled ? 'bg-sky-100 text-sky-800' : 'bg-stone-200 text-stone-600'
+                      }`}>
+                        {socialTelegramEnabled ? 'Enabled' : 'Disabled'}
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={socialTelegramEnabled}
+                        onChange={(e) => setSocialTelegramEnabled(e.target.checked)}
+                        className="w-4 h-4 accent-sky-600 rounded cursor-pointer"
+                      />
+                    </label>
+                  </div>
                   <input
                     type="url"
                     value={socialTelegram}
                     onChange={(e) => setSocialTelegram(e.target.value)}
                     placeholder="https://t.me/mkr_academy_official"
-                    className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-stone-900"
+                    className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-stone-900 focus:bg-white focus:outline-none focus:border-sky-600"
                   />
                 </div>
 
-                <div>
-                  <label className="block text-stone-700 font-semibold mb-1">YouTube Channel URL</label>
+                {/* 3. YouTube */}
+                <div className={`p-4 rounded-2xl border transition-all ${
+                  socialYoutubeEnabled ? 'bg-white border-red-200' : 'bg-stone-50 border-stone-200 opacity-75'
+                }`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center space-x-2">
+                      <div className="w-7 h-7 rounded-lg bg-red-600 text-white flex items-center justify-center">
+                        <Youtube className="w-4 h-4" />
+                      </div>
+                      <span className="font-bold text-stone-900 text-sm">YouTube Channel</span>
+                    </div>
+
+                    <label className="flex items-center space-x-2 cursor-pointer select-none">
+                      <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
+                        socialYoutubeEnabled ? 'bg-red-100 text-red-800' : 'bg-stone-200 text-stone-600'
+                      }`}>
+                        {socialYoutubeEnabled ? 'Enabled' : 'Disabled'}
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={socialYoutubeEnabled}
+                        onChange={(e) => setSocialYoutubeEnabled(e.target.checked)}
+                        className="w-4 h-4 accent-red-600 rounded cursor-pointer"
+                      />
+                    </label>
+                  </div>
                   <input
                     type="url"
                     value={socialYoutube}
                     onChange={(e) => setSocialYoutube(e.target.value)}
                     placeholder="https://youtube.com/@mkr_academy"
-                    className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-stone-900"
+                    className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-stone-900 focus:bg-white focus:outline-none focus:border-red-600"
                   />
                 </div>
 
-                <div>
-                  <label className="block text-stone-700 font-semibold mb-1">Instagram Profile URL</label>
+                {/* 4. Instagram */}
+                <div className={`p-4 rounded-2xl border transition-all ${
+                  socialInstagramEnabled ? 'bg-white border-pink-200' : 'bg-stone-50 border-stone-200 opacity-75'
+                }`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center space-x-2">
+                      <div className="w-7 h-7 rounded-lg bg-pink-600 text-white flex items-center justify-center">
+                        <Instagram className="w-4 h-4" />
+                      </div>
+                      <span className="font-bold text-stone-900 text-sm">Instagram Profile</span>
+                    </div>
+
+                    <label className="flex items-center space-x-2 cursor-pointer select-none">
+                      <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
+                        socialInstagramEnabled ? 'bg-pink-100 text-pink-800' : 'bg-stone-200 text-stone-600'
+                      }`}>
+                        {socialInstagramEnabled ? 'Enabled' : 'Disabled'}
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={socialInstagramEnabled}
+                        onChange={(e) => setSocialInstagramEnabled(e.target.checked)}
+                        className="w-4 h-4 accent-pink-600 rounded cursor-pointer"
+                      />
+                    </label>
+                  </div>
                   <input
                     type="url"
                     value={socialInstagram}
                     onChange={(e) => setSocialInstagram(e.target.value)}
                     placeholder="https://instagram.com/mkr_academy"
-                    className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-stone-900"
+                    className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-stone-900 focus:bg-white focus:outline-none focus:border-pink-600"
                   />
                 </div>
 
-                <div>
-                  <label className="block text-stone-700 font-semibold mb-1">Official Support Email</label>
+                {/* 5. Support Email */}
+                <div className={`p-4 rounded-2xl border transition-all ${
+                  socialEmailEnabled ? 'bg-white border-stone-300' : 'bg-stone-50 border-stone-200 opacity-75'
+                }`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center space-x-2">
+                      <div className="w-7 h-7 rounded-lg bg-stone-800 text-white flex items-center justify-center">
+                        <Mail className="w-4 h-4" />
+                      </div>
+                      <span className="font-bold text-stone-900 text-sm">Official Support Email</span>
+                    </div>
+
+                    <label className="flex items-center space-x-2 cursor-pointer select-none">
+                      <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
+                        socialEmailEnabled ? 'bg-stone-200 text-stone-800' : 'bg-stone-200 text-stone-600'
+                      }`}>
+                        {socialEmailEnabled ? 'Enabled' : 'Disabled'}
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={socialEmailEnabled}
+                        onChange={(e) => setSocialEmailEnabled(e.target.checked)}
+                        className="w-4 h-4 accent-stone-700 rounded cursor-pointer"
+                      />
+                    </label>
+                  </div>
                   <input
                     type="email"
                     value={socialEmail}
                     onChange={(e) => setSocialEmail(e.target.value)}
                     placeholder="muktar9085mkr@gmail.com"
-                    className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-stone-900"
+                    className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-stone-900 focus:bg-white focus:outline-none focus:border-stone-600"
                   />
                 </div>
 
-                <button
-                  type="submit"
-                  disabled={socialSaving}
-                  className="py-2.5 px-6 rounded-xl bg-red-700 hover:bg-red-800 disabled:bg-stone-300 text-white font-bold flex items-center space-x-2 shadow-sm cursor-pointer"
-                >
-                  {socialSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                  <span>Save Social Settings</span>
-                </button>
+                {/* 6. Support Phone */}
+                <div className={`p-4 rounded-2xl border transition-all ${
+                  socialPhoneEnabled ? 'bg-white border-stone-300' : 'bg-stone-50 border-stone-200 opacity-75'
+                }`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center space-x-2">
+                      <div className="w-7 h-7 rounded-lg bg-stone-800 text-white flex items-center justify-center">
+                        <Phone className="w-4 h-4" />
+                      </div>
+                      <span className="font-bold text-stone-900 text-sm">Customer Support Phone</span>
+                    </div>
+
+                    <label className="flex items-center space-x-2 cursor-pointer select-none">
+                      <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
+                        socialPhoneEnabled ? 'bg-stone-200 text-stone-800' : 'bg-stone-200 text-stone-600'
+                      }`}>
+                        {socialPhoneEnabled ? 'Enabled' : 'Disabled'}
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={socialPhoneEnabled}
+                        onChange={(e) => setSocialPhoneEnabled(e.target.checked)}
+                        className="w-4 h-4 accent-stone-700 rounded cursor-pointer"
+                      />
+                    </label>
+                  </div>
+                  <input
+                    type="text"
+                    value={socialPhone}
+                    onChange={(e) => setSocialPhone(e.target.value)}
+                    placeholder="+91 98640 12345"
+                    className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-stone-900 focus:bg-white focus:outline-none focus:border-stone-600"
+                  />
+                </div>
+
+                <div className="pt-2">
+                  <button
+                    type="submit"
+                    disabled={socialSaving}
+                    className="py-2.5 px-6 rounded-xl bg-red-700 hover:bg-red-800 disabled:bg-stone-300 text-white font-bold flex items-center space-x-2 shadow-sm cursor-pointer"
+                  >
+                    {socialSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                    <span>Save Social Settings & Platform Toggles</span>
+                  </button>
+                </div>
               </form>
             </div>
           )}

@@ -1,0 +1,27 @@
+{
+  "name": "MKR Academy — Educational Notes & HSLC 2027",
+  "short_name": "MKR Academy",
+  "description": "High-scoring Chapter-wise Notes & Solved Papers for Class 10 & 9 in Assamese and English Mediums.",
+  "start_url": "/",
+  "id": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0c0a09",
+  "theme_color": "#b91c1c",
+  "categories": ["education", "books", "productivity"],
+  "icons": [
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192' fill='%23b91c1c'%3E%3Crect width='192' height='192' rx='40' fill='%23991b1b'/%3E%3Cpath d='M96 36L24 76l72 40 58.67-32.59V144h13.33V76L96 36zm-58.67 55.68L96 124.8l58.67-32.59L96 52.64 37.33 91.68zM96 137.5l-46.67-21.2v37.87l46.67 23.33 46.67-23.33v-37.87L96 137.5z' fill='white'/%3E%3C/svg%3E",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512' fill='%23b91c1c'%3E%3Crect width='512' height='512' rx='108' fill='%23991b1b'/%3E%3Cpath d='M256 96L64 202.67l192 106.67 156.44-86.91V384h35.56V202.67L256 96zm-156.44 148.48L256 332.8l156.44-86.91L256 140.37 99.56 244.48zM256 366.67l-124.44-56.53v100.99l124.44 62.2 124.44-62.2V310.14L256 366.67z' fill='white'/%3E%3C/svg%3E",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

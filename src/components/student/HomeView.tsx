@@ -79,10 +79,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
   const classBadges = [
     { id: 'HSLC 2027', name: 'HSLC 2027', desc: 'Target 90%+ in Board Exams', highlight: true },
     { id: 'Class 10', name: 'Class 10', desc: 'Pre-board & Annual Exam Notes', highlight: false },
-    { id: 'Class 9', name: 'Class 9', desc: 'Foundation & Theorem Proofs', highlight: false },
-    { id: 'Class 8', name: 'Class 8', desc: 'Quick Hand Revision Notes', highlight: false },
-    { id: 'Class 7', name: 'Class 7', desc: 'Basic Concepts & Worksheets', highlight: false },
-    { id: 'Class 6', name: 'Class 6', desc: 'Middle School Prep Sets', highlight: false }
+    { id: 'Class 9', name: 'Class 9', desc: 'Foundation & Theorem Proofs', highlight: false }
   ];
 
   const handleSearchSubmit = (e: React.FormEvent) => {
@@ -103,7 +100,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
           {/* Badge */}
           <div className="inline-flex items-center space-x-2 bg-stone-800/80 border border-stone-700 text-stone-200 text-xs font-bold px-3.5 py-1.5 rounded-full backdrop-blur-md">
             <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
-            <span>HSLC 2027 & Classes 6-10 Educational Platform</span>
+            <span>HSLC 2027 & Class 10 & 9 Special Preparation Platform</span>
           </div>
 
           {/* Main Headline */}
@@ -274,7 +271,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
             </p>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 pt-2">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
             {classBadges.map((badge) => (
               <button
                 key={badge.id}

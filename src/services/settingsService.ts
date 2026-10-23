@@ -6,6 +6,14 @@ const SETTINGS_COLLECTION = 'appSettings';
 const PUBLIC_DOC = 'public';
 
 export const DEFAULT_SETTINGS: AppPublicSettings = {
+  logo: {
+    imageUrl: '',
+    text: 'MKR',
+    highlightText: 'ACADEMY',
+    subtitle: 'Quality Notes • Better Results',
+    iconPreset: 'graduation',
+    showImageOnly: false
+  },
   banner: {
     enabled: true,
     title: 'HSLC 2027 Special Preparation Notes',
@@ -16,11 +24,17 @@ export const DEFAULT_SETTINGS: AppPublicSettings = {
   },
   social: {
     whatsapp: '919864012345',
+    whatsappEnabled: true,
     telegram: 'https://t.me/mkr_academy_official',
+    telegramEnabled: true,
     youtube: 'https://youtube.com/@mkr_academy',
+    youtubeEnabled: true,
     instagram: 'https://instagram.com/mkr_academy',
+    instagramEnabled: true,
     email: 'muktar9085mkr@gmail.com',
-    supportPhone: '+91 98640 12345'
+    emailEnabled: true,
+    supportPhone: '+91 98640 12345',
+    supportPhoneEnabled: true
   },
   announcement: '🔥 Special Launch: Get up to 50% discount on all HSLC 2027 Assamese & English medium note sets!',
   brandTagline: 'Quality Notes. Better Preparation. Better Results.'
@@ -44,7 +58,23 @@ export async function getPublicSettings(): Promise<AppPublicSettings> {
       return DEFAULT_SETTINGS;
     }
 
-    return { ...DEFAULT_SETTINGS, ...docSnap.data() } as AppPublicSettings;
+    const data = docSnap.data();
+    return {
+      ...DEFAULT_SETTINGS,
+      ...data,
+      logo: {
+        ...DEFAULT_SETTINGS.logo,
+        ...(data?.logo || {})
+      },
+      social: {
+        ...DEFAULT_SETTINGS.social,
+        ...(data?.social || {})
+      },
+      banner: {
+        ...DEFAULT_SETTINGS.banner,
+        ...(data?.banner || {})
+      }
+    } as AppPublicSettings;
   } catch (error) {
     console.warn('Could not fetch remote settings, using default:', error);
     return DEFAULT_SETTINGS;

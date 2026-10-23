@@ -12,96 +12,111 @@ import {
   Lock,
   ArrowRight
 } from 'lucide-react';
-import { SocialLinks } from '../../types';
+import { SocialLinks, AppPublicSettings } from '../../types';
+import { BrandLogo } from './BrandLogo';
 
 interface FooterProps {
   onNavigate: (view: string, filterParam?: any) => void;
   onOpenPolicy: (type: 'privacy' | 'terms' | 'refund' | 'contact') => void;
   socialLinks?: SocialLinks;
+  settings?: AppPublicSettings | null;
 }
 
 export const Footer: React.FC<FooterProps> = ({
   onNavigate,
   onOpenPolicy,
-  socialLinks
+  socialLinks,
+  settings
 }) => {
   const currentYear = new Date().getFullYear();
 
-  const whatsappNumber = socialLinks?.whatsapp || '919864012345';
-  const telegramUrl = socialLinks?.telegram || 'https://t.me/mkr_academy_official';
-  const youtubeUrl = socialLinks?.youtube || 'https://youtube.com/@mkr_academy';
-  const instagramUrl = socialLinks?.instagram || 'https://instagram.com/mkr_academy';
-  const contactEmail = socialLinks?.email || 'muktar9085mkr@gmail.com';
+  const effectiveSocial = socialLinks || settings?.social;
+  const whatsappNumber = effectiveSocial?.whatsapp || '919864012345';
+  const telegramUrl = effectiveSocial?.telegram || 'https://t.me/mkr_academy_official';
+  const youtubeUrl = effectiveSocial?.youtube || 'https://youtube.com/@mkr_academy';
+  const instagramUrl = effectiveSocial?.instagram || 'https://instagram.com/mkr_academy';
+  const contactEmail = effectiveSocial?.email || 'muktar9085mkr@gmail.com';
+
+  const isWhatsappEnabled = effectiveSocial?.whatsappEnabled !== false && Boolean(whatsappNumber);
+  const isTelegramEnabled = effectiveSocial?.telegramEnabled !== false && Boolean(telegramUrl);
+  const isYoutubeEnabled = effectiveSocial?.youtubeEnabled !== false && Boolean(youtubeUrl);
+  const isInstagramEnabled = effectiveSocial?.instagramEnabled !== false && Boolean(instagramUrl);
+  const isEmailEnabled = effectiveSocial?.emailEnabled !== false && Boolean(contactEmail);
 
   return (
-    <footer className="bg-stone-900 text-stone-300 pt-16 pb-12 border-t border-stone-800">
+    <footer className="bg-stone-900 text-stone-300 pt-16 pb-20 md:pb-12 border-t border-stone-800">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-10 pb-12 border-b border-stone-800">
           
           {/* Brand & Mission */}
           <div className="lg:col-span-2 space-y-4">
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 rounded-xl bg-red-700 flex items-center justify-center text-white shadow-md">
-                <GraduationCap className="w-6 h-6" />
-              </div>
-              <span className="font-extrabold text-2xl tracking-tight text-white font-sans">
-                MKR <span className="text-red-500">ACADEMY</span>
-              </span>
-            </div>
+            <BrandLogo settings={settings?.logo} variant="light" size="lg" />
             
             <p className="text-stone-300 text-sm leading-relaxed max-w-sm">
               <span className="font-semibold text-white">Quality Notes. Better Preparation. Better Results.</span>
               <br />
-              Dedicated educational digital notes and preparation platform for Class 6 to 10 students and HSLC 2027 aspirants. Prepared meticulously in both Assamese and English mediums by experienced subject educators.
+              Dedicated educational digital notes and preparation platform for Class 10 & 9 students and HSLC 2027 aspirants. Prepared meticulously in both Assamese and English mediums by experienced subject educators.
             </p>
 
+            {/* Quick Action Social Buttons (Only if enabled) */}
             <div className="pt-2 flex flex-wrap gap-3">
-              <a
-                href={`https://wa.me/${whatsappNumber}`}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center space-x-2 bg-emerald-700/80 hover:bg-emerald-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
-              >
-                <MessageCircle className="w-3.5 h-3.5" />
-                <span>WhatsApp Community</span>
-              </a>
-              <a
-                href={telegramUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center space-x-2 bg-sky-700/80 hover:bg-sky-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
-              >
-                <Send className="w-3.5 h-3.5" />
-                <span>Telegram Channel</span>
-              </a>
+              {isWhatsappEnabled && (
+                <a
+                  href={`https://wa.me/${whatsappNumber}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center space-x-2 bg-emerald-700/90 hover:bg-emerald-600 text-white text-xs font-semibold px-3.5 py-2 rounded-xl transition-colors shadow-sm"
+                >
+                  <MessageCircle className="w-3.5 h-3.5" />
+                  <span>WhatsApp Community</span>
+                </a>
+              )}
+              {isTelegramEnabled && (
+                <a
+                  href={telegramUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center space-x-2 bg-sky-700/90 hover:bg-sky-600 text-white text-xs font-semibold px-3.5 py-2 rounded-xl transition-colors shadow-sm"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  <span>Telegram Channel</span>
+                </a>
+              )}
             </div>
 
+            {/* Social Icons row (Only active links shown) */}
             <div className="flex items-center space-x-3 pt-1 text-stone-400">
-              <a
-                href={youtubeUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="p-2 rounded-lg bg-stone-800 hover:text-red-500 hover:bg-stone-700 transition-colors"
-                title="YouTube"
-              >
-                <Youtube className="w-4 h-4" />
-              </a>
-              <a
-                href={instagramUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="p-2 rounded-lg bg-stone-800 hover:text-pink-400 hover:bg-stone-700 transition-colors"
-                title="Instagram"
-              >
-                <Instagram className="w-4 h-4" />
-              </a>
-              <a
-                href={`mailto:${contactEmail}`}
-                className="p-2 rounded-lg bg-stone-800 hover:text-white hover:bg-stone-700 transition-colors"
-                title="Email Support"
-              >
-                <Mail className="w-4 h-4" />
-              </a>
+              {isYoutubeEnabled && (
+                <a
+                  href={youtubeUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="p-2.5 rounded-xl bg-stone-800 hover:text-red-500 hover:bg-stone-700 transition-colors"
+                  title="YouTube"
+                >
+                  <Youtube className="w-4 h-4" />
+                </a>
+              )}
+              {isInstagramEnabled && (
+                <a
+                  href={instagramUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="p-2.5 rounded-xl bg-stone-800 hover:text-pink-400 hover:bg-stone-700 transition-colors"
+                  title="Instagram"
+                >
+                  <Instagram className="w-4 h-4" />
+                </a>
+              )}
+              {isEmailEnabled && (
+                <a
+                  href={`mailto:${contactEmail}`}
+                  className="p-2.5 rounded-xl bg-stone-800 hover:text-white hover:bg-stone-700 transition-colors"
+                  title="Email Support"
+                >
+                  <Mail className="w-4 h-4" />
+                </a>
+              )}
             </div>
           </div>
 
@@ -154,7 +169,7 @@ export const Footer: React.FC<FooterProps> = ({
             </ul>
           </div>
 
-          {/* Classes & Targets */}
+          {/* Classes & Targets - Strictly Class 10 & 9 */}
           <div>
             <h4 className="text-white text-sm font-bold uppercase tracking-wider mb-4 border-l-2 border-red-600 pl-2">
               Classes & Exam
@@ -187,18 +202,10 @@ export const Footer: React.FC<FooterProps> = ({
               </li>
               <li>
                 <button
-                  onClick={() => onNavigate('browse', { classLevel: 'Class 8' })}
-                  className="hover:text-red-400 transition-colors"
+                  onClick={() => onNavigate('free-pdfs')}
+                  className="text-emerald-400 hover:text-emerald-300 font-bold transition-colors"
                 >
-                  Class 8 Notes
-                </button>
-              </li>
-              <li>
-                <button
-                  onClick={() => onNavigate('browse', { classLevel: 'Class 7' })}
-                  className="hover:text-red-400 transition-colors"
-                >
-                  Class 7 & Class 6
+                  100% Free PDFs & Notes
                 </button>
               </li>
               <li>

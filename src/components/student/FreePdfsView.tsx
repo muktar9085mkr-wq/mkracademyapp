@@ -37,7 +37,7 @@ export const FreePdfsView: React.FC<FreePdfsViewProps> = ({
   const [previewPdf, setPreviewPdf] = useState<Product | null>(null);
 
   const subjects = ['All', 'General Science', 'Mathematics', 'Social Science', 'English', 'Assamese', 'Other Subjects'];
-  const classes = ['All', 'HSLC 2027', 'Class 10', 'Class 9', 'Class 8', 'Class 7', 'Class 6'];
+  const classes = ['All', 'HSLC 2027', 'Class 10', 'Class 9'];
   const mediums = ['All', 'Assamese Medium', 'English Medium', 'Both Mediums'];
 
   // Filter only Free PDFs (isFree === true OR sellingPricePaise === 0 OR category === 'Free')

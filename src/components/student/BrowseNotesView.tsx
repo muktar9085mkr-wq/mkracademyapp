@@ -46,7 +46,7 @@ export const BrowseNotesView: React.FC<BrowseNotesViewProps> = ({
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
 
   const subjects = ['All', 'General Science', 'Mathematics', 'Social Science', 'English', 'Assamese', 'Other Subjects'];
-  const classes = ['All', 'HSLC 2027', 'Class 10', 'Class 9', 'Class 8', 'Class 7', 'Class 6'];
+  const classes = ['All', 'HSLC 2027', 'Class 10', 'Class 9'];
   const mediums = ['All', 'Assamese Medium', 'English Medium', 'Both Mediums'];
   const categories = ['All', 'Free PDFs', 'Premium', 'Normal', 'Budget Friendly'];
   const tags = [

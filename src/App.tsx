@@ -12,6 +12,7 @@ import { getPublicSettings } from './services/settingsService';
 
 import { Navbar } from './components/common/Navbar';
 import { Footer } from './components/common/Footer';
+import { MobileBottomNav } from './components/common/MobileBottomNav';
 import { HomeView } from './components/student/HomeView';
 import { BrowseNotesView } from './components/student/BrowseNotesView';
 import { FreePdfsView } from './components/student/FreePdfsView';
@@ -156,10 +157,11 @@ function AppContent() {
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         onExecuteSearch={handleExecuteSearch}
+        settings={settings}
       />
 
-      {/* Main Content View */}
-      <main className="flex-1">
+      {/* Main Content View with mobile safe-padding */}
+      <main className="flex-1 pb-16 md:pb-0">
         {loading ? (
           <div className="py-24 text-center space-y-4">
             <div className="w-10 h-10 border-3 border-red-700 border-t-transparent rounded-full animate-spin mx-auto"></div>
@@ -208,6 +210,16 @@ function AppContent() {
         onNavigate={handleNavigate}
         onOpenPolicy={(p) => setPolicyType(p)}
         socialLinks={settings?.social}
+        settings={settings}
+      />
+
+      {/* Mobile-First App Bottom Navigation Bar (Visible on mobile screens) */}
+      <MobileBottomNav
+        currentView={currentView}
+        onNavigate={handleNavigate}
+        onOpenAuth={handleOpenAuth}
+        onOpenProfile={() => setProfileModalOpen(true)}
+        purchaseCount={purchases.length}
       />
 
       {/* Product Details Modal */}

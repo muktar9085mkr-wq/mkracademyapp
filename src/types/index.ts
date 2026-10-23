@@ -7,13 +7,9 @@ export type SubjectType =
   | 'Other Subjects';
 
 export type ClassLevel =
-  | 'Class 6'
-  | 'Class 7'
-  | 'Class 8'
   | 'Class 9'
   | 'Class 10'
-  | 'HSLC 2027'
-  | 'Other Examinations';
+  | 'HSLC 2027';
 
 export type MediumType = 'Assamese Medium' | 'English Medium' | 'Both Mediums';
 
@@ -112,15 +108,32 @@ export interface PromotionalBanner {
 
 export interface SocialLinks {
   whatsapp?: string;
+  whatsappEnabled?: boolean;
   telegram?: string;
+  telegramEnabled?: boolean;
   youtube?: string;
+  youtubeEnabled?: boolean;
   instagram?: string;
+  instagramEnabled?: boolean;
   website?: string;
+  websiteEnabled?: boolean;
   email?: string;
+  emailEnabled?: boolean;
   supportPhone?: string;
+  supportPhoneEnabled?: boolean;
+}
+
+export interface AppLogoSettings {
+  imageUrl?: string;
+  text?: string;
+  highlightText?: string;
+  subtitle?: string;
+  iconPreset?: 'graduation' | 'book' | 'sparkles' | 'award' | 'school';
+  showImageOnly?: boolean;
 }
 
 export interface AppPublicSettings {
+  logo?: AppLogoSettings;
   banner: PromotionalBanner;
   social: SocialLinks;
   announcement?: string;

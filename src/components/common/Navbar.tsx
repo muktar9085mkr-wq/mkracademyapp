@@ -13,6 +13,8 @@ import {
   Sparkles
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { AppPublicSettings } from '../../types';
+import { BrandLogo } from './BrandLogo';
 
 interface NavbarProps {
   currentView: string;
@@ -23,6 +25,7 @@ interface NavbarProps {
   searchQuery: string;
   onSearchChange: (q: string) => void;
   onExecuteSearch: () => void;
+  settings?: AppPublicSettings | null;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -33,7 +36,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   purchaseCount,
   searchQuery,
   onSearchChange,
-  onExecuteSearch
+  onExecuteSearch,
+  settings
 }) => {
   const { user, profile, isAdmin, logout } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -46,48 +50,37 @@ export const Navbar: React.FC<NavbarProps> = ({
   };
 
   return (
-    <header className="sticky top-0 z-40 bg-white border-b border-stone-200 shadow-xs">
+    <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-stone-200 shadow-xs">
       {/* Top Notification Strip */}
-      <div className="bg-stone-900 text-stone-200 text-xs py-1.5 px-4 font-medium flex items-center justify-between">
+      <div className="bg-stone-900 text-stone-200 text-xs py-1.5 px-3 sm:px-4 font-medium flex items-center justify-between">
         <div className="flex items-center space-x-2 truncate">
-          <span className="bg-red-700 text-white text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded">
+          <span className="bg-red-700 text-white text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded shrink-0">
             HSLC 2027
           </span>
-          <span className="truncate">
-            New Assamese & English medium syllabus notes & chapter-wise question banks now ready!
+          <span className="truncate text-[11px] sm:text-xs">
+            {settings?.announcement || 'Class 10 & 9 chapter-wise notes & question banks ready for download!'}
           </span>
         </div>
-        <div className="hidden sm:flex items-center space-x-4 text-[11px] text-stone-300">
+        <div className="hidden sm:flex items-center space-x-4 text-[11px] text-stone-300 shrink-0">
           <span>Assamese & English Medium</span>
           <span className="text-stone-600">|</span>
           <a href="#contact" onClick={() => onNavigate('contact')} className="hover:text-white transition-colors">
-            Help & WhatsApp Support
+            Help & Support
           </a>
         </div>
       </div>
 
       {/* Main Navbar */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-18 gap-4">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between h-16 sm:h-18 gap-3 sm:gap-4">
           
           {/* Logo */}
           <button
             onClick={() => onNavigate('home')}
-            className="flex items-center space-x-3 text-left focus:outline-none shrink-0"
+            className="flex items-center text-left focus:outline-none shrink-0 cursor-pointer"
+            aria-label="MKR Academy Home"
           >
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-red-800 to-red-600 flex items-center justify-center text-white shadow-md shadow-red-950/20">
-              <GraduationCap className="w-6 h-6" />
-            </div>
-            <div>
-              <div className="flex items-center space-x-1.5">
-                <span className="font-extrabold text-xl tracking-tight text-stone-900 font-sans">
-                  MKR <span className="text-red-700">ACADEMY</span>
-                </span>
-              </div>
-              <p className="text-[10px] text-stone-500 font-medium tracking-wide uppercase">
-                Quality Notes • Better Results
-              </p>
-            </div>
+            <BrandLogo settings={settings?.logo} variant="dark" size="md" />
           </button>
 
           {/* Search Bar - Desktop */}
