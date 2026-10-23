@@ -102,7 +102,7 @@ export const MyPurchasesView: React.FC<MyPurchasesViewProps> = ({
   );
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8 animate-in fade-in duration-200">
+    <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6 sm:space-y-8 animate-in fade-in duration-200 min-w-0">
       
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-stone-200 pb-6">
@@ -115,7 +115,7 @@ export const MyPurchasesView: React.FC<MyPurchasesViewProps> = ({
               My Purchased Notes
             </h1>
           </div>
-          <p className="text-stone-500 text-sm mt-1">
+          <p className="text-stone-500 text-xs sm:text-sm mt-1">
             Access, view in browser, or download your official educational PDF materials anytime.
           </p>
         </div>
@@ -143,14 +143,14 @@ export const MyPurchasesView: React.FC<MyPurchasesViewProps> = ({
         </div>
       ) : purchases.length === 0 ? (
         /* Empty State */
-        <div className="bg-white rounded-3xl border border-stone-200 p-12 text-center max-w-lg mx-auto space-y-5 shadow-xs">
+        <div className="bg-white rounded-3xl border border-stone-200 p-8 sm:p-12 text-center max-w-lg mx-auto space-y-5 shadow-xs">
           <div className="w-16 h-16 rounded-2xl bg-stone-100 text-stone-400 flex items-center justify-center mx-auto">
             <FileText className="w-8 h-8" />
           </div>
           <div className="space-y-1">
             <h3 className="text-lg font-bold text-stone-900">No Purchased Notes Yet</h3>
             <p className="text-stone-500 text-xs leading-relaxed">
-              You haven't bought any study notes yet. Explore our HSLC 2027 and Class 6-10 note sets to begin your exam preparation.
+              You haven't bought any study notes yet. Explore our HSLC 2027, Class 10 & Class 9 note sets to begin your exam preparation.
             </p>
           </div>
           <button
@@ -174,7 +174,7 @@ export const MyPurchasesView: React.FC<MyPurchasesViewProps> = ({
             return (
               <div
                 key={purchase.id}
-                className="bg-white rounded-2xl border border-stone-200 overflow-hidden shadow-xs hover:shadow-lg transition-all flex flex-col justify-between"
+                className="bg-white rounded-2xl border border-stone-200 overflow-hidden shadow-xs hover:shadow-lg transition-all flex flex-col justify-between w-full max-w-full min-w-0"
               >
                 <div>
                   {/* Cover */}

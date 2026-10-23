@@ -88,31 +88,31 @@ export const HomeView: React.FC<HomeViewProps> = ({
   };
 
   return (
-    <div className="space-y-16 pb-20">
+    <div className="w-full max-w-full space-y-12 sm:space-y-16 pb-20 overflow-x-hidden">
       
       {/* Hero Section */}
-      <section className="relative overflow-hidden bg-gradient-to-b from-stone-900 via-stone-950 to-stone-900 text-white pt-12 pb-20 sm:pt-20 sm:pb-28">
-        {/* Background glow effects */}
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[350px] bg-red-700/15 rounded-full blur-3xl pointer-events-none"></div>
+      <section className="w-full relative overflow-hidden bg-gradient-to-b from-stone-900 via-stone-950 to-stone-900 text-white pt-10 pb-16 sm:pt-20 sm:pb-28">
+        {/* Background glow effects - constrained to prevent mobile overflow */}
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-[550px] h-[280px] bg-red-700/15 rounded-full blur-3xl pointer-events-none"></div>
 
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-8">
+        <div className="relative w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-6 sm:space-y-8">
           
           {/* Badge */}
-          <div className="inline-flex items-center space-x-2 bg-stone-800/80 border border-stone-700 text-stone-200 text-xs font-bold px-3.5 py-1.5 rounded-full backdrop-blur-md">
-            <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
-            <span>HSLC 2027 & Class 10 & 9 Special Preparation Platform</span>
+          <div className="inline-flex items-center space-x-2 bg-stone-800/80 border border-stone-700 text-stone-200 text-[11px] sm:text-xs font-bold px-3 py-1.5 rounded-full backdrop-blur-md max-w-full">
+            <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0"></span>
+            <span className="truncate">HSLC 2027 & Class 10 & 9 Special Preparation Platform</span>
           </div>
 
           {/* Main Headline */}
-          <div className="space-y-4 max-w-3xl mx-auto">
-            <h1 className="text-3xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight font-sans leading-tight">
+          <div className="space-y-3 sm:space-y-4 max-w-3xl mx-auto">
+            <h1 className="text-2xl sm:text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tight font-sans leading-tight break-words">
               Quality Notes.{' '}
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-red-500 via-rose-400 to-amber-300">
                 Better Preparation.
               </span>{' '}
               Better Results.
             </h1>
-            <p className="text-stone-300 text-sm sm:text-base lg:text-lg max-w-2xl mx-auto leading-relaxed">
+            <p className="text-stone-300 text-xs sm:text-base lg:text-lg max-w-2xl mx-auto leading-relaxed">
               Assam’s educational notes platform for SEBA & Board examination success. Chapter-wise solved questions, formula banks, and important notes in <strong>অসমীয়া</strong> and <strong>English</strong> mediums.
             </p>
           </div>
@@ -120,29 +120,29 @@ export const HomeView: React.FC<HomeViewProps> = ({
           {/* Hero Search Bar */}
           <form
             onSubmit={handleSearchSubmit}
-            className="max-w-xl mx-auto relative flex items-center"
+            className="w-full max-w-xl mx-auto relative flex items-center"
           >
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => onSearchChange(e.target.value)}
-              placeholder="Search notes by subject, chapter, or exam (e.g. Science, HSLC 2027)..."
-              className="w-full bg-stone-800/90 text-white placeholder-stone-400 text-sm rounded-2xl pl-11 pr-28 py-4 border border-stone-700 focus:outline-none focus:border-red-500 shadow-2xl backdrop-blur-md"
+              placeholder="Search notes by subject, chapter, or exam..."
+              className="w-full bg-stone-800/90 text-white placeholder-stone-400 text-xs sm:text-sm rounded-2xl pl-10 sm:pl-11 pr-24 sm:pr-28 py-3 sm:py-4 border border-stone-700 focus:outline-none focus:border-red-500 shadow-2xl backdrop-blur-md"
             />
-            <Search className="w-5 h-5 text-stone-400 absolute left-4" />
+            <Search className="w-4 h-4 sm:w-5 sm:h-5 text-stone-400 absolute left-3.5 sm:left-4" />
             <button
               type="submit"
-              className="absolute right-2.5 px-4 py-2.5 bg-red-700 hover:bg-red-800 text-white font-bold text-xs rounded-xl shadow-md transition-colors cursor-pointer"
+              className="absolute right-2 px-3 sm:px-4 py-2 sm:py-2.5 bg-red-700 hover:bg-red-800 text-white font-bold text-xs rounded-xl shadow-md transition-colors cursor-pointer"
             >
               Search
             </button>
           </form>
 
           {/* Quick CTA Actions */}
-          <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+          <div className="flex flex-wrap items-center justify-center gap-2.5 sm:gap-3 pt-1">
             <button
               onClick={() => onNavigate('free-pdfs')}
-              className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs flex items-center space-x-2 shadow-lg shadow-emerald-950/40 transition-all cursor-pointer"
+              className="px-4 sm:px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs flex items-center space-x-2 shadow-lg shadow-emerald-950/40 transition-all cursor-pointer"
             >
               <Sparkles className="w-4 h-4 text-emerald-200" />
               <span>Explore Free PDFs & Notes</span>
@@ -152,51 +152,51 @@ export const HomeView: React.FC<HomeViewProps> = ({
             </button>
             <button
               onClick={() => onNavigate('browse')}
-              className="px-5 py-2.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 hover:text-white font-bold text-xs border border-stone-700 transition-all cursor-pointer"
+              className="px-4 sm:px-5 py-2.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 hover:text-white font-bold text-xs border border-stone-700 transition-all cursor-pointer"
             >
               <span>Browse All Paid Notes</span>
             </button>
           </div>
 
-          {/* Highlights / Features Banner */}
-          <div className="pt-4 grid grid-cols-2 md:grid-cols-4 gap-3 max-w-4xl mx-auto text-left text-xs">
-            <div className="bg-stone-800/50 border border-stone-700/60 p-3.5 rounded-2xl backdrop-blur-xs flex items-center space-x-3">
+          {/* Highlights / Features Banner - Responsive grid */}
+          <div className="pt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3 max-w-4xl mx-auto text-left text-xs w-full">
+            <div className="bg-stone-800/50 border border-stone-700/60 p-3 sm:p-3.5 rounded-2xl backdrop-blur-xs flex items-center space-x-3 min-w-0">
               <div className="w-8 h-8 rounded-lg bg-red-900/60 text-red-400 flex items-center justify-center shrink-0">
                 <BookOpen className="w-4 h-4" />
               </div>
-              <div>
-                <p className="font-bold text-white">Assamese & English</p>
-                <p className="text-[10px] text-stone-400">Both Mediums Covered</p>
+              <div className="min-w-0">
+                <p className="font-bold text-white truncate">Assamese & English</p>
+                <p className="text-[10px] text-stone-400 truncate">Both Mediums Covered</p>
               </div>
             </div>
 
-            <div className="bg-stone-800/50 border border-stone-700/60 p-3.5 rounded-2xl backdrop-blur-xs flex items-center space-x-3">
+            <div className="bg-stone-800/50 border border-stone-700/60 p-3 sm:p-3.5 rounded-2xl backdrop-blur-xs flex items-center space-x-3 min-w-0">
               <div className="w-8 h-8 rounded-lg bg-emerald-900/60 text-emerald-400 flex items-center justify-center shrink-0">
                 <ShieldCheck className="w-4 h-4" />
               </div>
-              <div>
-                <p className="font-bold text-white">SEBA Board Aligned</p>
-                <p className="text-[10px] text-stone-400">Strict Curriculum Standard</p>
+              <div className="min-w-0">
+                <p className="font-bold text-white truncate">SEBA Board Aligned</p>
+                <p className="text-[10px] text-stone-400 truncate">Strict Curriculum Standard</p>
               </div>
             </div>
 
-            <div className="bg-stone-800/50 border border-stone-700/60 p-3.5 rounded-2xl backdrop-blur-xs flex items-center space-x-3">
+            <div className="bg-stone-800/50 border border-stone-700/60 p-3 sm:p-3.5 rounded-2xl backdrop-blur-xs flex items-center space-x-3 min-w-0">
               <div className="w-8 h-8 rounded-lg bg-amber-900/60 text-amber-400 flex items-center justify-center shrink-0">
                 <Download className="w-4 h-4" />
               </div>
-              <div>
-                <p className="font-bold text-white">Instant Download</p>
-                <p className="text-[10px] text-stone-400">Permanent PDF Access</p>
+              <div className="min-w-0">
+                <p className="font-bold text-white truncate">Instant Download</p>
+                <p className="text-[10px] text-stone-400 truncate">Permanent PDF Access</p>
               </div>
             </div>
 
-            <div className="bg-stone-800/50 border border-stone-700/60 p-3.5 rounded-2xl backdrop-blur-xs flex items-center space-x-3">
+            <div className="bg-stone-800/50 border border-stone-700/60 p-3 sm:p-3.5 rounded-2xl backdrop-blur-xs flex items-center space-x-3 min-w-0">
               <div className="w-8 h-8 rounded-lg bg-rose-900/60 text-rose-400 flex items-center justify-center shrink-0">
                 <Users className="w-4 h-4" />
               </div>
-              <div>
-                <p className="font-bold text-white">Expert Educators</p>
-                <p className="text-[10px] text-stone-400">Prepared by Top Teachers</p>
+              <div className="min-w-0">
+                <p className="font-bold text-white truncate">Expert Educators</p>
+                <p className="text-[10px] text-stone-400 truncate">Prepared by Top Teachers</p>
               </div>
             </div>
           </div>
@@ -204,7 +204,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
       </section>
 
       {/* Main Container */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-16">
+      <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12 sm:space-y-16">
         
         {/* Promotional Banner (Admin controlled) */}
         {settings?.banner && (

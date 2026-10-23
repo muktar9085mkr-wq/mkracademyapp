@@ -62,7 +62,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   };
 
   return (
-    <div className="group bg-white rounded-2xl border border-stone-200 overflow-hidden shadow-xs hover:shadow-xl hover:border-red-200 transition-all duration-300 flex flex-col justify-between">
+    <div className="group bg-white rounded-2xl border border-stone-200 overflow-hidden shadow-xs hover:shadow-xl hover:border-red-200 transition-all duration-300 flex flex-col justify-between w-full max-w-full min-w-0">
       <div>
         {/* Cover Image & Badges */}
         <div className="relative aspect-16/10 w-full overflow-hidden bg-stone-100">
@@ -121,14 +121,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           {/* Title */}
           <h3
             onClick={() => onViewDetails(product)}
-            className="font-bold text-stone-900 text-base line-clamp-2 hover:text-red-700 cursor-pointer transition-colors leading-snug"
+            className="font-bold text-stone-900 text-base line-clamp-2 hover:text-red-700 cursor-pointer transition-colors leading-snug break-words"
             title={product.title}
           >
             {product.title}
           </h3>
 
           {/* Short Description */}
-          <p className="text-stone-600 text-xs line-clamp-2 leading-relaxed">
+          <p className="text-stone-600 text-xs line-clamp-2 leading-relaxed break-words">
             {product.shortDescription}
           </p>
 
@@ -177,7 +177,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         </div>
 
         {/* Action Buttons */}
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 gap-2 w-full">
           <button
             onClick={() => onViewDetails(product)}
             className="w-full py-2.5 px-3 rounded-xl border border-stone-300 hover:border-stone-400 hover:bg-stone-50 text-stone-700 font-bold text-xs flex items-center justify-center space-x-1.5 transition-colors cursor-pointer"

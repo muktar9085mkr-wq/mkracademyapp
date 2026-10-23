@@ -146,7 +146,7 @@ function AppContent() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-stone-50 text-stone-900 font-sans selection:bg-red-700 selection:text-white">
+    <div className="min-h-screen w-full max-w-full flex flex-col bg-stone-50 text-stone-900 font-sans selection:bg-red-700 selection:text-white overflow-x-hidden">
       {/* Navigation Bar */}
       <Navbar
         currentView={currentView}
@@ -161,7 +161,7 @@ function AppContent() {
       />
 
       {/* Main Content View with mobile safe-padding */}
-      <main className="flex-1 pb-16 md:pb-0">
+      <main className="flex-1 w-full max-w-full min-w-0 pb-16 md:pb-0">
         {loading ? (
           <div className="py-24 text-center space-y-4">
             <div className="w-10 h-10 border-3 border-red-700 border-t-transparent rounded-full animate-spin mx-auto"></div>

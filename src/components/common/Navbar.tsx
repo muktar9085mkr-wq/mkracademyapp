@@ -50,18 +50,18 @@ export const Navbar: React.FC<NavbarProps> = ({
   };
 
   return (
-    <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-stone-200 shadow-xs">
+    <header className="w-full max-w-full sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-stone-200 shadow-xs">
       {/* Top Notification Strip */}
-      <div className="bg-stone-900 text-stone-200 text-xs py-1.5 px-3 sm:px-4 font-medium flex items-center justify-between">
-        <div className="flex items-center space-x-2 truncate">
+      <div className="w-full bg-stone-900 text-stone-200 text-xs py-1.5 px-3 sm:px-4 font-medium flex items-center justify-between overflow-hidden">
+        <div className="flex items-center space-x-2 min-w-0 flex-1">
           <span className="bg-red-700 text-white text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded shrink-0">
             HSLC 2027
           </span>
-          <span className="truncate text-[11px] sm:text-xs">
+          <span className="truncate text-[11px] sm:text-xs min-w-0">
             {settings?.announcement || 'Class 10 & 9 chapter-wise notes & question banks ready for download!'}
           </span>
         </div>
-        <div className="hidden sm:flex items-center space-x-4 text-[11px] text-stone-300 shrink-0">
+        <div className="hidden sm:flex items-center space-x-4 text-[11px] text-stone-300 shrink-0 ml-2">
           <span>Assamese & English Medium</span>
           <span className="text-stone-600">|</span>
           <a href="#contact" onClick={() => onNavigate('contact')} className="hover:text-white transition-colors">
@@ -71,13 +71,13 @@ export const Navbar: React.FC<NavbarProps> = ({
       </div>
 
       {/* Main Navbar */}
-      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16 sm:h-18 gap-3 sm:gap-4">
+      <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between h-16 sm:h-18 gap-2 sm:gap-4">
           
           {/* Logo */}
           <button
             onClick={() => onNavigate('home')}
-            className="flex items-center text-left focus:outline-none shrink-0 cursor-pointer"
+            className="flex items-center text-left focus:outline-none min-w-0 shrink cursor-pointer"
             aria-label="MKR Academy Home"
           >
             <BrandLogo settings={settings?.logo} variant="dark" size="md" />
@@ -159,11 +159,11 @@ export const Navbar: React.FC<NavbarProps> = ({
           </nav>
 
           {/* User & Actions */}
-          <div className="flex items-center space-x-2 sm:space-x-3">
-            {/* My Purchases Button */}
+          <div className="flex items-center space-x-1.5 sm:space-x-3 shrink-0">
+            {/* My Purchases Button - Hidden on small mobile screens because it is in MobileBottomNav */}
             <button
               onClick={() => onNavigate('purchases')}
-              className={`relative px-3 py-2 rounded-lg text-sm font-semibold flex items-center space-x-1.5 transition-colors ${
+              className={`hidden sm:flex relative px-3 py-2 rounded-lg text-sm font-semibold items-center space-x-1.5 transition-colors ${
                 currentView === 'purchases'
                   ? 'bg-red-700 text-white'
                   : 'bg-stone-100 text-stone-800 hover:bg-stone-200'
@@ -171,7 +171,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               title="My Purchases"
             >
               <ShoppingBag className="w-4 h-4" />
-              <span className="hidden sm:inline">My Purchases</span>
+              <span className="hidden md:inline">My Purchases</span>
               {purchaseCount > 0 && (
                 <span className="ml-1 bg-red-600 text-white text-[11px] font-bold px-1.5 py-0.2 rounded-full">
                   {purchaseCount}
@@ -183,14 +183,14 @@ export const Navbar: React.FC<NavbarProps> = ({
             {isAdmin && (
               <button
                 onClick={() => onNavigate('admin')}
-                className={`px-3 py-2 rounded-lg text-sm font-bold flex items-center space-x-1.5 transition-colors ${
+                className={`px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-bold flex items-center space-x-1 sm:space-x-1.5 transition-colors ${
                   currentView === 'admin'
                     ? 'bg-stone-900 text-white'
                     : 'bg-red-100 text-red-800 hover:bg-red-200'
                 }`}
               >
                 <ShieldCheck className="w-4 h-4" />
-                <span className="hidden sm:inline">Admin Panel</span>
+                <span className="hidden sm:inline">Admin</span>
               </button>
             )}
 
@@ -199,7 +199,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <div className="relative">
                 <button
                   onClick={() => setUserDropdownOpen(!userDropdownOpen)}
-                  className="flex items-center space-x-2 p-1.5 sm:px-3 sm:py-2 rounded-lg hover:bg-stone-100 text-stone-800 transition-colors border border-stone-200"
+                  className="flex items-center space-x-1 sm:space-x-2 p-1.5 sm:px-3 sm:py-2 rounded-lg hover:bg-stone-100 text-stone-800 transition-colors border border-stone-200"
                 >
                   <div className="w-7 h-7 rounded-full bg-red-700 text-white flex items-center justify-center font-bold text-xs uppercase">
                     {(profile?.displayName || user.email || 'S')[0]}
@@ -267,16 +267,16 @@ export const Navbar: React.FC<NavbarProps> = ({
                 )}
               </div>
             ) : (
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-1 sm:space-x-2">
                 <button
                   onClick={() => onOpenAuth('login')}
-                  className="px-3.5 py-2 text-sm font-bold text-stone-700 hover:text-stone-900 hover:bg-stone-100 rounded-lg transition-colors"
+                  className="px-2.5 sm:px-3.5 py-1.5 sm:py-2 text-xs sm:text-sm font-bold text-stone-700 hover:text-stone-900 hover:bg-stone-100 rounded-lg transition-colors"
                 >
                   Log In
                 </button>
                 <button
                   onClick={() => onOpenAuth('register')}
-                  className="px-4 py-2 text-sm font-bold bg-red-700 hover:bg-red-800 text-white rounded-lg shadow-sm transition-all shadow-red-800/20"
+                  className="hidden sm:inline-flex px-3.5 py-2 text-sm font-bold bg-red-700 hover:bg-red-800 text-white rounded-lg shadow-sm transition-all shadow-red-800/20"
                 >
                   Sign Up
                 </button>
@@ -286,10 +286,10 @@ export const Navbar: React.FC<NavbarProps> = ({
             {/* Mobile Menu Toggle */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="lg:hidden p-2 rounded-lg text-stone-600 hover:text-stone-900 hover:bg-stone-100"
+              className="lg:hidden p-1.5 sm:p-2 rounded-lg text-stone-600 hover:text-stone-900 hover:bg-stone-100 transition-colors"
               aria-label="Toggle navigation"
             >
-              {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+              {mobileMenuOpen ? <X className="w-5 h-5 sm:w-6 sm:h-6" /> : <Menu className="w-5 h-5 sm:w-6 sm:h-6" />}
             </button>
           </div>
         </div>

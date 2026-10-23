@@ -116,9 +116,9 @@ export const FreePdfsView: React.FC<FreePdfsViewProps> = ({
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8 animate-in fade-in">
+    <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6 sm:space-y-8 animate-in fade-in min-w-0">
       {/* Hero Header Strip */}
-      <div className="bg-gradient-to-r from-emerald-900 via-stone-900 to-emerald-950 text-white rounded-3xl p-6 sm:p-10 shadow-lg relative overflow-hidden">
+      <div className="w-full max-w-full bg-gradient-to-r from-emerald-900 via-stone-900 to-emerald-950 text-white rounded-3xl p-6 sm:p-10 shadow-lg relative overflow-hidden">
         <div className="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
 
         <div className="relative max-w-3xl space-y-3">
@@ -127,21 +127,21 @@ export const FreePdfsView: React.FC<FreePdfsViewProps> = ({
             <span>100% Free Study Materials • বিনামূলীয়া ন’টচ</span>
           </div>
 
-          <h1 className="text-2xl sm:text-4xl font-black font-sans tracking-tight text-white">
+          <h1 className="text-2xl sm:text-4xl font-black font-sans tracking-tight text-white break-words">
             MKR Academy Free PDFs & Study Notes
           </h1>
 
-          <p className="text-xs sm:text-sm text-stone-300 leading-relaxed">
+          <p className="text-xs sm:text-sm text-stone-300 leading-relaxed break-words">
             All free chapter notes, practice papers, formula sheets, and important question banks. 
             Direct Google Drive access — read online or download free without any payment!
           </p>
 
-          <div className="flex items-center space-x-4 pt-2 text-xs font-semibold text-emerald-200">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-4 pt-2 text-xs font-semibold text-emerald-200">
             <span className="flex items-center space-x-1.5">
-              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
               <span>{freeProducts.length} Free Notes Available</span>
             </span>
-            <span>•</span>
+            <span className="hidden sm:inline">•</span>
             <span className="text-stone-300">
               Sorted: <strong>Newest PDF at the Top (নব্য প্ৰথম)</strong>
             </span>
@@ -318,7 +318,7 @@ export const FreePdfsView: React.FC<FreePdfsViewProps> = ({
             {filteredAndSortedPdfs.map((product, idx) => (
               <div
                 key={product.id}
-                className="group bg-white rounded-2xl border border-stone-200 overflow-hidden shadow-xs hover:shadow-xl hover:border-emerald-300 transition-all duration-300 flex flex-col justify-between"
+                className="group bg-white rounded-2xl border border-stone-200 overflow-hidden shadow-xs hover:shadow-xl hover:border-emerald-300 transition-all duration-300 flex flex-col justify-between w-full max-w-full min-w-0"
               >
                 <div>
                   {/* Thumbnail Cover */}

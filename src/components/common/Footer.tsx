@@ -44,7 +44,7 @@ export const Footer: React.FC<FooterProps> = ({
   const isEmailEnabled = effectiveSocial?.emailEnabled !== false && Boolean(contactEmail);
 
   return (
-    <footer className="bg-stone-900 text-stone-300 pt-16 pb-20 md:pb-12 border-t border-stone-800">
+    <footer className="w-full max-w-full overflow-hidden bg-stone-900 text-stone-300 pt-16 pb-20 md:pb-12 border-t border-stone-800">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-10 pb-12 border-b border-stone-800">
           
@@ -274,14 +274,14 @@ export const Footer: React.FC<FooterProps> = ({
         </div>
 
         {/* Bottom Bar */}
-        <div className="pt-8 flex flex-col sm:flex-row items-center justify-between text-xs text-stone-500 gap-4">
-          <p>© {currentYear} MKR Academy. All rights reserved. Built for student academic excellence.</p>
-          <div className="flex items-center space-x-4">
+        <div className="pt-8 flex flex-col sm:flex-row items-center justify-between text-xs text-stone-500 gap-4 text-center sm:text-left">
+          <p className="max-w-full break-words">© {currentYear} MKR Academy. All rights reserved. Built for student academic excellence.</p>
+          <div className="flex flex-wrap items-center justify-center sm:justify-end gap-x-3 gap-y-1.5">
             <span className="flex items-center space-x-1 text-emerald-400">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0"></span>
               <span>100% Secure Razorpay Checkout</span>
             </span>
-            <span className="text-stone-700">|</span>
+            <span className="text-stone-700 hidden sm:inline">|</span>
             <span>Instant PDF Delivery</span>
           </div>
         </div>

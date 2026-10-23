@@ -71,7 +71,7 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
       : 'text-[9px] sm:text-[10px]';
 
   return (
-    <div className={`flex items-center space-x-2.5 sm:space-x-3 select-none ${className}`}>
+    <div className={`flex items-center space-x-2 sm:space-x-3 select-none min-w-0 ${className}`}>
       {/* Visual Badge or Custom Image */}
       {imageUrl && !imageError ? (
         <div
@@ -96,10 +96,10 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
 
       {/* Brand Text (Hidden if showImageOnly is true) */}
       {!showImageOnly && (
-        <div className="flex flex-col text-left leading-tight">
-          <div className="flex items-center space-x-1.5">
+        <div className="flex flex-col text-left leading-tight min-w-0">
+          <div className="flex items-center space-x-1.5 truncate">
             <span
-              className={`font-black tracking-tight font-sans ${textClass} ${
+              className={`font-black tracking-tight font-sans truncate ${textClass} ${
                 variant === 'light' ? 'text-white' : 'text-stone-900'
               }`}
             >
@@ -109,7 +109,7 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
           </div>
           {showSubtitle && (
             <p
-              className={`font-semibold tracking-wide uppercase truncate ${subtitleClass} ${
+              className={`font-semibold tracking-wide uppercase truncate hidden sm:block ${subtitleClass} ${
                 variant === 'light' ? 'text-stone-300' : 'text-stone-500'
               }`}
             >

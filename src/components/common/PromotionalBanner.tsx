@@ -13,12 +13,12 @@ export const PromotionalBanner: React.FC<PromotionalBannerProps> = ({ banner, on
   }
 
   return (
-    <div className="relative overflow-hidden bg-gradient-to-r from-red-900 via-red-800 to-rose-950 text-white rounded-2xl shadow-xl shadow-red-950/20 my-6 border border-red-700/50">
+    <div className="relative w-full max-w-full overflow-hidden bg-gradient-to-r from-red-900 via-red-800 to-rose-950 text-white rounded-2xl shadow-xl shadow-red-950/20 my-6 border border-red-700/50">
       {/* Background Decorative Circles */}
-      <div className="absolute top-0 right-0 -mt-12 -mr-12 w-96 h-96 bg-red-600/20 rounded-full blur-3xl pointer-events-none"></div>
-      <div className="absolute bottom-0 left-1/3 -mb-16 w-80 h-80 bg-rose-500/10 rounded-full blur-2xl pointer-events-none"></div>
+      <div className="absolute top-0 right-0 -mt-12 -mr-12 w-64 sm:w-96 h-64 sm:h-96 bg-red-600/20 rounded-full blur-3xl pointer-events-none"></div>
+      <div className="absolute bottom-0 left-1/3 -mb-16 w-56 sm:w-80 h-56 sm:h-80 bg-rose-500/10 rounded-full blur-2xl pointer-events-none"></div>
 
-      <div className="relative max-w-7xl mx-auto px-6 py-8 sm:py-10 sm:px-10 flex flex-col md:flex-row items-center justify-between gap-6">
+      <div className="relative w-full max-w-7xl mx-auto px-4 sm:px-8 py-6 sm:py-10 flex flex-col md:flex-row items-center justify-between gap-6">
         <div className="space-y-3 text-center md:text-left max-w-2xl">
           {banner.badgeText && (
             <div className="inline-flex items-center space-x-1.5 bg-red-950/60 border border-red-500/40 text-red-200 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider backdrop-blur-xs">

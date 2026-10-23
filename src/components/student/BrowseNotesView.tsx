@@ -145,7 +145,7 @@ export const BrowseNotesView: React.FC<BrowseNotesViewProps> = ({
     selectedTag !== 'All';
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+    <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
       
       {/* Page Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-stone-200 pb-6">
@@ -158,13 +158,13 @@ export const BrowseNotesView: React.FC<BrowseNotesViewProps> = ({
             Browse All Study Notes
           </h1>
           <p className="text-stone-500 text-xs sm:text-sm mt-1">
-            Showing {filteredProducts.length} verified notes for HSLC 2027 and Classes 6-10.
+            Showing {filteredProducts.length} verified notes for HSLC 2027, Class 10 & Class 9.
           </p>
         </div>
 
         {/* Search & Sort Controls */}
-        <div className="flex items-center space-x-3">
-          <div className="relative flex-1 sm:w-64">
+        <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 sm:gap-3 w-full sm:w-auto">
+          <div className="relative flex-1 min-w-[140px] sm:w-64">
             <input
               type="text"
               value={search}
@@ -175,23 +175,23 @@ export const BrowseNotesView: React.FC<BrowseNotesViewProps> = ({
             <Search className="w-3.5 h-3.5 text-stone-400 absolute left-3 top-2.5" />
           </div>
 
-          <div className="relative">
+          <div className="relative shrink-0">
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as any)}
-              className="bg-white border border-stone-300 rounded-xl px-3 py-2 text-xs text-stone-800 font-semibold focus:outline-none focus:border-red-600 appearance-none pr-8 cursor-pointer"
+              className="bg-white border border-stone-300 rounded-xl px-2.5 sm:px-3 py-2 text-xs text-stone-800 font-semibold focus:outline-none focus:border-red-600 appearance-none pr-7 cursor-pointer"
             >
               <option value="latest">Sort: Latest</option>
-              <option value="price-low">Price: Low to High</option>
-              <option value="price-high">Price: High to Low</option>
-              <option value="title">Title: A to Z</option>
+              <option value="price-low">Price: Low</option>
+              <option value="price-high">Price: High</option>
+              <option value="title">A to Z</option>
             </select>
-            <ChevronDown className="w-3.5 h-3.5 text-stone-400 absolute right-2.5 top-2.5 pointer-events-none" />
+            <ChevronDown className="w-3.5 h-3.5 text-stone-400 absolute right-2 top-2.5 pointer-events-none" />
           </div>
 
           <button
             onClick={() => setMobileFilterOpen(!mobileFilterOpen)}
-            className="md:hidden p-2 rounded-xl border border-stone-300 bg-white text-stone-700"
+            className="md:hidden p-2 rounded-xl border border-stone-300 bg-white text-stone-700 shrink-0"
             title="Toggle filters"
           >
             <SlidersHorizontal className="w-4 h-4" />
@@ -200,7 +200,7 @@ export const BrowseNotesView: React.FC<BrowseNotesViewProps> = ({
       </div>
 
       {/* Main Grid with Sidebar Filters */}
-      <div className="flex flex-col md:flex-row gap-8 items-start">
+      <div className="flex flex-col md:flex-row gap-6 md:gap-8 items-start w-full">
         
         {/* Filter Sidebar - Desktop & Responsive Mobile */}
         <aside
@@ -330,7 +330,7 @@ export const BrowseNotesView: React.FC<BrowseNotesViewProps> = ({
         </aside>
 
         {/* Product Cards Grid */}
-        <main className="flex-1 w-full">
+        <main className="flex-1 w-full min-w-0">
           {filteredProducts.length === 0 ? (
             <div className="bg-white rounded-3xl border border-stone-200 p-12 text-center max-w-lg mx-auto space-y-4">
               <div className="w-14 h-14 rounded-2xl bg-stone-100 text-stone-400 flex items-center justify-center mx-auto">
