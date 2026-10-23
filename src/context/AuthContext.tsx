@@ -19,6 +19,7 @@ interface AuthContextType {
   profile: UserProfile | null;
   isAdmin: boolean;
   loading: boolean;
+  authInitialized: boolean;
   authError: string | null;
   clearError: () => void;
   loginWithEmail: (email: string, pass: string) => Promise<void>;
@@ -36,6 +37,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
+  const [authInitialized, setAuthInitialized] = useState<boolean>(false);
   const [authError, setAuthError] = useState<string | null>(null);
 
   const clearError = () => setAuthError(null);
@@ -107,15 +109,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     testConnection();
 
+    // Single source of truth for authentication state
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
       if (currentUser) {
-        await syncProfile(currentUser);
+        try {
+          await syncProfile(currentUser);
+        } catch (err) {
+          console.warn('Could not sync user profile in onAuthStateChanged:', err);
+        }
       } else {
         setProfile(null);
         setIsAdmin(false);
       }
       setLoading(false);
+      setAuthInitialized(true);
     });
 
     return () => unsubscribe();
@@ -125,7 +133,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setLoading(true);
     setAuthError(null);
     try {
-      await signInWithEmailAndPassword(auth, email.trim(), pass);
+      const res = await signInWithEmailAndPassword(auth, email.trim(), pass);
+      setUser(res.user);
+      await syncProfile(res.user);
     } catch (err: any) {
       const message = getFriendlyErrorMessage(err.code);
       setAuthError(message);
@@ -160,6 +170,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
 
       await setDoc(doc(db, 'users', res.user.uid), newProfile);
+      setUser(res.user);
       setProfile(newProfile);
       setIsAdmin(isUserAdmin);
     } catch (err: any) {
@@ -177,6 +188,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const provider = new GoogleAuthProvider();
       const res = await signInWithPopup(auth, provider);
+      setUser(res.user);
       await syncProfile(res.user);
     } catch (err: any) {
       const message = getFriendlyErrorMessage(err.code);
@@ -188,9 +200,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = async () => {
-    await signOut(auth);
-    setProfile(null);
-    setIsAdmin(false);
+    setLoading(true);
+    try {
+      await signOut(auth);
+      setUser(null);
+      setProfile(null);
+      setIsAdmin(false);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const resetPassword = async (email: string) => {
@@ -229,6 +247,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         profile,
         isAdmin,
         loading,
+        authInitialized,
         authError,
         clearError,
         loginWithEmail,

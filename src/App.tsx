@@ -6,8 +6,8 @@
 import React, { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Product, Purchase, AppPublicSettings } from './types';
-import { getPublishedProducts } from './services/productService';
-import { getUserPurchases } from './services/orderService';
+import { getPublishedProducts, subscribeToPublishedProducts } from './services/productService';
+import { getUserPurchases, subscribeToUserPurchases } from './services/orderService';
 import { getPublicSettings } from './services/settingsService';
 
 import { Navbar } from './components/common/Navbar';
@@ -25,7 +25,7 @@ import { PolicyModal } from './components/common/PolicyModal';
 import { AdminDashboard } from './components/admin/AdminDashboard';
 
 function AppContent() {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, authInitialized } = useAuth();
 
   // Navigation State
   const [currentView, setCurrentView] = useState<'home' | 'browse' | 'free-pdfs' | 'purchases' | 'admin'>('home');
@@ -48,41 +48,84 @@ function AppContent() {
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [policyType, setPolicyType] = useState<'privacy' | 'terms' | 'refund' | 'contact' | null>(null);
 
-  // Load initial public data
+  // 1. Load public settings and subscribe to published study materials in real-time
   useEffect(() => {
-    async function loadData() {
-      try {
-        setLoading(true);
-        const [loadedProducts, loadedSettings] = await Promise.all([
-          getPublishedProducts(),
-          getPublicSettings()
-        ]);
-        setProducts(loadedProducts);
-        setSettings(loadedSettings);
-      } catch (err) {
-        console.error('Error loading initial store data:', err);
-      } finally {
+    let isMounted = true;
+
+    // Fetch initial settings
+    getPublicSettings()
+      .then((loadedSettings) => {
+        if (isMounted) setSettings(loadedSettings);
+      })
+      .catch((err) => console.warn('Could not load settings:', err));
+
+    // One-time fallback eager load
+    getPublishedProducts().then((initialItems) => {
+      if (isMounted && initialItems.length > 0) {
+        setProducts(initialItems);
         setLoading(false);
       }
-    }
-    loadData();
+    });
+
+    // Real-time synchronization for published products (works for both visitors & users)
+    const unsubscribeProducts = subscribeToPublishedProducts(
+      (loadedProducts) => {
+        if (isMounted) {
+          setProducts(loadedProducts);
+          setLoading(false);
+        }
+      },
+      (error) => {
+        console.warn('Real-time products subscription issue:', error);
+        if (isMounted) setLoading(false);
+      }
+    );
+
+    return () => {
+      isMounted = false;
+      unsubscribeProducts();
+    };
   }, []);
 
-  // Load user purchases when user logs in
+  // 2. React to authentication changes immediately (login, register, logout)
   useEffect(() => {
-    async function loadUserEntitlements() {
-      if (!user) {
-        setPurchases([]);
-        return;
-      }
-      try {
-        const userPurchases = await getUserPurchases(user.uid);
-        setPurchases(userPurchases);
-      } catch (err) {
-        console.error('Failed to load user purchases:', err);
-      }
+    let isMounted = true;
+    let unsubscribePurchases: (() => void) | null = null;
+
+    if (!user) {
+      setPurchases([]);
+      return;
     }
-    loadUserEntitlements();
+
+    // Immediately load student purchases and keep them updated in real-time
+    unsubscribePurchases = subscribeToUserPurchases(
+      user.uid,
+      (userPurchases) => {
+        if (isMounted) {
+          setPurchases(userPurchases);
+        }
+      },
+      (err) => {
+        console.warn('Subscription error for user purchases, falling back to direct fetch:', err);
+        getUserPurchases(user.uid).then((p) => {
+          if (isMounted) setPurchases(p);
+        });
+      }
+    );
+
+    // Refresh products catalog when user logs in so that any auth-dependent changes sync immediately
+    getPublishedProducts().then((latest) => {
+      if (isMounted && latest.length > 0) {
+        setProducts(latest);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      if (unsubscribePurchases) {
+        unsubscribePurchases();
+      }
+    };
   }, [user]);
 
   const purchasedProductIds = new Set(purchases.map((p) => p.productId));

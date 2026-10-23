@@ -7,7 +7,8 @@ import {
   updateDoc,
   query,
   where,
-  orderBy
+  orderBy,
+  onSnapshot
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase/config';
 import { Order, Purchase, UserProfile } from '../types';
@@ -160,6 +161,47 @@ export async function getUserPurchases(uid: string): Promise<Purchase[]> {
   } catch (error) {
     console.warn('Could not read user purchases from Firestore:', error);
     return [];
+  }
+}
+
+/**
+  * Real-time subscription to student's purchased notes.
+  * Updates immediately upon login or purchase completion without page refresh.
+  */
+export function subscribeToUserPurchases(
+  uid: string,
+  callback: (purchases: Purchase[]) => void,
+  onError?: (error: Error) => void
+): () => void {
+  if (!uid) {
+    callback([]);
+    return () => {};
+  }
+  try {
+    const q = query(
+      collection(db, PURCHASES_COLLECTION),
+      where('uid', '==', uid)
+    );
+    const unsubscribe = onSnapshot(
+      q,
+      (querySnapshot) => {
+        const purchases: Purchase[] = [];
+        querySnapshot.forEach((docSnap) => {
+          purchases.push(docSnap.data() as Purchase);
+        });
+        purchases.sort((a, b) => new Date(b.purchasedAt).getTime() - new Date(a.purchasedAt).getTime());
+        callback(purchases);
+      },
+      (error) => {
+        console.warn('Real-time purchases subscription warning:', error);
+        if (onError) onError(error);
+      }
+    );
+    return unsubscribe;
+  } catch (err: any) {
+    console.warn('Failed to attach purchases listener:', err);
+    callback([]);
+    return () => {};
   }
 }
 
