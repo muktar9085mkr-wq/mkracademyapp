@@ -51,7 +51,8 @@ import {
   addProduct,
   updateProduct,
   deleteProduct,
-  deleteLegacySampleProductsAdmin
+  deleteLegacySampleProductsAdmin,
+  syncBaselineProductsToFirestore
 } from '../../services/productService';
 import {
   getAllOrdersAdmin,
@@ -239,6 +240,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
       setLoading(true);
       // Automatically clean up any legacy sample documents from Firestore
       await deleteLegacySampleProductsAdmin().catch(() => 0);
+      // Ensure all authentic baseline products exist in Firestore
+      await syncBaselineProductsToFirestore().catch(() => ({ synced: 0, skipped: 0 }));
 
       const [prods, ords, studs, setts] = await Promise.all([
         getAllProductsAdmin(),
@@ -579,6 +582,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
 
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (formSaving) return;
     if (!prodTitle.trim()) {
       setFormMessage('Product title is required');
       return;
@@ -626,6 +630,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
 
       const refreshed = await getAllProductsAdmin();
       setProducts(refreshed);
+      if (onProductsChanged) {
+        onProductsChanged();
+      }
       setTimeout(() => {
         handleResetProductForm();
         setCurrentTab('products');
@@ -641,7 +648,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
     if (window.confirm(`Are you sure you want to delete or archive "${title}"? Existing student purchases will remain safely preserved.`)) {
       try {
         await deleteProduct(id);
-        setProducts(products.filter((p) => p.id !== id));
+        const refreshed = await getAllProductsAdmin();
+        setProducts(refreshed);
+        if (onProductsChanged) {
+          onProductsChanged();
+        }
       } catch (err: any) {
         alert(err.message || 'Failed to delete product');
       }

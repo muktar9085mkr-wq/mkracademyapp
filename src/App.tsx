@@ -185,7 +185,16 @@ function AppContent() {
 
   // If in Admin Panel View
   if (currentView === 'admin' && isAdmin) {
-    return <AdminDashboard onBackToStore={() => handleNavigate('home')} />;
+    return (
+      <AdminDashboard
+        onBackToStore={() => handleNavigate('home')}
+        onProductsChanged={() => {
+          getPublishedProducts().then((latest) => {
+            if (latest.length > 0) setProducts(latest);
+          });
+        }}
+      />
+    );
   }
 
   return (
