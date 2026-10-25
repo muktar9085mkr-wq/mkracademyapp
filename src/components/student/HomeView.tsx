@@ -52,18 +52,18 @@ export const HomeView: React.FC<HomeViewProps> = ({
   const { isAdmin } = useAuth();
   const publishedProducts = products.filter((p) => p.published);
 
-  // Curated lists based on real database attributes
+  // Curated lists based on real database attributes (Paid notes strictly separated from free notes)
+  const isPaid = (p: Product) => !p.isFree && p.sellingPricePaise > 0;
+  const paidProducts = publishedProducts.filter(isPaid);
   const freeNotes = publishedProducts.filter(
-    (p) => p.isFree === true || p.sellingPricePaise === 0 || (p.category as any) === 'Free'
-  ).sort(
-    (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+    (p) => p.isFree === true || (p as any).freeNote === true || (p.category as any) === 'Free'
   );
-  const hslc2027Notes = publishedProducts.filter((p) => p.classLevel === 'HSLC 2027');
-  const featuredNotes = publishedProducts.filter((p) => p.featured || p.category === 'Premium');
-  const latestNotes = [...publishedProducts].sort(
+  const hslc2027Notes = paidProducts.filter((p) => p.classLevel === 'HSLC 2027');
+  const featuredNotes = paidProducts.filter((p) => p.featured || p.category === 'Premium');
+  const latestNotes = [...paidProducts].sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   );
-  const discountedNotes = publishedProducts.filter(
+  const discountedNotes = paidProducts.filter(
     (p) => p.originalPricePaise > p.sellingPricePaise
   );
 
@@ -366,46 +366,63 @@ export const HomeView: React.FC<HomeViewProps> = ({
               </section>
             )}
 
-            {/* 100% Free PDFs Section (Newest at Top) */}
-            {freeNotes.length > 0 && (
-              <section className="space-y-6 bg-gradient-to-br from-emerald-50/80 to-white p-6 sm:p-8 rounded-3xl border border-emerald-200 shadow-xs">
-                <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
-                  <div>
-                    <div className="inline-flex items-center space-x-1.5 bg-emerald-100 text-emerald-800 text-[11px] font-bold px-2.5 py-0.5 rounded-md uppercase">
-                      <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>100% Free Study Materials</span>
-                    </div>
-                    <h2 className="text-xl sm:text-2xl font-extrabold text-stone-900 font-sans mt-1">
-                      Free PDF Notes (বিনামূলীয়া অধ্যয়ন সামগ্ৰী)
-                    </h2>
-                    <p className="text-xs text-stone-600 mt-0.5">
-                      Newest PDFs are at the top. Open directly in Google Drive or download free!
-                    </p>
-                  </div>
+            {/* Dedicated Free Notes Portal Card on Home Screen (Separated from paid products listing) */}
+            <section className="bg-gradient-to-br from-stone-900 via-stone-950 to-stone-900 text-white p-6 sm:p-10 rounded-3xl border border-stone-800 shadow-xl relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-80 h-80 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
 
+              <div className="relative max-w-3xl space-y-4">
+                <div className="inline-flex items-center space-x-2 bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider backdrop-blur-xs">
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Dedicated Free Notes Section • বিনামূলীয়া ন’টচ</span>
+                </div>
+
+                <div className="space-y-2">
+                  <h2 className="text-2xl sm:text-3xl font-black font-sans tracking-tight text-white">
+                    Looking for Free Study Materials?
+                  </h2>
+                  <p className="text-xs sm:text-sm text-stone-300 leading-relaxed max-w-2xl">
+                    We have organized all 100% free PDFs into a dedicated subject portal. Browse free chapter notes, practice questions, and formula sheets for <strong>Mathematics, Science, English, Social Science, and Assamese</strong> without any payment.
+                  </p>
+                </div>
+
+                {/* 5 Subject Quick Indicators */}
+                <div className="pt-2 flex flex-wrap gap-2 text-xs">
+                  <span className="bg-stone-800/90 border border-stone-700/80 text-stone-200 px-3 py-1.5 rounded-xl font-semibold flex items-center space-x-1.5">
+                    <span>📐</span>
+                    <span>Mathematics</span>
+                  </span>
+                  <span className="bg-stone-800/90 border border-stone-700/80 text-stone-200 px-3 py-1.5 rounded-xl font-semibold flex items-center space-x-1.5">
+                    <span>🔬</span>
+                    <span>Science</span>
+                  </span>
+                  <span className="bg-stone-800/90 border border-stone-700/80 text-stone-200 px-3 py-1.5 rounded-xl font-semibold flex items-center space-x-1.5">
+                    <span>📖</span>
+                    <span>English</span>
+                  </span>
+                  <span className="bg-stone-800/90 border border-stone-700/80 text-stone-200 px-3 py-1.5 rounded-xl font-semibold flex items-center space-x-1.5">
+                    <span>🌍</span>
+                    <span>Social Science</span>
+                  </span>
+                  <span className="bg-stone-800/90 border border-stone-700/80 text-stone-200 px-3 py-1.5 rounded-xl font-semibold flex items-center space-x-1.5">
+                    <span>✍️</span>
+                    <span>Assamese</span>
+                  </span>
+                </div>
+
+                <div className="pt-2 flex items-center gap-3">
                   <button
                     onClick={() => onNavigate('free-pdfs')}
-                    className="text-xs font-bold text-white bg-emerald-700 hover:bg-emerald-800 px-4 py-2.5 rounded-xl flex items-center space-x-1.5 shadow-sm transition-all cursor-pointer self-start sm:self-auto"
+                    className="px-6 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs sm:text-sm flex items-center space-x-2 shadow-lg shadow-emerald-950/40 transition-all cursor-pointer"
                   >
-                    <span>View All {freeNotes.length} Free Notes</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
+                    <span>Open Free Notes Page</span>
+                    <ArrowRight className="w-4 h-4" />
                   </button>
+                  <span className="text-xs text-stone-400 font-medium hidden sm:inline">
+                    {freeNotes.length} Free {freeNotes.length === 1 ? 'Note' : 'Notes'} Available
+                  </span>
                 </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {freeNotes.slice(0, 3).map((p) => (
-                    <ProductCard
-                      key={p.id}
-                      product={p}
-                      isPurchased={purchasedProductIds.has(p.id)}
-                      onViewDetails={onViewDetails}
-                      onBuyNow={onBuyNow}
-                      onDownloadNotes={onDownloadNotes}
-                    />
-                  ))}
-                </div>
-              </section>
-            )}
+              </div>
+            </section>
 
             {/* Featured & Premium Notes */}
             {featuredNotes.length > 0 && (

@@ -128,6 +128,33 @@ export const INITIAL_PRODUCTS: Product[] = [
     updatedAt: '2026-10-22T03:47:46.578Z'
   },
   {
+    id: 'prod_1792823094592_ririu',
+    title: 'ইণ্টাৰনেটৰ তিতা-মিঠা FREE',
+    slug: 'free',
+    shortDescription: 'ইণ্টাৰনেটৰ তিতা-মিঠা free chapter notes for HSLC 2027.',
+    description: 'ইণ্টাৰনেটৰ তিতা-মিঠা free chapter notes for HSLC 2027 Board Exam.',
+    subject: 'Assamese',
+    classLevel: 'HSLC 2027',
+    examTarget: 'HSLC 2027 Board Exam',
+    medium: 'Both Mediums',
+    category: 'Normal',
+    tags: ['Important Questions', 'Chapter-wise Notes'],
+    chapters: ['ইণ্টাৰনেটৰ তিতা-মিঠা'],
+    coverImagePath: 'https://user46792.na.imgto.link/public/20261024/7ef7a3af1129d3c1e32cf750-class-10-hslc-2027-pdf-lesson.avif',
+    driveFileLink: 'https://drive.google.com/file/d/1kGWb3fCYFMI7NC_1hHi8AsN32XaX_sXK/view?usp=drivesdk',
+    fileType: 'PDF Document',
+    pdfFileName: 'ASSAMESE',
+    pdfStoragePath: '',
+    pageCount: 2,
+    originalPricePaise: 19900,
+    sellingPricePaise: 0,
+    isFree: true,
+    featured: false,
+    published: true,
+    createdAt: '2026-10-24T06:24:54.592Z',
+    updatedAt: '2026-10-24T06:24:54.592Z'
+  },
+  {
     id: 'prod_1792588389139_duc2u',
     title: 'HSLC-2027: Assamese (অসমীয়া) Class 10',
     slug: 'hslc-2027-assamese-class-10',
@@ -182,6 +209,101 @@ export const INITIAL_PRODUCTS: Product[] = [
     updatedAt: '2026-10-21T13:07:19.943Z'
   }
 ];
+
+export interface FreeNoteSubjectConfig {
+  id: string;
+  name: string;
+  assamese: string;
+  icon: string;
+  badgeBg: string;
+  badgeText: string;
+  accentBorder: string;
+}
+
+export const FREE_NOTE_SUBJECTS: FreeNoteSubjectConfig[] = [
+  {
+    id: 'mathematics',
+    name: 'Mathematics',
+    assamese: 'গণিত',
+    icon: '📐',
+    badgeBg: 'bg-blue-100 text-blue-800',
+    badgeText: 'text-blue-700',
+    accentBorder: 'hover:border-blue-300'
+  },
+  {
+    id: 'science',
+    name: 'Science',
+    assamese: 'সাধাৰণ বিজ্ঞান',
+    icon: '🔬',
+    badgeBg: 'bg-emerald-100 text-emerald-800',
+    badgeText: 'text-emerald-700',
+    accentBorder: 'hover:border-emerald-300'
+  },
+  {
+    id: 'english',
+    name: 'English',
+    assamese: 'ইংৰাজী',
+    icon: '📖',
+    badgeBg: 'bg-indigo-100 text-indigo-800',
+    badgeText: 'text-indigo-700',
+    accentBorder: 'hover:border-indigo-300'
+  },
+  {
+    id: 'social-science',
+    name: 'Social Science',
+    assamese: 'সমাজ বিজ্ঞান',
+    icon: '🌍',
+    badgeBg: 'bg-amber-100 text-amber-800',
+    badgeText: 'text-amber-700',
+    accentBorder: 'hover:border-amber-300'
+  },
+  {
+    id: 'assamese',
+    name: 'Assamese',
+    assamese: 'অসমীয়া',
+    icon: '✍️',
+    badgeBg: 'bg-rose-100 text-rose-800',
+    badgeText: 'text-rose-700',
+    accentBorder: 'hover:border-rose-300'
+  }
+];
+
+export function isFreeNote(p: Product): boolean {
+  if (p.published === false) return false;
+  return p.isFree === true || (p as any).freeNote === true || (p.category as any) === 'Free';
+}
+
+export function matchFreeNoteSubject(p: Product, subjectId: string): boolean {
+  const target = subjectId.toLowerCase().replace(/[-\s]+/g, '');
+  const s = (p.subject || '').toLowerCase().replace(/[-\s]+/g, '');
+
+  if (target === 'mathematics') {
+    return s === 'mathematics' || s === 'maths' || s === 'math';
+  }
+  if (target === 'science') {
+    return s === 'science' || s === 'generalscience';
+  }
+  if (target === 'english') {
+    return (
+      s === 'english' ||
+      (s === 'othersubjects' &&
+        (p.pdfFileName?.toLowerCase().includes('english') ||
+         p.title?.toLowerCase().includes('madam rides the bus')))
+    );
+  }
+  if (target === 'socialscience') {
+    return s === 'socialscience';
+  }
+  if (target === 'assamese') {
+    return (
+      s === 'assamese' ||
+      (s === 'othersubjects' &&
+        (p.pdfFileName?.toLowerCase().includes('assamese') ||
+         p.title?.includes('ইণ্টাৰনেটৰ')))
+    );
+  }
+  return false;
+}
 
 function isLegacySampleDoc(id: string, title?: string): boolean {
   if (

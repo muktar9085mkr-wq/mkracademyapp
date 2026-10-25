@@ -52,7 +52,10 @@ import {
   updateProduct,
   deleteProduct,
   deleteLegacySampleProductsAdmin,
-  syncBaselineProductsToFirestore
+  syncBaselineProductsToFirestore,
+  FREE_NOTE_SUBJECTS,
+  isFreeNote,
+  matchFreeNoteSubject
 } from '../../services/productService';
 import {
   getAllOrdersAdmin,
@@ -72,6 +75,7 @@ type AdminTab =
   | 'dashboard'
   | 'products'
   | 'add-product'
+  | 'free-notes'
   | 'students'
   | 'orders'
   | 'banner'
@@ -124,6 +128,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
   const [quickOriginalPrice, setQuickOriginalPrice] = useState<number>(0);
   const [quickPriceSaving, setQuickPriceSaving] = useState(false);
   const [quickPriceMessage, setQuickPriceMessage] = useState<string | null>(null);
+
+  // Dedicated Free Notes Manager State
+  const [freeNotesSubjectFilter, setFreeNotesSubjectFilter] = useState<string>('all');
+  const [freeNoteSearch, setFreeNoteSearch] = useState<string>('');
+  const [freeNoteModalOpen, setFreeNoteModalOpen] = useState<boolean>(false);
+  const [editingFreeNote, setEditingFreeNote] = useState<Product | null>(null);
+  const [freeNoteTitle, setFreeNoteTitle] = useState<string>('');
+  const [freeNoteSubject, setFreeNoteSubject] = useState<string>('Mathematics');
+  const [freeNoteChapter, setFreeNoteChapter] = useState<string>('');
+  const [freeNoteClass, setFreeNoteClass] = useState<string>('HSLC 2027');
+  const [freeNoteMedium, setFreeNoteMedium] = useState<string>('Both Mediums');
+  const [freeNoteDriveLink, setFreeNoteDriveLink] = useState<string>('');
+  const [freeNoteCoverUrl, setFreeNoteCoverUrl] = useState<string>('');
+  const [freeNotePageCount, setFreeNotePageCount] = useState<number>(10);
+  const [freeNotePublished, setFreeNotePublished] = useState<boolean>(true);
+  const [freeNoteSaving, setFreeNoteSaving] = useState<boolean>(false);
+  const [freeNoteMessage, setFreeNoteMessage] = useState<string | null>(null);
 
   // Banner State
   const [bannerEnabled, setBannerEnabled] = useState(true);
@@ -669,6 +690,141 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
     }
   };
 
+  // Free Notes Management Handlers
+  const handleOpenAddFreeNote = () => {
+    setEditingFreeNote(null);
+    setFreeNoteTitle('');
+    setFreeNoteSubject('Mathematics');
+    setFreeNoteChapter('');
+    setFreeNoteClass('HSLC 2027');
+    setFreeNoteMedium('Both Mediums');
+    setFreeNoteDriveLink('');
+    setFreeNoteCoverUrl('');
+    setFreeNotePageCount(10);
+    setFreeNotePublished(true);
+    setFreeNoteMessage(null);
+    setFreeNoteModalOpen(true);
+  };
+
+  const handleOpenEditFreeNote = (note: Product) => {
+    setEditingFreeNote(note);
+    let sub = note.subject || 'Mathematics';
+    if (sub === 'General Science') sub = 'Science';
+    if (sub === 'Other Subjects') {
+      if (note.pdfFileName?.toLowerCase().includes('assamese') || note.title?.includes('ইণ্টাৰনেটৰ')) {
+        sub = 'Assamese';
+      } else if (note.pdfFileName?.toLowerCase().includes('english') || note.title?.toLowerCase().includes('madam')) {
+        sub = 'English';
+      } else {
+        sub = 'Assamese';
+      }
+    }
+    setFreeNoteSubject(sub);
+    setFreeNoteChapter(note.chapters?.[0] || note.shortDescription || '');
+    setFreeNoteClass(note.classLevel || 'HSLC 2027');
+    setFreeNoteMedium(note.medium || 'Both Mediums');
+    setFreeNoteDriveLink(note.driveFileLink || '');
+    setFreeNoteCoverUrl(note.coverImagePath || '');
+    setFreeNotePageCount(note.pageCount || 10);
+    setFreeNotePublished(note.published !== false);
+    setFreeNoteMessage(null);
+    setFreeNoteModalOpen(true);
+  };
+
+  const handleSaveFreeNote = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (freeNoteSaving) return;
+    if (!freeNoteTitle.trim()) {
+      setFreeNoteMessage('Free Note title is required');
+      return;
+    }
+    if (!freeNoteDriveLink.trim()) {
+      setFreeNoteMessage('Valid Google Drive or PDF file link is required');
+      return;
+    }
+
+    setFreeNoteSaving(true);
+    setFreeNoteMessage(null);
+
+    try {
+      const generatedSlug = freeNoteTitle
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)/g, '');
+
+      const payload: Partial<Product> = {
+        title: freeNoteTitle.trim(),
+        slug: generatedSlug || 'free-note',
+        shortDescription: freeNoteChapter.trim() ? `Chapter: ${freeNoteChapter.trim()}` : '',
+        description: freeNoteChapter.trim()
+          ? `Free educational chapter notes for ${freeNoteChapter.trim()} (${freeNoteSubject}).`
+          : `Free study materials for ${freeNoteSubject}.`,
+        subject: freeNoteSubject,
+        classLevel: freeNoteClass,
+        examTarget: 'HSLC 2027 Board Exam',
+        medium: freeNoteMedium,
+        category: 'Normal',
+        tags: ['Important Questions', 'Chapter-wise Notes', 'Free PDF'],
+        chapters: freeNoteChapter.trim() ? [freeNoteChapter.trim()] : [],
+        coverImagePath:
+          freeNoteCoverUrl.trim() ||
+          'https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=800&q=80',
+        driveFileLink: freeNoteDriveLink.trim(),
+        pdfStoragePath: '',
+        pdfFileName: `${generatedSlug}.pdf`,
+        fileType: 'PDF Document',
+        pageCount: Number(freeNotePageCount) || 1,
+        originalPricePaise: 0,
+        sellingPricePaise: 0,
+        isFree: true,
+        featured: false,
+        published: freeNotePublished
+      };
+
+      if (editingFreeNote) {
+        await updateProduct(editingFreeNote.id, payload);
+        setFreeNoteMessage('Free Note metadata updated successfully!');
+      } else {
+        await addProduct(payload as any);
+        setFreeNoteMessage('New Free Note created successfully!');
+      }
+
+      const refreshed = await getAllProductsAdmin();
+      setProducts(refreshed);
+      if (onProductsChanged) {
+        onProductsChanged();
+      }
+
+      setTimeout(() => {
+        setFreeNoteModalOpen(false);
+        setEditingFreeNote(null);
+      }, 1000);
+    } catch (err: any) {
+      setFreeNoteMessage(err.message || 'Failed to save free note');
+    } finally {
+      setFreeNoteSaving(false);
+    }
+  };
+
+  const handleDeleteFreeNote = async (id: string, title: string) => {
+    if (
+      window.confirm(
+        `Are you sure you want to delete the Free Note record for "${title}"?\n\nImportant: The actual uploaded PDF file in Google Drive will remain safe and untouched.`
+      )
+    ) {
+      try {
+        await deleteProduct(id);
+        const refreshed = await getAllProductsAdmin();
+        setProducts(refreshed);
+        if (onProductsChanged) {
+          onProductsChanged();
+        }
+      } catch (err: any) {
+        alert(err.message || 'Failed to delete free note');
+      }
+    }
+  };
+
   const handleSaveBanner = async (e: React.FormEvent) => {
     e.preventDefault();
     setBannerSaving(true);
@@ -829,6 +985,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
           >
             <PlusCircle className="w-4 h-4" />
             <span>Add New Product</span>
+          </button>
+
+          <button
+            onClick={() => setCurrentTab('free-notes')}
+            className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center justify-between transition-colors cursor-pointer ${
+              currentTab === 'free-notes'
+                ? 'bg-emerald-700 text-white shadow-xs'
+                : 'bg-white text-emerald-800 hover:bg-emerald-50 border border-emerald-200'
+            }`}
+          >
+            <div className="flex items-center space-x-2.5">
+              <Sparkles className="w-4 h-4 text-emerald-500" />
+              <span>Free Notes Manager</span>
+            </div>
+            <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${currentTab === 'free-notes' ? 'bg-emerald-900 text-white' : 'bg-emerald-100 text-emerald-800'}`}>
+              {products.filter((p) => isFreeNote(p)).length}
+            </span>
           </button>
 
           <button
@@ -2102,7 +2275,431 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
             </div>
           )}
 
-          {/* TAB: ORDERS & PAYMENTS */}
+          {/* TAB: FREE NOTES MANAGER (Dedicated 5-Subject Management) */}
+          {currentTab === 'free-notes' && (
+            <div className="space-y-6 animate-in fade-in">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <div className="inline-flex items-center space-x-1.5 bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2.5 py-0.5 rounded-md uppercase mb-1">
+                    <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Free Study Materials System</span>
+                  </div>
+                  <h2 className="text-xl font-extrabold text-stone-900 font-sans">
+                    Free Notes Manager
+                  </h2>
+                  <p className="text-xs text-stone-500">
+                    Add, edit metadata, and organize 100% free notes across the 5 core subjects without altering paid products.
+                  </p>
+                </div>
+
+                <button
+                  onClick={handleOpenAddFreeNote}
+                  className="px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow-xs flex items-center space-x-2 transition-all cursor-pointer self-start sm:self-auto"
+                >
+                  <PlusCircle className="w-4 h-4" />
+                  <span>Add New Free Note</span>
+                </button>
+              </div>
+
+              {/* 5 Subjects Summary Cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setFreeNotesSubjectFilter('all')}
+                  className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${
+                    freeNotesSubjectFilter === 'all'
+                      ? 'bg-stone-900 text-white border-stone-900 shadow-sm'
+                      : 'bg-stone-50 border-stone-200 text-stone-700 hover:bg-stone-100'
+                  }`}
+                >
+                  <span className="text-[10px] uppercase font-bold block opacity-75">All Subjects</span>
+                  <span className="text-lg font-black">{products.filter((p) => isFreeNote(p)).length}</span>
+                </button>
+
+                {FREE_NOTE_SUBJECTS.map((sub) => {
+                  const count = products.filter((p) => isFreeNote(p) && matchFreeNoteSubject(p, sub.id)).length;
+                  const isSelected = freeNotesSubjectFilter === sub.id;
+                  return (
+                    <button
+                      key={sub.id}
+                      type="button"
+                      onClick={() => setFreeNotesSubjectFilter(sub.id)}
+                      className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${
+                        isSelected
+                          ? 'bg-emerald-700 text-white border-emerald-700 shadow-sm'
+                          : 'bg-white border-stone-200 text-stone-800 hover:border-emerald-300'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between text-xs">
+                        <span>{sub.icon}</span>
+                        <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${isSelected ? 'bg-emerald-900 text-emerald-100' : 'bg-stone-100 text-stone-600'}`}>
+                          {count}
+                        </span>
+                      </div>
+                      <span className="text-xs font-bold block mt-1 truncate">{sub.name}</span>
+                      <span className={`text-[10px] block truncate ${isSelected ? 'text-emerald-100' : 'text-stone-400'}`}>
+                        {sub.assamese}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Search in Free Notes */}
+              <div className="relative max-w-sm">
+                <input
+                  type="text"
+                  value={freeNoteSearch}
+                  onChange={(e) => setFreeNoteSearch(e.target.value)}
+                  placeholder="Filter free notes by title, topic, or chapter..."
+                  className="w-full bg-stone-50 border border-stone-200 rounded-xl pl-9 pr-3 py-2 text-xs text-stone-900 focus:bg-white focus:outline-none focus:border-emerald-600"
+                />
+                <Search className="w-3.5 h-3.5 text-stone-400 absolute left-3 top-2.5" />
+              </div>
+
+              {/* Free Notes Table */}
+              {(() => {
+                const freeList = products.filter((p) => {
+                  if (!isFreeNote(p)) return false;
+                  if (freeNotesSubjectFilter !== 'all' && !matchFreeNoteSubject(p, freeNotesSubjectFilter)) {
+                    return false;
+                  }
+                  if (freeNoteSearch.trim()) {
+                    const q = freeNoteSearch.toLowerCase().trim();
+                    const matchesTitle = p.title.toLowerCase().includes(q);
+                    const matchesSubject = (p.subject || '').toLowerCase().includes(q);
+                    const matchesDesc = (p.shortDescription || '').toLowerCase().includes(q);
+                    const matchesChapters = p.chapters?.some((c) => c.toLowerCase().includes(q));
+                    return matchesTitle || matchesSubject || matchesDesc || matchesChapters;
+                  }
+                  return true;
+                });
+
+                if (freeList.length === 0) {
+                  return (
+                    <div className="bg-stone-50 border-2 border-dashed border-stone-200 rounded-3xl p-8 text-center space-y-3">
+                      <div className="w-12 h-12 bg-emerald-100 text-emerald-700 rounded-2xl flex items-center justify-center mx-auto text-xl">
+                        📖
+                      </div>
+                      <h3 className="text-sm font-bold text-stone-900">
+                        {freeNoteSearch || freeNotesSubjectFilter !== 'all'
+                          ? 'No free notes match this filter'
+                          : 'No Free Notes added yet'}
+                      </h3>
+                      <p className="text-xs text-stone-500 max-w-md mx-auto">
+                        Click "Add New Free Note" to create a free PDF note for any of the 5 subjects.
+                      </p>
+                      <button
+                        onClick={handleOpenAddFreeNote}
+                        className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow-xs inline-flex items-center space-x-1.5 transition-colors cursor-pointer"
+                      >
+                        <PlusCircle className="w-3.5 h-3.5" />
+                        <span>Add First Free Note</span>
+                      </button>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="border border-stone-200 rounded-2xl overflow-hidden shadow-2xs">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-stone-50 border-b border-stone-200 text-stone-500 uppercase text-[10px] font-bold">
+                        <tr>
+                          <th className="py-3 px-4">Title & Chapter</th>
+                          <th className="py-3 px-4">Assigned Subject</th>
+                          <th className="py-3 px-4">Class & Medium</th>
+                          <th className="py-3 px-4">PDF Link</th>
+                          <th className="py-3 px-4">Status</th>
+                          <th className="py-3 px-4 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-stone-100">
+                        {freeList.map((note) => (
+                          <tr key={note.id} className="hover:bg-stone-50/60 transition-colors">
+                            <td className="py-3 px-4">
+                              <div className="flex items-center space-x-3">
+                                {note.coverImagePath ? (
+                                  <img
+                                    src={note.coverImagePath}
+                                    alt={note.title}
+                                    className="w-10 h-10 object-cover rounded-xl border border-stone-200 shrink-0"
+                                  />
+                                ) : (
+                                  <div className="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 flex items-center justify-center font-bold text-xs shrink-0">
+                                    PDF
+                                  </div>
+                                )}
+                                <div className="max-w-xs space-y-0.5">
+                                  <p className="font-bold text-stone-900 truncate" title={note.title}>
+                                    {note.title}
+                                  </p>
+                                  <p className="text-[10px] text-stone-500 truncate">
+                                    {note.chapters?.[0] || note.shortDescription || '100% Free Note'}
+                                  </p>
+                                </div>
+                              </div>
+                            </td>
+
+                            <td className="py-3 px-4">
+                              <span className="inline-flex items-center space-x-1 bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-extrabold px-2 py-0.5 rounded-md uppercase">
+                                <span>{note.subject}</span>
+                              </span>
+                            </td>
+
+                            <td className="py-3 px-4 text-stone-600 text-[11px]">
+                              {note.classLevel} • {note.medium}
+                            </td>
+
+                            <td className="py-3 px-4">
+                              {note.driveFileLink ? (
+                                <a
+                                  href={note.driveFileLink}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center space-x-1 text-[10px] font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded-md border border-blue-200 transition-colors"
+                                  title="Test Google Drive URL"
+                                >
+                                  <ExternalLink className="w-3 h-3" />
+                                  <span>Open Drive</span>
+                                </a>
+                              ) : (
+                                <span className="text-[10px] text-stone-400">No URL</span>
+                              )}
+                            </td>
+
+                            <td className="py-3 px-4">
+                              <button
+                                type="button"
+                                onClick={() => handleTogglePublish(note)}
+                                className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold cursor-pointer transition-colors ${
+                                  note.published !== false
+                                    ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
+                                    : 'bg-stone-200 text-stone-700 hover:bg-stone-300'
+                                }`}
+                                title="Click to toggle active/inactive status"
+                              >
+                                {note.published !== false ? 'Active (Live)' : 'Inactive (Draft)'}
+                              </button>
+                            </td>
+
+                            <td className="py-3 px-4 text-right">
+                              <div className="flex items-center justify-end space-x-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenEditFreeNote(note)}
+                                  className="p-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-700 transition-colors cursor-pointer"
+                                  title="Edit Free Note Metadata"
+                                >
+                                  <Edit className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteFreeNote(note.id, note.title)}
+                                  className="p-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 transition-colors cursor-pointer"
+                                  title="Delete Free Note Record (Safe - underlying file is not touched)"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })()}
+
+              {/* Dedicated Free Note Modal (Add & Edit) */}
+              {freeNoteModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-950/75 backdrop-blur-xs animate-in fade-in">
+                  <div className="bg-white rounded-3xl w-full max-w-xl max-h-[90vh] overflow-y-auto shadow-2xl border border-stone-200 p-6 sm:p-8 space-y-6">
+                    <div className="flex items-center justify-between pb-3 border-b border-stone-100">
+                      <div className="flex items-center space-x-2.5">
+                        <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold">
+                          <Sparkles className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <h3 className="font-extrabold text-stone-900 text-base">
+                            {editingFreeNote ? 'Edit Free Note Metadata' : 'Add New Free Note'}
+                          </h3>
+                          <p className="text-[11px] text-stone-500">
+                            Strictly assigns note to one of the 5 subjects. Underlying PDF files remain safe.
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setFreeNoteModalOpen(false);
+                          setEditingFreeNote(null);
+                        }}
+                        className="p-1 rounded-lg text-stone-400 hover:text-stone-700 cursor-pointer"
+                      >
+                        ✕
+                      </button>
+                    </div>
+
+                    {freeNoteMessage && (
+                      <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 font-semibold flex items-center space-x-2">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <span>{freeNoteMessage}</span>
+                      </div>
+                    )}
+
+                    <form onSubmit={handleSaveFreeNote} className="space-y-4 text-xs">
+                      {/* Subject Selection (The 5 Core Subjects) */}
+                      <div>
+                        <label className="block text-stone-700 font-bold mb-1">
+                          Subject <span className="text-red-600">*</span>
+                        </label>
+                        <select
+                          value={freeNoteSubject}
+                          onChange={(e) => setFreeNoteSubject(e.target.value)}
+                          className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-stone-900 font-semibold focus:outline-none focus:border-emerald-600 cursor-pointer"
+                        >
+                          <option value="Mathematics">Mathematics (গণিত)</option>
+                          <option value="Science">Science (সাধাৰণ বিজ্ঞান)</option>
+                          <option value="English">English (ইংৰাজী)</option>
+                          <option value="Social Science">Social Science (সমাজ বিজ্ঞান)</option>
+                          <option value="Assamese">Assamese (অসমীয়া)</option>
+                        </select>
+                      </div>
+
+                      {/* Title */}
+                      <div>
+                        <label className="block text-stone-700 font-bold mb-1">
+                          Free Note Title <span className="text-red-600">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={freeNoteTitle}
+                          onChange={(e) => setFreeNoteTitle(e.target.value)}
+                          placeholder="e.g. Acid, Bases and Salts - Complete Free Notes"
+                          className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-stone-900 focus:outline-none focus:border-emerald-600"
+                        />
+                      </div>
+
+                      {/* Chapter / Topic */}
+                      <div>
+                        <label className="block text-stone-700 font-bold mb-1">
+                          Chapter or Topic Name
+                        </label>
+                        <input
+                          type="text"
+                          value={freeNoteChapter}
+                          onChange={(e) => setFreeNoteChapter(e.target.value)}
+                          placeholder="e.g. Chapter 2 - Acids, Bases & Salts"
+                          className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-stone-900 focus:outline-none focus:border-emerald-600"
+                        />
+                      </div>
+
+                      {/* Google Drive PDF URL */}
+                      <div>
+                        <label className="block text-stone-700 font-bold mb-1">
+                          PDF File Link (Google Drive / Storage URL) <span className="text-red-600">*</span>
+                        </label>
+                        <input
+                          type="url"
+                          required
+                          value={freeNoteDriveLink}
+                          onChange={(e) => setFreeNoteDriveLink(e.target.value)}
+                          placeholder="https://drive.google.com/file/d/..."
+                          className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-stone-900 focus:outline-none focus:border-emerald-600 font-mono text-[11px]"
+                        />
+                        <p className="text-[10px] text-stone-400 mt-1">
+                          Enter your shareable Google Drive link with "Anyone with the link can view" permission.
+                        </p>
+                      </div>
+
+                      {/* Class Level & Medium */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-stone-700 font-bold mb-1">Class Level</label>
+                          <select
+                            value={freeNoteClass}
+                            onChange={(e) => setFreeNoteClass(e.target.value)}
+                            className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-stone-900 cursor-pointer"
+                          >
+                            <option value="HSLC 2027">HSLC 2027</option>
+                            <option value="Class 10">Class 10</option>
+                            <option value="Class 9">Class 9</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-stone-700 font-bold mb-1">Medium</label>
+                          <select
+                            value={freeNoteMedium}
+                            onChange={(e) => setFreeNoteMedium(e.target.value)}
+                            className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-stone-900 cursor-pointer"
+                          >
+                            <option value="Both Mediums">Both Mediums</option>
+                            <option value="Assamese Medium">Assamese Medium</option>
+                            <option value="English Medium">English Medium</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Thumbnail URL */}
+                      <div>
+                        <label className="block text-stone-700 font-bold mb-1">Thumbnail Cover URL (Optional)</label>
+                        <input
+                          type="url"
+                          value={freeNoteCoverUrl}
+                          onChange={(e) => setFreeNoteCoverUrl(e.target.value)}
+                          placeholder="https://..."
+                          className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-stone-900 font-mono text-[11px]"
+                        />
+                      </div>
+
+                      {/* Active Status */}
+                      <div className="p-3 bg-stone-50 rounded-xl border border-stone-200 flex items-center justify-between">
+                        <div>
+                          <span className="font-bold text-stone-900">Active Status</span>
+                          <p className="text-[10px] text-stone-500">
+                            Active notes are visible immediately to all students on the website.
+                          </p>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={freeNotePublished}
+                          onChange={(e) => setFreeNotePublished(e.target.checked)}
+                          className="w-4 h-4 text-emerald-600 rounded cursor-pointer"
+                        />
+                      </div>
+
+                      {/* Action buttons */}
+                      <div className="pt-3 border-t border-stone-100 flex items-center justify-end space-x-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFreeNoteModalOpen(false);
+                            setEditingFreeNote(null);
+                          }}
+                          className="px-4 py-2 border border-stone-300 text-stone-700 font-bold rounded-xl hover:bg-stone-50 transition-colors cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={freeNoteSaving}
+                          className="px-6 py-2 bg-emerald-700 hover:bg-emerald-800 disabled:bg-stone-300 text-white font-bold rounded-xl shadow-sm transition-all cursor-pointer flex items-center space-x-1.5"
+                        >
+                          {freeNoteSaving ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Save className="w-3.5 h-3.5" />
+                          )}
+                          <span>{editingFreeNote ? 'Save Changes' : 'Create Free Note'}</span>
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
           {currentTab === 'orders' && (
             <div className="space-y-6 animate-in fade-in">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
