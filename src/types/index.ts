@@ -52,6 +52,30 @@ export interface Product {
   updatedAt: string;
 }
 
+export interface FreeNote {
+  id: string;
+  title: string;
+  slug: string;
+  shortDescription?: string;
+  description?: string;
+  subject: string;
+  chapterTopic?: string;
+  chapters?: string[];
+  classLevel: string;
+  examTarget?: string;
+  medium: string;
+  coverImagePath: string;
+  driveFileLink: string;
+  fileType: string;
+  pageCount?: number;
+  pdfFileName?: string;
+  isFree: true;
+  featured?: boolean;
+  published: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface UserProfile {
   uid: string;
   displayName: string;

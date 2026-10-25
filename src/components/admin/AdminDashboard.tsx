@@ -53,6 +53,11 @@ import {
   deleteProduct,
   deleteLegacySampleProductsAdmin,
   syncBaselineProductsToFirestore,
+  getFreeNotes,
+  addFreeNote,
+  updateFreeNote,
+  deleteFreeNote,
+  syncFreeNotesToFirestore,
   FREE_NOTE_SUBJECTS,
   isFreeNote,
   matchFreeNoteSubject
@@ -88,6 +93,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
 
   const [currentTab, setCurrentTab] = useState<AdminTab>('dashboard');
   const [products, setProducts] = useState<Product[]>([]);
+  const [freeNotes, setFreeNotes] = useState<Product[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [students, setStudents] = useState<UserProfile[]>([]);
   const [settings, setSettings] = useState<AppPublicSettings | null>(null);
@@ -264,16 +270,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
       // Ensure all authentic baseline products exist in Firestore
       await syncBaselineProductsToFirestore().catch(() => ({ synced: 0, skipped: 0 }));
 
-      const [prods, ords, studs, setts] = await Promise.all([
+      const [prods, ords, studs, setts, fNotes] = await Promise.all([
         getAllProductsAdmin(),
         getAllOrdersAdmin(),
         getAllStudentsAdmin(),
-        getPublicSettings()
+        getPublicSettings(),
+        getFreeNotes()
       ]);
       setProducts(prods);
       setOrders(ords);
       setStudents(studs);
       setSettings(setts);
+      setFreeNotes(fNotes);
 
       if (setts) {
         setBannerEnabled(setts.banner.enabled);
@@ -782,15 +790,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
       };
 
       if (editingFreeNote) {
-        await updateProduct(editingFreeNote.id, payload);
+        await updateFreeNote(editingFreeNote.id, payload);
         setFreeNoteMessage('Free Note metadata updated successfully!');
       } else {
-        await addProduct(payload as any);
-        setFreeNoteMessage('New Free Note created successfully!');
+        await addFreeNote(payload as any);
+        setFreeNoteMessage('New Free Note created successfully in freeNotes collection!');
       }
 
-      const refreshed = await getAllProductsAdmin();
+      const [refreshed, refreshedFree] = await Promise.all([
+        getAllProductsAdmin(),
+        getFreeNotes()
+      ]);
       setProducts(refreshed);
+      setFreeNotes(refreshedFree);
       if (onProductsChanged) {
         onProductsChanged();
       }
@@ -813,9 +825,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
       )
     ) {
       try {
-        await deleteProduct(id);
-        const refreshed = await getAllProductsAdmin();
+        await deleteFreeNote(id);
+        const [refreshed, refreshedFree] = await Promise.all([
+          getAllProductsAdmin(),
+          getFreeNotes()
+        ]);
         setProducts(refreshed);
+        setFreeNotes(refreshedFree);
         if (onProductsChanged) {
           onProductsChanged();
         }
@@ -2302,48 +2318,53 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
               </div>
 
               {/* 5 Subjects Summary Cards */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => setFreeNotesSubjectFilter('all')}
-                  className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${
-                    freeNotesSubjectFilter === 'all'
-                      ? 'bg-stone-900 text-white border-stone-900 shadow-sm'
-                      : 'bg-stone-50 border-stone-200 text-stone-700 hover:bg-stone-100'
-                  }`}
-                >
-                  <span className="text-[10px] uppercase font-bold block opacity-75">All Subjects</span>
-                  <span className="text-lg font-black">{products.filter((p) => isFreeNote(p)).length}</span>
-                </button>
-
-                {FREE_NOTE_SUBJECTS.map((sub) => {
-                  const count = products.filter((p) => isFreeNote(p) && matchFreeNoteSubject(p, sub.id)).length;
-                  const isSelected = freeNotesSubjectFilter === sub.id;
-                  return (
+              {(() => {
+                const freeSource = freeNotes.length > 0 ? freeNotes : products.filter((p) => isFreeNote(p));
+                return (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
                     <button
-                      key={sub.id}
                       type="button"
-                      onClick={() => setFreeNotesSubjectFilter(sub.id)}
+                      onClick={() => setFreeNotesSubjectFilter('all')}
                       className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${
-                        isSelected
-                          ? 'bg-emerald-700 text-white border-emerald-700 shadow-sm'
-                          : 'bg-white border-stone-200 text-stone-800 hover:border-emerald-300'
+                        freeNotesSubjectFilter === 'all'
+                          ? 'bg-stone-900 text-white border-stone-900 shadow-sm'
+                          : 'bg-stone-50 border-stone-200 text-stone-700 hover:bg-stone-100'
                       }`}
                     >
-                      <div className="flex items-center justify-between text-xs">
-                        <span>{sub.icon}</span>
-                        <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${isSelected ? 'bg-emerald-900 text-emerald-100' : 'bg-stone-100 text-stone-600'}`}>
-                          {count}
-                        </span>
-                      </div>
-                      <span className="text-xs font-bold block mt-1 truncate">{sub.name}</span>
-                      <span className={`text-[10px] block truncate ${isSelected ? 'text-emerald-100' : 'text-stone-400'}`}>
-                        {sub.assamese}
-                      </span>
+                      <span className="text-[10px] uppercase font-bold block opacity-75">All Subjects</span>
+                      <span className="text-lg font-black">{freeSource.length}</span>
                     </button>
-                  );
-                })}
-              </div>
+
+                    {FREE_NOTE_SUBJECTS.map((sub) => {
+                      const count = freeSource.filter((p) => matchFreeNoteSubject(p, sub.id)).length;
+                      const isSelected = freeNotesSubjectFilter === sub.id;
+                      return (
+                        <button
+                          key={sub.id}
+                          type="button"
+                          onClick={() => setFreeNotesSubjectFilter(sub.id)}
+                          className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${
+                            isSelected
+                              ? 'bg-emerald-700 text-white border-emerald-700 shadow-sm'
+                              : 'bg-white border-stone-200 text-stone-800 hover:border-emerald-300'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between text-xs">
+                            <span>{sub.icon}</span>
+                            <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${isSelected ? 'bg-emerald-900 text-emerald-100' : 'bg-stone-100 text-stone-600'}`}>
+                              {count}
+                            </span>
+                          </div>
+                          <span className="text-xs font-bold block mt-1 truncate">{sub.name}</span>
+                          <span className={`text-[10px] block truncate ${isSelected ? 'text-emerald-100' : 'text-stone-400'}`}>
+                            {sub.assamese}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
 
               {/* Search in Free Notes */}
               <div className="relative max-w-sm">
@@ -2359,8 +2380,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
 
               {/* Free Notes Table */}
               {(() => {
-                const freeList = products.filter((p) => {
-                  if (!isFreeNote(p)) return false;
+                const freeSource = freeNotes.length > 0 ? freeNotes : products.filter((p) => isFreeNote(p));
+                const freeList = freeSource.filter((p) => {
                   if (freeNotesSubjectFilter !== 'all' && !matchFreeNoteSubject(p, freeNotesSubjectFilter)) {
                     return false;
                   }

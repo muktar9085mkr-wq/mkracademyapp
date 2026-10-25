@@ -12,12 +12,13 @@ import {
   onSnapshot
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase/config';
-import { Product } from '../types';
+import { Product, FreeNote } from '../types';
 
-const PRODUCTS_COLLECTION = 'products';
+export const PRODUCTS_COLLECTION = 'products';
+export const FREE_NOTES_COLLECTION = 'freeNotes';
 
 // Authentic Official MKR Academy Study Materials for Classes 10 & 9 and HSLC 2027
-// Preserves all 5 original authentic products + the newly created PDF product
+// Preserves all 5 original authentic paid products
 export const INITIAL_PRODUCTS: Product[] = [
   {
     id: 'prod_1792811094545_9xspg',
@@ -101,60 +102,6 @@ export const INITIAL_PRODUCTS: Product[] = [
     updatedAt: '2026-10-22T03:46:55.562Z'
   },
   {
-    id: 'prod_1792589249434_kwfee',
-    title: 'Madam rides the bus',
-    slug: 'madam-rides-the-bus',
-    shortDescription: 'Madam rides the bus free chapter note and question answers.',
-    description: 'Madam rides the bus free chapter note and question answers for HSLC 2027 Board Exam.',
-    subject: 'Other Subjects',
-    classLevel: 'HSLC 2027',
-    examTarget: 'HSLC 2027 Board Exam',
-    medium: 'English Medium',
-    category: 'Normal',
-    tags: ['Important Questions', 'Chapter-wise Notes'],
-    chapters: [],
-    coverImagePath: 'https://user46792.na.imgto.link/public/20261021/22ab0a34a0090b167878d87d-madam-reee.avif',
-    driveFileLink: 'https://drive.google.com/uc?export=download&id=1LuQDa9mQ6YtnkYl0eAgEJYAlFnvEiXOK',
-    fileType: 'PDF Document',
-    pdfFileName: 'madam-rides-the-bus.pdf',
-    pdfStoragePath: '',
-    pageCount: 3,
-    originalPricePaise: 19900,
-    sellingPricePaise: 0,
-    isFree: true,
-    featured: false,
-    published: true,
-    createdAt: '2026-10-21T13:27:29.434Z',
-    updatedAt: '2026-10-22T03:47:46.578Z'
-  },
-  {
-    id: 'prod_1792823094592_ririu',
-    title: 'ইণ্টাৰনেটৰ তিতা-মিঠা FREE',
-    slug: 'free',
-    shortDescription: 'ইণ্টাৰনেটৰ তিতা-মিঠা free chapter notes for HSLC 2027.',
-    description: 'ইণ্টাৰনেটৰ তিতা-মিঠা free chapter notes for HSLC 2027 Board Exam.',
-    subject: 'Assamese',
-    classLevel: 'HSLC 2027',
-    examTarget: 'HSLC 2027 Board Exam',
-    medium: 'Both Mediums',
-    category: 'Normal',
-    tags: ['Important Questions', 'Chapter-wise Notes'],
-    chapters: ['ইণ্টাৰনেটৰ তিতা-মিঠা'],
-    coverImagePath: 'https://user46792.na.imgto.link/public/20261024/7ef7a3af1129d3c1e32cf750-class-10-hslc-2027-pdf-lesson.avif',
-    driveFileLink: 'https://drive.google.com/file/d/1kGWb3fCYFMI7NC_1hHi8AsN32XaX_sXK/view?usp=drivesdk',
-    fileType: 'PDF Document',
-    pdfFileName: 'ASSAMESE',
-    pdfStoragePath: '',
-    pageCount: 2,
-    originalPricePaise: 19900,
-    sellingPricePaise: 0,
-    isFree: true,
-    featured: false,
-    published: true,
-    createdAt: '2026-10-24T06:24:54.592Z',
-    updatedAt: '2026-10-24T06:24:54.592Z'
-  },
-  {
     id: 'prod_1792588389139_duc2u',
     title: 'HSLC-2027: Assamese (অসমীয়া) Class 10',
     slug: 'hslc-2027-assamese-class-10',
@@ -207,6 +154,65 @@ export const INITIAL_PRODUCTS: Product[] = [
     published: true,
     createdAt: '2026-10-21T13:03:16.027Z',
     updatedAt: '2026-10-21T13:07:19.943Z'
+  }
+];
+
+// Authentic Official MKR Academy Free Educational Notes
+// Preserves all existing verified free notes created by MKR Academy
+export const INITIAL_FREE_NOTES: Product[] = [
+  {
+    id: 'prod_1792589249434_kwfee',
+    title: 'Madam rides the bus',
+    slug: 'madam-rides-the-bus',
+    shortDescription: 'Madam rides the bus free chapter note and question answers.',
+    description: 'Madam rides the bus free chapter note and question answers for HSLC 2027 Board Exam.',
+    subject: 'English',
+    classLevel: 'HSLC 2027',
+    examTarget: 'HSLC 2027 Board Exam',
+    medium: 'English Medium',
+    category: 'Normal',
+    tags: ['Important Questions', 'Chapter-wise Notes', 'Free PDF'],
+    chapters: ['Madam rides the bus'],
+    coverImagePath: 'https://user46792.na.imgto.link/public/20261021/22ab0a34a0090b167878d87d-madam-reee.avif',
+    driveFileLink: 'https://drive.google.com/uc?export=download&id=1LuQDa9mQ6YtnkYl0eAgEJYAlFnvEiXOK',
+    fileType: 'PDF Document',
+    pdfFileName: 'madam-rides-the-bus.pdf',
+    pdfStoragePath: '',
+    pageCount: 3,
+    originalPricePaise: 0,
+    sellingPricePaise: 0,
+    isFree: true,
+    featured: false,
+    published: true,
+    createdAt: '2026-10-21T13:27:29.434Z',
+    updatedAt: '2026-10-22T03:47:46.578Z'
+  },
+  {
+    id: 'prod_1792823094592_ririu',
+    title: 'ইণ্টাৰনেটৰ তিতা-মিঠা FREE',
+    slug: 'free',
+    shortDescription: 'ইণ্টাৰনেটৰ তিতা-মিঠা free chapter notes for HSLC 2027.',
+    description: 'ইণ্টাৰনেটৰ তিতা-মিঠা free chapter notes for HSLC 2027 Board Exam.',
+    subject: 'Assamese',
+    classLevel: 'HSLC 2027',
+    examTarget: 'HSLC 2027 Board Exam',
+    medium: 'Both Mediums',
+    category: 'Normal',
+    tags: ['Important Questions', 'Chapter-wise Notes', 'Free PDF'],
+    chapters: ['ইণ্টাৰনেটৰ তিতা-মিঠা'],
+    coverImagePath: 'https://user46792.na.imgto.link/public/20261024/7ef7a3af1129d3c1e32cf750-class-10-hslc-2027-pdf-lesson.avif',
+    driveFileLink: 'https://drive.google.com/file/d/1kGWb3fCYFMI7NC_1hHi8AsN32XaX_sXK/view?usp=drivesdk',
+    fileType: 'PDF Document',
+    pdfFileName: 'ASSAMESE',
+    pdfStoragePath: '',
+    pageCount: 2,
+    originalPricePaise: 0,
+    sellingPricePaise: 0,
+    isFree: true,
+    featured: false,
+    published: true,
+    createdAt: '2026-10-24T06:24:54.592Z',
+    updatedAt: '2026-10-24T06:24:54.592Z'
   }
 ];
 
@@ -268,12 +274,19 @@ export const FREE_NOTE_SUBJECTS: FreeNoteSubjectConfig[] = [
   }
 ];
 
-export function isFreeNote(p: Product): boolean {
+/**
+ * Checks whether an item is specifically marked as a Free Note.
+ * Strictly adheres to rule: only designated free notes, not merely zero price.
+ */
+export function isFreeNote(p: Product | FreeNote): boolean {
   if (p.published === false) return false;
-  return p.isFree === true || (p as any).freeNote === true || (p.category as any) === 'Free';
+  return p.isFree === true || (p as any).freeNote === true || (p as any).category === 'Free';
 }
 
-export function matchFreeNoteSubject(p: Product, subjectId: string): boolean {
+/**
+ * Match a Free Note to one of the 5 canonical curriculum subjects.
+ */
+export function matchFreeNoteSubject(p: Product | FreeNote, subjectId: string): boolean {
   const target = subjectId.toLowerCase().replace(/[-\s]+/g, '');
   const s = (p.subject || '').toLowerCase().replace(/[-\s]+/g, '');
 
@@ -364,9 +377,46 @@ export function mergeWithBaselineProducts(firestoreProducts: Product[]): Product
 }
 
 /**
- * Fetch all published products for student application.
+ * Safely merges baseline free notes with Firestore documents from freeNotes collection.
+ */
+export function mergeWithBaselineFreeNotes(firestoreNotes: Product[]): Product[] {
+  const noteMap = new Map<string, Product>();
+
+  // 1. Seed with baseline authentic MKR Academy free notes
+  for (const base of INITIAL_FREE_NOTES) {
+    noteMap.set(base.id, { ...base });
+  }
+
+  // 2. Overlay Firestore documents (preserving newly added notes and edits)
+  for (const fn of firestoreNotes) {
+    if (!fn || !fn.id) continue;
+    if (isLegacySampleDoc(fn.id, fn.title)) continue;
+
+    if ((fn as any)._deleted === true) {
+      noteMap.delete(fn.id);
+      continue;
+    }
+
+    const existing = noteMap.get(fn.id);
+    if (existing) {
+      noteMap.set(fn.id, { ...existing, ...fn, isFree: true });
+    } else {
+      noteMap.set(fn.id, { ...fn, isFree: true });
+    }
+  }
+
+  // 3. Sort stably by createdAt descending
+  return Array.from(noteMap.values()).sort((a, b) => {
+    const timeA = new Date(a.createdAt || 0).getTime();
+    const timeB = new Date(b.createdAt || 0).getTime();
+    return timeB - timeA;
+  });
+}
+
+/**
+ * Fetch all published PAID products for student store.
+ * Filters out documents specifically marked as free, ensuring they are treated separately.
  * Reads directly from Firestore without requiring user authentication.
- * Merges with baseline authentic products so notes are ALWAYS visible and never lost.
  */
 export async function getPublishedProducts(): Promise<Product[]> {
   try {
@@ -383,16 +433,17 @@ export async function getPublishedProducts(): Promise<Product[]> {
     });
 
     const merged = mergeWithBaselineProducts(items);
-    return merged.filter((p) => p.published !== false);
+    // Filter strictly for paid products: not marked free and selling price > 0
+    return merged.filter((p) => p.published !== false && !isFreeNote(p) && (p.sellingPricePaise || 0) > 0);
   } catch (error) {
     console.warn('Could not read products from Firestore, using baseline materials:', error);
-    return INITIAL_PRODUCTS.filter((p) => p.published !== false);
+    return INITIAL_PRODUCTS.filter((p) => p.published !== false && !isFreeNote(p) && (p.sellingPricePaise || 0) > 0);
   }
 }
 
 /**
- * Subscribe to real-time updates of published products.
- * Allows instant UI synchronization when admin publishes, edits, or adds notes, without page refresh.
+ * Subscribe to real-time updates of published PAID products.
+ * Filters out free notes to treat them completely separately.
  */
 export function subscribeToPublishedProducts(
   callback: (products: Product[]) => void,
@@ -413,11 +464,11 @@ export function subscribeToPublishedProducts(
         });
 
         const merged = mergeWithBaselineProducts(items);
-        callback(merged.filter((p) => p.published !== false));
+        callback(merged.filter((p) => p.published !== false && !isFreeNote(p) && (p.sellingPricePaise || 0) > 0));
       },
       (error) => {
         console.warn('Real-time products subscription issue:', error);
-        callback(INITIAL_PRODUCTS.filter((p) => p.published !== false));
+        callback(INITIAL_PRODUCTS.filter((p) => p.published !== false && !isFreeNote(p) && (p.sellingPricePaise || 0) > 0));
         if (onError) onError(error);
       }
     );
@@ -425,7 +476,89 @@ export function subscribeToPublishedProducts(
     return unsubscribe;
   } catch (err: any) {
     console.warn('Failed to attach products listener:', err);
-    callback(INITIAL_PRODUCTS.filter((p) => p.published !== false));
+    callback(INITIAL_PRODUCTS.filter((p) => p.published !== false && !isFreeNote(p) && (p.sellingPricePaise || 0) > 0));
+    return () => {};
+  }
+}
+
+/**
+ * Fetch all Free Notes from the dedicated 'freeNotes' Firestore collection.
+ * Includes backward-compatible fallback to existing free notes so none are ever lost.
+ */
+export async function getFreeNotes(): Promise<Product[]> {
+  try {
+    const items: Product[] = [];
+
+    // 1. Fetch from dedicated freeNotes collection
+    try {
+      const qFree = query(collection(db, FREE_NOTES_COLLECTION));
+      const freeSnapshot = await getDocs(qFree);
+      freeSnapshot.forEach((docSnap) => {
+        const data = docSnap.data() as Omit<Product, 'id'>;
+        if (isLegacySampleDoc(docSnap.id, data.title)) return;
+        items.push({ id: docSnap.id, ...data, isFree: true });
+      });
+    } catch (e) {
+      console.warn('Could not read freeNotes collection:', e);
+    }
+
+    // 2. Also check if any existing free notes are present in products collection (backward compatibility)
+    try {
+      const qProd = query(collection(db, PRODUCTS_COLLECTION));
+      const prodSnapshot = await getDocs(qProd);
+      prodSnapshot.forEach((docSnap) => {
+        const data = docSnap.data() as Product;
+        if (isFreeNote(data) && !items.some((item) => item.id === docSnap.id)) {
+          if (!isLegacySampleDoc(docSnap.id, data.title)) {
+            items.push({ ...data, id: docSnap.id, isFree: true });
+          }
+        }
+      });
+    } catch (e) {
+      // Products collection check is optional
+    }
+
+    const merged = mergeWithBaselineFreeNotes(items);
+    return merged.filter((p) => p.published !== false);
+  } catch (error) {
+    console.warn('Error reading free notes from Firestore, using baseline free notes:', error);
+    return INITIAL_FREE_NOTES.filter((p) => p.published !== false);
+  }
+}
+
+/**
+ * Subscribe to real-time updates of the dedicated 'freeNotes' collection.
+ */
+export function subscribeToFreeNotes(
+  callback: (freeNotes: Product[]) => void,
+  onError?: (error: Error) => void
+): () => void {
+  try {
+    const q = query(collection(db, FREE_NOTES_COLLECTION));
+    const unsubscribe = onSnapshot(
+      q,
+      (querySnapshot) => {
+        const items: Product[] = [];
+        querySnapshot.forEach((docSnap) => {
+          const data = docSnap.data() as Omit<Product, 'id'>;
+          if (isLegacySampleDoc(docSnap.id, data.title)) return;
+          items.push({ id: docSnap.id, ...data, isFree: true });
+        });
+
+        const merged = mergeWithBaselineFreeNotes(items);
+        callback(merged.filter((p) => p.published !== false));
+      },
+      (error) => {
+        console.warn('Real-time free notes subscription issue:', error);
+        callback(INITIAL_FREE_NOTES.filter((p) => p.published !== false));
+        if (onError) onError(error);
+      }
+    );
+
+    return unsubscribe;
+  } catch (err: any) {
+    console.warn('Failed to attach free notes listener:', err);
+    callback(INITIAL_FREE_NOTES.filter((p) => p.published !== false));
     return () => {};
   }
 }
@@ -455,26 +588,50 @@ export async function getAllProductsAdmin(): Promise<Product[]> {
 }
 
 /**
- * Get product by ID
+ * Fetch all Free Notes for Admin (including drafts)
+ */
+export async function getAllFreeNotesAdmin(): Promise<Product[]> {
+  return getFreeNotes();
+}
+
+/**
+ * Get product by ID (searches products and free notes)
  */
 export async function getProductById(id: string): Promise<Product | null> {
   try {
+    // 1. Try freeNotes collection first if id starts with freenote_
+    if (id.startsWith('freenote_')) {
+      const freeDocRef = doc(db, FREE_NOTES_COLLECTION, id);
+      const freeDocSnap = await getDoc(freeDocRef);
+      if (freeDocSnap.exists() && !isLegacySampleDoc(id)) {
+        return { id: freeDocSnap.id, ...(freeDocSnap.data() as Omit<Product, 'id'>), isFree: true };
+      }
+    }
+
+    // 2. Try products collection
     const docRef = doc(db, PRODUCTS_COLLECTION, id);
     const docSnap = await getDoc(docRef);
     if (docSnap.exists() && !isLegacySampleDoc(id)) {
       return { id: docSnap.id, ...(docSnap.data() as Omit<Product, 'id'>) };
     }
-    const local = INITIAL_PRODUCTS.find((p) => p.id === id);
-    return local || null;
+
+    // 3. Fallback to baseline lists
+    const localProd = INITIAL_PRODUCTS.find((p) => p.id === id);
+    if (localProd) return localProd;
+
+    const localFree = INITIAL_FREE_NOTES.find((p) => p.id === id);
+    if (localFree) return localFree;
+
+    return null;
   } catch (error) {
-    const local = INITIAL_PRODUCTS.find((p) => p.id === id);
+    const local = INITIAL_PRODUCTS.find((p) => p.id === id) || INITIAL_FREE_NOTES.find((p) => p.id === id);
     return local || null;
   }
 }
 
 /**
  * Add product (Admin only)
- * Creates a unique document in Firestore without replacing or clearing other products.
+ * Creates a unique document in products collection without replacing other products.
  */
 export async function addProduct(productData: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
   try {
@@ -494,7 +651,6 @@ export async function addProduct(productData: Omit<Product, 'id' | 'createdAt' |
 
 /**
  * Update product (Admin only)
- * Uses setDoc with merge: true to safely handle both existing Firestore docs and baseline items.
  */
 export async function updateProduct(id: string, updates: Partial<Product>): Promise<void> {
   try {
@@ -514,17 +670,123 @@ export async function updateProduct(id: string, updates: Partial<Product>): Prom
 
 /**
  * Delete product (Admin only)
- * Marks as _deleted: true and removes from collection to cleanly delete from student and admin views.
  */
 export async function deleteProduct(id: string): Promise<void> {
   try {
     const docRef = doc(db, PRODUCTS_COLLECTION, id);
     await setDoc(docRef, { _deleted: true, published: false, updatedAt: new Date().toISOString() }, { merge: true });
-    // Attempt deleteDoc if exists as distinct document
     await deleteDoc(docRef).catch(() => {});
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, `${PRODUCTS_COLLECTION}/${id}`);
   }
+}
+
+/**
+ * Add Free Note into dedicated 'freeNotes' Firestore collection (Admin only)
+ */
+export async function addFreeNote(noteData: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
+  try {
+    const id = `freenote_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const docRef = doc(db, FREE_NOTES_COLLECTION, id);
+    const newNote = {
+      ...noteData,
+      isFree: true,
+      sellingPricePaise: 0,
+      originalPricePaise: 0,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    await setDoc(docRef, newNote);
+    return id;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, FREE_NOTES_COLLECTION);
+  }
+}
+
+/**
+ * Update Free Note in dedicated 'freeNotes' Firestore collection (Admin only)
+ */
+export async function updateFreeNote(id: string, updates: Partial<Product>): Promise<void> {
+  try {
+    const docRef = doc(db, FREE_NOTES_COLLECTION, id);
+    await setDoc(
+      docRef,
+      {
+        ...updates,
+        isFree: true,
+        sellingPricePaise: 0,
+        originalPricePaise: 0,
+        updatedAt: new Date().toISOString()
+      },
+      { merge: true }
+    );
+
+    // If document also exists in legacy products collection, keep it in sync
+    if (id.startsWith('prod_')) {
+      const prodRef = doc(db, PRODUCTS_COLLECTION, id);
+      await setDoc(
+        prodRef,
+        {
+          ...updates,
+          isFree: true,
+          sellingPricePaise: 0,
+          originalPricePaise: 0,
+          updatedAt: new Date().toISOString()
+        },
+        { merge: true }
+      ).catch(() => {});
+    }
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `${FREE_NOTES_COLLECTION}/${id}`);
+  }
+}
+
+/**
+ * Delete Free Note from 'freeNotes' collection (Admin only)
+ */
+export async function deleteFreeNote(id: string): Promise<void> {
+  try {
+    const docRef = doc(db, FREE_NOTES_COLLECTION, id);
+    await setDoc(docRef, { _deleted: true, published: false, updatedAt: new Date().toISOString() }, { merge: true });
+    await deleteDoc(docRef).catch(() => {});
+
+    // If it was originally in products collection, also soft-delete it there
+    if (id.startsWith('prod_')) {
+      const prodRef = doc(db, PRODUCTS_COLLECTION, id);
+      await setDoc(prodRef, { _deleted: true, published: false, updatedAt: new Date().toISOString() }, { merge: true }).catch(() => {});
+      await deleteDoc(prodRef).catch(() => {});
+    }
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `${FREE_NOTES_COLLECTION}/${id}`);
+  }
+}
+
+/**
+ * Synchronize baseline free notes into the 'freeNotes' Firestore collection.
+ */
+export async function syncFreeNotesToFirestore(): Promise<{ synced: number; skipped: number }> {
+  let synced = 0;
+  let skipped = 0;
+  try {
+    for (const note of INITIAL_FREE_NOTES) {
+      try {
+        const docRef = doc(db, FREE_NOTES_COLLECTION, note.id);
+        const existing = await getDoc(docRef);
+        if (!existing.exists()) {
+          const { id, ...data } = note;
+          await setDoc(docRef, { ...data, isFree: true, updatedAt: new Date().toISOString() }, { merge: true });
+          synced++;
+        } else {
+          skipped++;
+        }
+      } catch (e) {
+        // Silently handled
+      }
+    }
+  } catch (err) {
+    console.warn('Sync free notes error:', err);
+  }
+  return { synced, skipped };
 }
 
 /**
@@ -551,6 +813,9 @@ export async function syncBaselineProductsToFirestore(): Promise<{ synced: numbe
         // Handled silently if permissions not yet granted
       }
     }
+
+    // Also sync free notes to dedicated freeNotes collection
+    await syncFreeNotesToFirestore();
   } catch (err) {
     console.warn('Sync baseline products error:', err);
   }
@@ -581,6 +846,17 @@ export async function deleteLegacySampleProductsAdmin(): Promise<number> {
       const data = docSnap.data();
       if (isLegacySampleDoc(docSnap.id, data.title)) {
         await deleteDoc(doc(db, PRODUCTS_COLLECTION, docSnap.id));
+        count++;
+      }
+    }
+
+    // 3. Query freeNotes collection for any legacy samples
+    const qFree = query(collection(db, FREE_NOTES_COLLECTION));
+    const snapFree = await getDocs(qFree);
+    for (const docSnap of snapFree.docs) {
+      const data = docSnap.data();
+      if (isLegacySampleDoc(docSnap.id, data.title)) {
+        await deleteDoc(doc(db, FREE_NOTES_COLLECTION, docSnap.id));
         count++;
       }
     }

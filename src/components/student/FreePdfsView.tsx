@@ -24,13 +24,15 @@ import {
 } from '../../services/productService';
 
 interface FreePdfsViewProps {
-  products: Product[];
+  products?: Product[];
+  freeNotes?: Product[];
   onViewDetails: (product: Product) => void;
   onNavigateToAdmin?: () => void;
 }
 
 export const FreePdfsView: React.FC<FreePdfsViewProps> = ({
-  products,
+  products = [],
+  freeNotes,
   onViewDetails,
   onNavigateToAdmin
 }) => {
@@ -46,10 +48,13 @@ export const FreePdfsView: React.FC<FreePdfsViewProps> = ({
   // In-App PDF Preview state
   const [previewPdf, setPreviewPdf] = useState<Product | null>(null);
 
-  // Filter only published Free Notes based on real database attributes
+  // Filter only published Free Notes from dedicated freeNotes collection or fallback products
   const allFreeNotes = useMemo(() => {
+    if (freeNotes && freeNotes.length > 0) {
+      return freeNotes.filter((p) => p.published !== false);
+    }
     return products.filter((p) => isFreeNote(p));
-  }, [products]);
+  }, [freeNotes, products]);
 
   // Compute live count of free notes for each of the 5 subjects strictly from real data
   const subjectCounts = useMemo(() => {

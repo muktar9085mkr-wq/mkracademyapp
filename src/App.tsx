@@ -6,7 +6,12 @@
 import React, { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Product, Purchase, AppPublicSettings } from './types';
-import { getPublishedProducts, subscribeToPublishedProducts } from './services/productService';
+import {
+  getPublishedProducts,
+  subscribeToPublishedProducts,
+  getFreeNotes,
+  subscribeToFreeNotes
+} from './services/productService';
 import { getUserPurchases, subscribeToUserPurchases } from './services/orderService';
 import { getPublicSettings } from './services/settingsService';
 
@@ -33,6 +38,7 @@ function AppContent() {
 
   // Global Data
   const [products, setProducts] = useState<Product[]>([]);
+  const [freeNotes, setFreeNotes] = useState<Product[]>([]);
   const [settings, setSettings] = useState<AppPublicSettings | null>(null);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -67,6 +73,12 @@ function AppContent() {
       }
     });
 
+    getFreeNotes().then((initialFreeNotes) => {
+      if (isMounted && initialFreeNotes.length > 0) {
+        setFreeNotes(initialFreeNotes);
+      }
+    });
+
     // Real-time synchronization for published products (works for both visitors & users)
     const unsubscribeProducts = subscribeToPublishedProducts(
       (loadedProducts) => {
@@ -81,9 +93,22 @@ function AppContent() {
       }
     );
 
+    // Real-time synchronization for free notes
+    const unsubscribeFreeNotes = subscribeToFreeNotes(
+      (loadedFreeNotes) => {
+        if (isMounted) {
+          setFreeNotes(loadedFreeNotes);
+        }
+      },
+      (error) => {
+        console.warn('Real-time free notes subscription issue:', error);
+      }
+    );
+
     return () => {
       isMounted = false;
       unsubscribeProducts();
+      unsubscribeFreeNotes();
     };
   }, []);
 
@@ -192,6 +217,9 @@ function AppContent() {
           getPublishedProducts().then((latest) => {
             if (latest.length > 0) setProducts(latest);
           });
+          getFreeNotes().then((latestFree) => {
+            if (latestFree.length > 0) setFreeNotes(latestFree);
+          });
         }}
       />
     );
@@ -237,6 +265,7 @@ function AppContent() {
         ) : currentView === 'free-pdfs' ? (
           <FreePdfsView
             products={products}
+            freeNotes={freeNotes}
             onViewDetails={(prod) => setSelectedProduct(prod)}
             onNavigateToAdmin={() => handleNavigate('admin')}
           />

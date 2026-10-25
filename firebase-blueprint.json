@@ -103,6 +103,32 @@
         "announcement": { "type": "string" },
         "updatedAt": { "type": "string" }
       }
+    },
+    "FreeNote": {
+      "title": "FreeNote",
+      "description": "Free educational notes catalog for all five subjects. Publicly viewable.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "maxLength": 250 },
+        "slug": { "type": "string", "maxLength": 250 },
+        "shortDescription": { "type": "string", "maxLength": 500 },
+        "description": { "type": "string", "maxLength": 5000 },
+        "subject": { "type": "string", "maxLength": 100 },
+        "chapterTopic": { "type": "string", "maxLength": 250 },
+        "chapters": { "type": "array" },
+        "classLevel": { "type": "string", "maxLength": 50 },
+        "examTarget": { "type": "string", "maxLength": 100 },
+        "medium": { "type": "string", "maxLength": 50 },
+        "coverImagePath": { "type": "string", "maxLength": 1000 },
+        "driveFileLink": { "type": "string", "maxLength": 1000 },
+        "fileType": { "type": "string", "maxLength": 50 },
+        "pageCount": { "type": "number" },
+        "isFree": { "type": "boolean" },
+        "published": { "type": "boolean" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["title", "subject", "driveFileLink", "published"]
     }
   },
   "firestore": {
@@ -117,6 +143,10 @@
     "/products/{productId}": {
       "schema": "Product",
       "description": "Notes and study material catalog. Published products are publicly viewable."
+    },
+    "/freeNotes/{freeNoteId}": {
+      "schema": "FreeNote",
+      "description": "Free educational chapter notes catalog for all subjects. Publicly accessible."
     },
     "/orders/{orderId}": {
       "schema": "Order",
