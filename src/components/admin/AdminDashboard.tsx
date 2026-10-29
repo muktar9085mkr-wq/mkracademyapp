@@ -41,7 +41,8 @@ import {
   GraduationCap,
   BookOpen,
   Award,
-  School
+  School,
+  RefreshCw
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { Product, Order, UserProfile, AppPublicSettings, AppLogoSettings } from '../../types';
@@ -64,7 +65,10 @@ import {
 } from '../../services/productService';
 import {
   getAllOrdersAdmin,
-  getAllStudentsAdmin
+  getAllStudentsAdmin,
+  subscribeToAllOrdersAdmin,
+  updateOrderStatusAdmin,
+  reconcileOrdersWithPurchases
 } from '../../services/orderService';
 import {
   getPublicSettings,
@@ -214,10 +218,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
   const [orderYearFilter, setOrderYearFilter] = useState<string>('all');
   const [orderMonthFilter, setOrderMonthFilter] = useState<string>('all');
   const [orderStatusFilter, setOrderStatusFilter] = useState<string>('all');
+  const [reconcilingOrders, setReconcilingOrders] = useState(false);
+  const [reconcileMessage, setReconcileMessage] = useState<string | null>(null);
 
   useEffect(() => {
     loadAllAdminData();
     fetchGatewayConfig();
+
+    // Real-time synchronization of all orders from Firestore
+    const unsubscribeOrders = subscribeToAllOrdersAdmin((liveOrders) => {
+      setOrders(liveOrders);
+    });
+
+    return () => {
+      unsubscribeOrders();
+    };
   }, []);
 
   const fetchGatewayConfig = async () => {
@@ -360,6 +375,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
   const verifiedPaidOrders = orders.filter((o) => o.status === 'paid');
   const pendingOrders = orders.filter((o) => o.status === 'pending');
   const failedOrders = orders.filter((o) => o.status === 'failed');
+  const refundedOrders = orders.filter((o) => o.status === 'refunded');
 
   // 1. Total Lifetime Revenue
   const totalRevenue = verifiedPaidOrders.reduce((sum, o) => sum + (o.amountPaise || 0), 0) / 100;
@@ -467,13 +483,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
 
   // Filtered orders for Orders & Payments tab
   const filteredOrdersList = orders.filter((o) => {
+    const q = orderSearch.toLowerCase().trim();
     const matchesSearch =
-      !orderSearch ||
-      o.id.toLowerCase().includes(orderSearch.toLowerCase()) ||
-      o.studentName?.toLowerCase().includes(orderSearch.toLowerCase()) ||
-      o.studentPhone?.includes(orderSearch) ||
-      o.studentEmail?.toLowerCase().includes(orderSearch.toLowerCase()) ||
-      o.productTitleSnapshot?.toLowerCase().includes(orderSearch.toLowerCase());
+      !q ||
+      o.id.toLowerCase().includes(q) ||
+      o.studentName?.toLowerCase().includes(q) ||
+      o.studentPhone?.includes(q) ||
+      o.studentEmail?.toLowerCase().includes(q) ||
+      o.productTitleSnapshot?.toLowerCase().includes(q) ||
+      (o.razorpayPaymentId && o.razorpayPaymentId.toLowerCase().includes(q)) ||
+      (o.razorpayOrderId && o.razorpayOrderId.toLowerCase().includes(q));
 
     const matchesStatus = orderStatusFilter === 'all' || o.status === orderStatusFilter;
 
@@ -551,6 +570,33 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
       setQuickPriceMessage(err.message || 'Failed to update price');
     } finally {
       setQuickPriceSaving(false);
+    }
+  };
+
+  const handleReconcileOrders = async () => {
+    setReconcilingOrders(true);
+    setReconcileMessage(null);
+    try {
+      const res = await reconcileOrdersWithPurchases();
+      if (res.reconciledCount > 0) {
+        setReconcileMessage(`Successfully reconciled and marked ${res.reconciledCount} pending ${res.reconciledCount === 1 ? 'order' : 'orders'} as Paid based on verified student purchase entitlements.`);
+      } else {
+        setReconcileMessage('All order payment statuses are already up-to-date and in sync with verified purchases.');
+      }
+      setTimeout(() => setReconcileMessage(null), 6000);
+    } catch (err: any) {
+      setReconcileMessage(err.message || 'Failed to reconcile orders');
+    } finally {
+      setReconcilingOrders(false);
+    }
+  };
+
+  const handleUpdateOrderStatus = async (orderId: string, newStatus: any) => {
+    if (!window.confirm(`Are you sure you want to change order ${orderId} status to "${newStatus}"?`)) return;
+    try {
+      await updateOrderStatusAdmin(orderId, newStatus);
+    } catch (err: any) {
+      alert(`Could not update order status: ${err.message || err}`);
     }
   };
 
@@ -2729,19 +2775,92 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
                     Order Transactions & Verification Log
                   </h2>
                   <p className="text-xs text-stone-500">
-                    Track Razorpay payment IDs, student phone numbers, and download verification records.
+                    Real-time Firestore synchronization of student payments, Razorpay IDs, and verification statuses.
                   </p>
                 </div>
 
-                <div className="relative max-w-xs">
-                  <input
-                    type="text"
-                    value={orderSearch}
-                    onChange={(e) => setOrderSearch(e.target.value)}
-                    placeholder="Search by student, order ID, phone..."
-                    className="w-full bg-stone-50 border border-stone-200 rounded-xl pl-8 pr-3 py-1.5 text-xs text-stone-900 focus:outline-none focus:border-red-600"
-                  />
-                  <Search className="w-3.5 h-3.5 text-stone-400 absolute left-2.5 top-2" />
+                <div className="flex items-center space-x-2.5">
+                  <button
+                    type="button"
+                    onClick={handleReconcileOrders}
+                    disabled={reconcilingOrders}
+                    className="px-3.5 py-1.5 rounded-xl bg-stone-900 hover:bg-stone-800 disabled:bg-stone-400 text-white font-bold text-xs flex items-center space-x-1.5 shadow-xs transition-all cursor-pointer"
+                    title="Automatically sync any pending orders that already have matching verified student purchases"
+                  >
+                    {reconcilingOrders ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <RefreshCw className="w-3.5 h-3.5" />
+                    )}
+                    <span>{reconcilingOrders ? 'Syncing...' : 'Reconcile Purchases'}</span>
+                  </button>
+
+                  <div className="relative max-w-xs">
+                    <input
+                      type="text"
+                      value={orderSearch}
+                      onChange={(e) => setOrderSearch(e.target.value)}
+                      placeholder="Search name, phone, order/pay ID..."
+                      className="w-full bg-stone-50 border border-stone-200 rounded-xl pl-8 pr-3 py-1.5 text-xs text-stone-900 focus:outline-none focus:border-red-600 focus:bg-white"
+                    />
+                    <Search className="w-3.5 h-3.5 text-stone-400 absolute left-2.5 top-2" />
+                  </div>
+                </div>
+              </div>
+
+              {reconcileMessage && (
+                <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center justify-between text-xs text-emerald-800 animate-in fade-in">
+                  <div className="flex items-center space-x-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>{reconcileMessage}</span>
+                  </div>
+                  <button
+                    onClick={() => setReconcileMessage(null)}
+                    className="text-emerald-700 hover:text-emerald-900 font-bold ml-2 cursor-pointer"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+
+              {/* 4 Key Order Metric Cards */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                <div className="bg-stone-50 p-3.5 rounded-2xl border border-stone-200 space-y-1">
+                  <div className="flex items-center justify-between text-[10px] font-bold uppercase text-stone-400">
+                    <span>Total Sales</span>
+                    <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
+                  </div>
+                  <p className="text-xl font-black text-emerald-700">₹{totalRevenue.toLocaleString()}</p>
+                  <p className="text-[10px] text-stone-500 font-medium">All verified transactions</p>
+                </div>
+
+                <div className="bg-stone-50 p-3.5 rounded-2xl border border-stone-200 space-y-1">
+                  <div className="flex items-center justify-between text-[10px] font-bold uppercase text-stone-400">
+                    <span>Successful Payments</span>
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                  </div>
+                  <p className="text-xl font-black text-stone-900">{verifiedPaidOrders.length}</p>
+                  <p className="text-[10px] text-emerald-600 font-medium">Paid & Delivered</p>
+                </div>
+
+                <div className="bg-stone-50 p-3.5 rounded-2xl border border-stone-200 space-y-1">
+                  <div className="flex items-center justify-between text-[10px] font-bold uppercase text-stone-400">
+                    <span>Pending Payments</span>
+                    <Clock className="w-3.5 h-3.5 text-amber-600" />
+                  </div>
+                  <p className="text-xl font-black text-amber-700">{pendingOrders.length}</p>
+                  <p className="text-[10px] text-amber-600 font-medium">Awaiting payment / sync</p>
+                </div>
+
+                <div className="bg-stone-50 p-3.5 rounded-2xl border border-stone-200 space-y-1">
+                  <div className="flex items-center justify-between text-[10px] font-bold uppercase text-stone-400">
+                    <span>Failed / Refunded</span>
+                    <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
+                  </div>
+                  <p className="text-xl font-black text-rose-700">{failedOrders.length + refundedOrders.length}</p>
+                  <p className="text-[10px] text-stone-500 font-medium">
+                    {failedOrders.length} failed • {refundedOrders.length} refunded
+                  </p>
                 </div>
               </div>
 
@@ -2781,16 +2900,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
                     ))}
                   </select>
 
-                  {/* Status Filter */}
+                  {/* 5-Status Filter (All, Paid, Pending, Failed, Refunded) */}
                   <select
                     value={orderStatusFilter}
                     onChange={(e) => setOrderStatusFilter(e.target.value)}
                     className="bg-white border border-stone-200 text-stone-800 rounded-xl px-2.5 py-1.5 font-semibold focus:outline-none focus:border-red-600 cursor-pointer shadow-2xs"
                   >
-                    <option value="all">All Statuses</option>
-                    <option value="paid">Paid & Verified</option>
-                    <option value="pending">Pending</option>
-                    <option value="failed">Failed</option>
+                    <option value="all">All Statuses ({orders.length})</option>
+                    <option value="paid">Paid & Verified ({verifiedPaidOrders.length})</option>
+                    <option value="pending">Pending ({pendingOrders.length})</option>
+                    <option value="failed">Failed ({failedOrders.length})</option>
+                    <option value="refunded">Refunded ({refundedOrders.length})</option>
                   </select>
 
                   {(orderYearFilter !== 'all' || orderMonthFilter !== 'all' || orderStatusFilter !== 'all' || orderSearch) && (
@@ -2812,7 +2932,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
                 {/* Filtered Revenue Metric */}
                 <div className="flex items-center space-x-3 text-xs">
                   <span className="text-stone-500">
-                    Showing <strong className="text-stone-900">{filteredOrdersList.length}</strong> orders
+                    Showing <strong className="text-stone-900">{filteredOrdersList.length}</strong> of {orders.length} orders
                   </span>
                   <div className="h-4 w-px bg-stone-300"></div>
                   <span className="bg-emerald-100 text-emerald-800 px-3 py-1 rounded-xl font-bold flex items-center space-x-1.5">
@@ -2822,66 +2942,151 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
                 </div>
               </div>
 
-              <div className="border border-stone-200 rounded-2xl overflow-hidden">
+              {/* Orders Table */}
+              <div className="border border-stone-200 rounded-2xl overflow-hidden shadow-2xs">
                 <table className="w-full text-left text-xs">
                   <thead className="bg-stone-50 border-b border-stone-200 text-stone-500 uppercase text-[10px] font-bold">
                     <tr>
-                      <th className="py-3 px-4">Order & Razorpay ID</th>
+                      <th className="py-3 px-4">Order & Payment IDs</th>
                       <th className="py-3 px-4">Student & Contact</th>
                       <th className="py-3 px-4">Product Snapshot</th>
                       <th className="py-3 px-4">Amount</th>
                       <th className="py-3 px-4">Status</th>
-                      <th className="py-3 px-4">Created Date</th>
+                      <th className="py-3 px-4">Date</th>
+                      <th className="py-3 px-4 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-stone-100">
                     {filteredOrdersList.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="py-12 text-center text-stone-500">
+                        <td colSpan={7} className="py-12 text-center text-stone-500">
                           <ShoppingBag className="w-8 h-8 text-stone-300 mx-auto mb-2" />
-                          <p className="font-semibold text-stone-700">No orders found for this period</p>
-                          <p className="text-[11px] text-stone-400">Try adjusting the year or month filter.</p>
+                          <p className="font-semibold text-stone-700">No orders match this filter</p>
+                          <p className="text-[11px] text-stone-400">Try adjusting the status, year, or search query.</p>
                         </td>
                       </tr>
                     ) : (
                       filteredOrdersList.map((o) => (
-                        <tr key={o.id} className="hover:bg-stone-50/50">
+                        <tr key={o.id} className="hover:bg-stone-50/60 transition-colors">
                           <td className="py-3 px-4 font-mono">
-                            <p className="font-bold text-stone-900">{o.id}</p>
+                            <div className="flex items-center space-x-1.5">
+                              <span className="font-bold text-stone-900">{o.id}</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(o.id);
+                                }}
+                                title="Copy Order ID"
+                                className="text-stone-400 hover:text-stone-700 p-0.5"
+                              >
+                                <Copy className="w-3 h-3" />
+                              </button>
+                            </div>
                             {o.razorpayPaymentId && (
-                              <p className="text-[10px] text-stone-400 truncate max-w-[140px]">
-                                {o.razorpayPaymentId}
+                              <div className="flex items-center space-x-1 text-[10px] text-emerald-700 font-semibold mt-0.5">
+                                <span className="truncate max-w-[140px]" title={o.razorpayPaymentId}>
+                                  💳 {o.razorpayPaymentId}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => navigator.clipboard.writeText(o.razorpayPaymentId || '')}
+                                  title="Copy Razorpay Payment ID"
+                                  className="text-stone-400 hover:text-stone-700"
+                                >
+                                  <Copy className="w-2.5 h-2.5" />
+                                </button>
+                              </div>
+                            )}
+                            {o.razorpayOrderId && (
+                              <p className="text-[9px] text-stone-400 truncate max-w-[140px]" title={o.razorpayOrderId}>
+                                RZP Ord: {o.razorpayOrderId}
                               </p>
                             )}
                           </td>
                           <td className="py-3 px-4">
-                            <p className="font-bold text-stone-900">{o.studentName}</p>
-                            <p className="text-[11px] text-stone-500 font-mono">📱 +91 {o.studentPhone}</p>
+                            <p className="font-bold text-stone-900">{o.studentName || 'Student'}</p>
+                            {o.studentPhone && (
+                              <p className="text-[11px] text-stone-600 font-mono">📱 +91 {o.studentPhone}</p>
+                            )}
                             <p className="text-[10px] text-stone-400">{o.studentEmail}</p>
                           </td>
-                          <td className="py-3 px-4 max-w-[220px]">
+                          <td className="py-3 px-4 max-w-[200px]">
                             <p className="font-medium text-stone-800 truncate" title={o.productTitleSnapshot}>
-                              {o.productTitleSnapshot}
+                              {o.productTitleSnapshot || 'Educational Notes'}
                             </p>
+                            <p className="text-[10px] text-stone-400 font-mono">ID: {o.productId}</p>
                           </td>
                           <td className="py-3 px-4 font-bold text-stone-900">
-                            ₹{o.amountPaise / 100}
+                            ₹{((o.amountPaise || 0) / 100).toFixed(0)}
                           </td>
                           <td className="py-3 px-4">
                             <span
-                              className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                              className={`inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${
                                 o.status === 'paid'
-                                  ? 'bg-emerald-100 text-emerald-800'
+                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
                                   : o.status === 'pending'
-                                  ? 'bg-amber-100 text-amber-800'
-                                  : 'bg-red-100 text-red-800'
+                                  ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                                  : o.status === 'refunded'
+                                  ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                                  : 'bg-rose-100 text-rose-800 border border-rose-200'
                               }`}
                             >
-                              {o.status}
+                              {o.status === 'paid' && <CheckCircle2 className="w-3 h-3 text-emerald-600" />}
+                              {o.status === 'pending' && <Clock className="w-3 h-3 text-amber-600" />}
+                              {o.status === 'failed' && <AlertCircle className="w-3 h-3 text-rose-600" />}
+                              <span>{o.status}</span>
                             </span>
                           </td>
                           <td className="py-3 px-4 text-stone-500 text-[11px]">
-                            {new Date(o.createdAt).toLocaleDateString()}
+                            <p>{new Date(o.createdAt).toLocaleDateString()}</p>
+                            <p className="text-[10px] text-stone-400">{new Date(o.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                          </td>
+                          <td className="py-3 px-4 text-right">
+                            <div className="flex items-center justify-end space-x-1.5">
+                              {o.status === 'pending' && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUpdateOrderStatus(o.id, 'paid')}
+                                    className="px-2 py-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-[10px] font-bold shadow-2xs transition-colors cursor-pointer"
+                                    title="Mark order as Paid"
+                                  >
+                                    Mark Paid
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUpdateOrderStatus(o.id, 'failed')}
+                                    className="px-2 py-1 bg-stone-200 hover:bg-rose-100 hover:text-rose-800 text-stone-700 rounded-lg text-[10px] font-bold transition-colors cursor-pointer"
+                                    title="Mark order as Failed"
+                                  >
+                                    Mark Failed
+                                  </button>
+                                </>
+                              )}
+                              {o.status === 'paid' && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateOrderStatus(o.id, 'refunded')}
+                                  className="px-2 py-1 bg-stone-100 hover:bg-purple-100 hover:text-purple-800 text-stone-600 rounded-lg text-[10px] font-bold transition-colors cursor-pointer"
+                                  title="Mark order as Refunded"
+                                >
+                                  Refund
+                                </button>
+                              )}
+                              {o.status === 'failed' && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateOrderStatus(o.id, 'paid')}
+                                  className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-lg text-[10px] font-bold transition-colors cursor-pointer"
+                                  title="Change to Paid"
+                                >
+                                  Mark Paid
+                                </button>
+                              )}
+                              {o.status === 'refunded' && (
+                                <span className="text-[10px] text-stone-400 italic">Refunded</span>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ))

@@ -22,6 +22,7 @@ import {
   createBackendPaymentOrder,
   verifyBackendPayment,
   recordPendingOrder,
+  recordFailedOrder,
   fulfillVerifiedPurchase
 } from '../../services/orderService';
 
@@ -248,6 +249,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         const rzp = new window.Razorpay(options);
         rzp.on('payment.failed', function (response: any) {
           console.error('Razorpay payment failed:', response.error);
+          recordFailedOrder(orderId, response.error?.description || 'Payment failed').catch(() => {});
           setErrorMessage(response.error?.description || 'Payment was unsuccessful or cancelled. You have not been charged.');
           setStep('failed');
           setIsSubmitting(false);

@@ -11,11 +11,11 @@ import {
   onSnapshot
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase/config';
-import { Order, Purchase, UserProfile } from '../types';
+import { Order, Purchase, UserProfile, OrderStatus } from '../types';
 
-const ORDERS_COLLECTION = 'orders';
-const PURCHASES_COLLECTION = 'purchases';
-const USERS_COLLECTION = 'users';
+export const ORDERS_COLLECTION = 'orders';
+export const PURCHASES_COLLECTION = 'purchases';
+export const USERS_COLLECTION = 'users';
 
 /**
  * Step 6: Call backend to create Razorpay Order
@@ -73,12 +73,14 @@ export async function verifyBackendPayment(params: {
  * Record a pending order in Firestore
  */
 export async function recordPendingOrder(orderData: Omit<Order, 'createdAt' | 'status'>): Promise<string> {
+  const now = new Date().toISOString();
   try {
     const orderRef = doc(db, ORDERS_COLLECTION, orderData.id);
     const orderDoc: Order = {
       ...orderData,
       status: 'pending',
-      createdAt: new Date().toISOString()
+      createdAt: now,
+      updatedAt: (orderData as any).updatedAt || now
     };
     await setDoc(orderRef, orderDoc);
     return orderData.id;
@@ -89,7 +91,29 @@ export async function recordPendingOrder(orderData: Omit<Order, 'createdAt' | 's
 }
 
 /**
+ * Record a failed/cancelled order in Firestore
+ */
+export async function recordFailedOrder(orderId: string, reason?: string): Promise<void> {
+  const now = new Date().toISOString();
+  try {
+    const orderRef = doc(db, ORDERS_COLLECTION, orderId);
+    await setDoc(
+      orderRef,
+      {
+        status: 'failed',
+        refundStatus: reason || 'Payment cancelled or failed',
+        updatedAt: now
+      },
+      { merge: true }
+    );
+  } catch (err) {
+    console.warn('Could not record failed order status:', err);
+  }
+}
+
+/**
  * Complete order and create verified purchase entitlement
+ * Updates order to 'paid' and creates deterministic purchase record
  */
 export async function fulfillVerifiedPurchase(params: {
   orderId: string;
@@ -118,25 +142,30 @@ export async function fulfillVerifiedPurchase(params: {
     createdAt: now
   };
 
+  // 1. Update order status to 'paid' in Firestore (using setDoc with merge: true)
   try {
-    // 1. Update order status to paid
     const orderRef = doc(db, ORDERS_COLLECTION, params.orderId);
-    await updateDoc(orderRef, {
-      status: 'paid',
-      razorpayPaymentId: params.razorpayPaymentId,
-      razorpayOrderId: params.razorpayOrderId || '',
-      verifiedAt: now
-    });
+    await setDoc(
+      orderRef,
+      {
+        status: 'paid',
+        razorpayPaymentId: params.razorpayPaymentId,
+        razorpayOrderId: params.razorpayOrderId || '',
+        verifiedAt: now,
+        updatedAt: now
+      },
+      { merge: true }
+    );
   } catch (err) {
-    console.warn('Order status update in Firestore skipped/failed:', err);
+    console.warn('Order status update in Firestore warning:', err);
   }
 
+  // 2. Deterministic purchase ID prevents duplicate purchases for the same product
   try {
-    // 2. Deterministic purchase ID prevents duplicate purchases
     const purchaseRef = doc(db, PURCHASES_COLLECTION, purchaseId);
     await setDoc(purchaseRef, purchaseData);
   } catch (err) {
-    console.warn('Purchase write in Firestore skipped/failed:', err);
+    console.warn('Purchase write in Firestore warning:', err);
   }
 
   return purchaseData;
@@ -165,9 +194,9 @@ export async function getUserPurchases(uid: string): Promise<Purchase[]> {
 }
 
 /**
-  * Real-time subscription to student's purchased notes.
-  * Updates immediately upon login or purchase completion without page refresh.
-  */
+ * Real-time subscription to student's purchased notes.
+ * Updates immediately upon purchase completion without page refresh.
+ */
 export function subscribeToUserPurchases(
   uid: string,
   callback: (purchases: Purchase[]) => void,
@@ -228,7 +257,7 @@ export async function getUserOrders(uid: string): Promise<Order[]> {
 }
 
 /**
- * Admin: Fetch all orders across the platform
+ * Admin: Fetch all orders across the platform (one-time)
  */
 export async function getAllOrdersAdmin(): Promise<Order[]> {
   try {
@@ -236,13 +265,122 @@ export async function getAllOrdersAdmin(): Promise<Order[]> {
     const querySnapshot = await getDocs(q);
     const orders: Order[] = [];
     querySnapshot.forEach((docSnap) => {
-      orders.push(docSnap.data() as Order);
+      orders.push({ id: docSnap.id, ...(docSnap.data() as Omit<Order, 'id'>) } as Order);
     });
     return orders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   } catch (error) {
     console.warn('Could not load admin orders from Firestore:', error);
     return [];
   }
+}
+
+/**
+ * Admin: Real-time subscription to all orders in Firestore
+ * Updates instantly when a student completes payment or an order changes status
+ */
+export function subscribeToAllOrdersAdmin(
+  callback: (orders: Order[]) => void,
+  onError?: (error: Error) => void
+): () => void {
+  try {
+    const q = query(collection(db, ORDERS_COLLECTION));
+    const unsubscribe = onSnapshot(
+      q,
+      (querySnapshot) => {
+        const orders: Order[] = [];
+        querySnapshot.forEach((docSnap) => {
+          orders.push({ id: docSnap.id, ...(docSnap.data() as Omit<Order, 'id'>) } as Order);
+        });
+        orders.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+        callback(orders);
+      },
+      (error) => {
+        console.warn('Real-time admin orders listener error:', error);
+        if (onError) onError(error);
+      }
+    );
+    return unsubscribe;
+  } catch (err: any) {
+    console.warn('Failed to attach admin orders listener:', err);
+    return () => {};
+  }
+}
+
+/**
+ * Admin: Manually update an order's status (paid, refunded, failed, pending)
+ */
+export async function updateOrderStatusAdmin(
+  orderId: string,
+  status: OrderStatus,
+  additionalFields?: Partial<Order>
+): Promise<void> {
+  try {
+    const orderRef = doc(db, ORDERS_COLLECTION, orderId);
+    const now = new Date().toISOString();
+    await setDoc(
+      orderRef,
+      {
+        status,
+        ...additionalFields,
+        updatedAt: now,
+        ...(status === 'paid' ? { verifiedAt: now } : {})
+      },
+      { merge: true }
+    );
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `${ORDERS_COLLECTION}/${orderId}`);
+  }
+}
+
+/**
+ * Reconcile orphaned 'pending' orders with verified purchases
+ * If a student has an active purchase record, the corresponding order is updated to 'paid'
+ */
+export async function reconcileOrdersWithPurchases(): Promise<{ reconciledCount: number }> {
+  let reconciledCount = 0;
+  try {
+    const [ordersSnap, purchasesSnap] = await Promise.all([
+      getDocs(collection(db, ORDERS_COLLECTION)),
+      getDocs(collection(db, PURCHASES_COLLECTION))
+    ]);
+
+    const activePurchasesByOrder = new Map<string, Purchase>();
+    const activePurchasesByUserProduct = new Map<string, Purchase>();
+
+    purchasesSnap.forEach((docSnap) => {
+      const p = docSnap.data() as Purchase;
+      if (p.entitlementStatus === 'active') {
+        if (p.orderId) activePurchasesByOrder.set(p.orderId, p);
+        if (p.uid && p.productId) activePurchasesByUserProduct.set(`${p.uid}_${p.productId}`, p);
+      }
+    });
+
+    for (const docSnap of ordersSnap.docs) {
+      const order = docSnap.data() as Order;
+      if (order.status === 'pending') {
+        const matchingPurchase =
+          activePurchasesByOrder.get(docSnap.id) ||
+          activePurchasesByUserProduct.get(`${order.uid}_${order.productId}`);
+
+        if (matchingPurchase) {
+          const now = new Date().toISOString();
+          await setDoc(
+            doc(db, ORDERS_COLLECTION, docSnap.id),
+            {
+              status: 'paid',
+              verifiedAt: matchingPurchase.purchasedAt || now,
+              updatedAt: now
+            },
+            { merge: true }
+          );
+          reconciledCount++;
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Reconcile orders error:', err);
+  }
+  return { reconciledCount };
 }
 
 /**

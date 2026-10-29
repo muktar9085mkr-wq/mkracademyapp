@@ -10,7 +10,12 @@ const processedPayments = new Set<string>();
 export function createApiApp() {
   const app = express();
 
-  app.use(express.json({ limit: '10mb' }));
+  app.use(express.json({
+    limit: '10mb',
+    verify: (req: any, _res, buf) => {
+      req.rawBody = buf;
+    }
+  }));
   app.use(express.urlencoded({ extended: true }));
 
   const router = Router();
@@ -228,29 +233,43 @@ export function createApiApp() {
    * Webhook handler for Razorpay async payment capture
    */
   router.post('/payment/webhook', (req: Request, res: Response): void => {
-    const webhookSignature = req.headers['x-razorpay-signature'] as string;
-    const webhookSecret = getRazorpayWebhookSecret();
-    if (webhookSecret && webhookSignature) {
-      const expectedSignature = crypto
-        .createHmac('sha256', webhookSecret)
-        .update(JSON.stringify(req.body))
-        .digest('hex');
+    try {
+      const webhookSignature = req.headers['x-razorpay-signature'] as string;
+      const webhookSecret = getRazorpayWebhookSecret();
+      if (webhookSecret && webhookSignature) {
+        const rawPayload = (req as any).rawBody || Buffer.from(JSON.stringify(req.body));
+        const expectedSignature = crypto
+          .createHmac('sha256', webhookSecret)
+          .update(rawPayload)
+          .digest('hex');
 
-      if (expectedSignature !== webhookSignature) {
-        res.status(400).json({ error: 'Invalid webhook signature' });
-        return;
+        if (expectedSignature !== webhookSignature) {
+          console.warn('⚠️ Webhook signature mismatch from Razorpay');
+          res.status(400).json({ error: 'Invalid webhook signature' });
+          return;
+        }
       }
-    }
 
-    const event = req.body?.event;
-    if (event === 'payment.captured') {
-      const paymentId = req.body?.payload?.payment?.entity?.id;
-      if (paymentId) {
-        processedPayments.add(paymentId);
+      const event = req.body?.event;
+      console.log(`📡 Razorpay Webhook Event: ${event}`);
+
+      if (event === 'payment.captured' || event === 'order.paid') {
+        const paymentEntity = req.body?.payload?.payment?.entity;
+        const paymentId = paymentEntity?.id;
+        if (paymentId) {
+          processedPayments.add(paymentId);
+          console.log(`✅ Webhook verified payment captured: ${paymentId}`);
+        }
+      } else if (event === 'payment.failed') {
+        const paymentId = req.body?.payload?.payment?.entity?.id;
+        console.warn(`❌ Webhook payment failed notification: ${paymentId}`);
       }
-    }
 
-    res.json({ status: 'ok' });
+      res.json({ status: 'ok', received: true });
+    } catch (err: any) {
+      console.error('Webhook error:', err);
+      res.status(500).json({ error: 'Webhook processing error' });
+    }
   });
 
   /**

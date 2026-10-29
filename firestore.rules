@@ -50,7 +50,22 @@ service cloud.firestore {
       allow get: if isSignedIn() && (resource.data.uid == request.auth.uid || isAdmin());
       allow list: if isSignedIn() && (resource.data.uid == request.auth.uid || isAdmin());
       allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
-      allow update, delete: if isAdmin();
+      allow update: if isAdmin() || (
+        isSignedIn() &&
+        resource.data.uid == request.auth.uid &&
+        request.resource.data.uid == request.auth.uid &&
+        request.resource.data.productId == resource.data.productId &&
+        request.resource.data.amountPaise == resource.data.amountPaise &&
+        request.resource.data.status in ['paid', 'failed'] &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status',
+          'razorpayPaymentId',
+          'razorpayOrderId',
+          'verifiedAt',
+          'updatedAt'
+        ])
+      );
+      allow delete: if isAdmin();
     }
 
     // Purchases entitlements: Students can read/list their own purchases; Admins can read all

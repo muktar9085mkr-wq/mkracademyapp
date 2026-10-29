@@ -102,8 +102,10 @@ export interface Order {
   razorpayPaymentId?: string;
   status: OrderStatus;
   createdAt: string;
+  updatedAt?: string;
   verifiedAt?: string;
   refundStatus?: string;
+  failureReason?: string;
 }
 
 export interface Purchase {
