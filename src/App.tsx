@@ -17,7 +17,6 @@ import { getPublicSettings } from './services/settingsService';
 
 import { Navbar } from './components/common/Navbar';
 import { Footer } from './components/common/Footer';
-import { MobileBottomNav } from './components/common/MobileBottomNav';
 import { HomeView } from './components/student/HomeView';
 import { BrowseNotesView } from './components/student/BrowseNotesView';
 import { FreePdfsView } from './components/student/FreePdfsView';
@@ -444,8 +443,8 @@ function AppContent() {
         settings={settings}
       />
 
-      {/* Main Content View with mobile safe-padding */}
-      <main className="flex-1 w-full max-w-full min-w-0 pb-28 md:pb-0">
+      {/* Main Content View */}
+      <main className="flex-1 w-full max-w-full min-w-0 pb-12 md:pb-0">
         {loading ? (
           <div className="py-24 text-center space-y-4">
             <div className="w-10 h-10 border-3 border-red-700 border-t-transparent rounded-full animate-spin mx-auto"></div>
@@ -504,15 +503,6 @@ function AppContent() {
         settings={settings}
       />
 
-      {/* Mobile-First App Bottom Navigation Bar (Visible on mobile screens) */}
-      <MobileBottomNav
-        currentView={currentView}
-        onNavigate={handleNavigate}
-        onOpenAuth={handleOpenAuth}
-        onOpenProfile={handleOpenProfile}
-        purchaseCount={purchases.length}
-      />
-
       {/* Product Details Modal */}
       {selectedProduct && (
         <ProductDetailsModal
@@ -557,7 +547,7 @@ function AppContent() {
 
       {/* Native Android Double-Back to Exit Toast */}
       {showExitToast && (
-        <div className="fixed bottom-28 left-1/2 -translate-x-1/2 z-[10000] bg-stone-900/95 text-white text-xs font-semibold px-4 py-2.5 rounded-full shadow-2xl border border-stone-700 animate-in fade-in slide-in-from-bottom-2 duration-150 flex items-center space-x-2 pointer-events-none">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[10000] bg-stone-900/95 text-white text-xs font-semibold px-4 py-2.5 rounded-full shadow-2xl border border-stone-700 animate-in fade-in slide-in-from-bottom-2 duration-150 flex items-center space-x-2 pointer-events-none">
           <span>Press back again to exit MKR Academy</span>
         </div>
       )}
