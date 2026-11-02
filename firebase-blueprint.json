@@ -72,7 +72,13 @@
         "status": { "type": "string", "enum": ["pending", "paid", "failed", "refunded"] },
         "createdAt": { "type": "string" },
         "verifiedAt": { "type": "string" },
+        "failedAt": { "type": "string" },
         "refundStatus": { "type": "string" },
+        "failureReason": { "type": "string" },
+        "isArchived": { "type": "boolean" },
+        "archivedAt": { "type": "string" },
+        "archiveReason": { "type": "string" },
+        "lastVerifiedWithRazorpayAt": { "type": "string" },
         "updatedAt": { "type": "string" }
       },
       "required": ["uid", "productId", "amountPaise", "status"]
@@ -130,6 +136,21 @@
         "updatedAt": { "type": "string" }
       },
       "required": ["title", "subject", "driveFileLink", "published"]
+    },
+    "HomepageBanner": {
+      "title": "HomepageBanner",
+      "description": "Dynamic promotional banner shown in 16:9 ratio in the homepage hero slider",
+      "type": "object",
+      "properties": {
+        "imageUrl": { "type": "string", "maxLength": 1000 },
+        "title": { "type": "string", "maxLength": 250 },
+        "redirectUrl": { "type": "string", "maxLength": 1000 },
+        "displayOrder": { "type": "number" },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["imageUrl", "displayOrder", "isActive", "createdAt"]
     }
   },
   "firestore": {
@@ -157,9 +178,17 @@
       "schema": "Purchase",
       "description": "User purchase entitlements. Users can list their own purchases."
     },
+    "/archived_orders/{orderId}": {
+      "schema": "Order",
+      "description": "Financial audit archive for failed orders cleared after 30 days"
+    },
     "/appSettings/public": {
       "schema": "AppPublicSettings",
       "description": "Public site banners, contact numbers, and social links"
+    },
+    "/homepage_banners/{bannerId}": {
+      "schema": "HomepageBanner",
+      "description": "Promotional banners displayed dynamically in the homepage hero slider"
     }
   }
 }

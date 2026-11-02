@@ -24,6 +24,8 @@ import { useAuth } from '../../context/AuthContext';
 interface MyPurchasesViewProps {
   onBrowseNotes: () => void;
   onOpenAuth: () => void;
+  selectedReaderPurchase?: Purchase | null;
+  onSelectReaderPurchase?: (purchase: Purchase | null) => void;
 }
 
 function getGoogleDriveEmbedUrl(url?: string): string | null {
@@ -46,13 +48,25 @@ function getGoogleDriveDownloadUrl(url?: string): string | null {
 
 export const MyPurchasesView: React.FC<MyPurchasesViewProps> = ({
   onBrowseNotes,
-  onOpenAuth
+  onOpenAuth,
+  selectedReaderPurchase: propReaderPurchase,
+  onSelectReaderPurchase
 }) => {
   const { user } = useAuth();
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [searchFilter, setSearchFilter] = useState('');
-  const [selectedReaderPurchase, setSelectedReaderPurchase] = useState<Purchase | null>(null);
+  
+  // Controlled or internal fallback for reader
+  const [internalReaderPurchase, setInternalReaderPurchase] = useState<Purchase | null>(null);
+  const selectedReaderPurchase = propReaderPurchase !== undefined ? propReaderPurchase : internalReaderPurchase;
+  const setSelectedReaderPurchase = (purchase: Purchase | null) => {
+    if (onSelectReaderPurchase) {
+      onSelectReaderPurchase(purchase);
+    } else {
+      setInternalReaderPurchase(purchase);
+    }
+  };
 
   useEffect(() => {
     async function loadPurchases() {

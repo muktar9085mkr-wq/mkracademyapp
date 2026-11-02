@@ -42,10 +42,12 @@ import {
   BookOpen,
   Award,
   School,
-  RefreshCw
+  RefreshCw,
+  Archive,
+  Download
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { Product, Order, UserProfile, AppPublicSettings, AppLogoSettings } from '../../types';
+import { Product, Order, UserProfile, AppPublicSettings, AppLogoSettings, ReconcileAndCleanupResult } from '../../types';
 import { BrandLogo } from '../common/BrandLogo';
 import {
   getAllProductsAdmin,
@@ -68,7 +70,9 @@ import {
   getAllStudentsAdmin,
   subscribeToAllOrdersAdmin,
   updateOrderStatusAdmin,
-  reconcileOrdersWithPurchases
+  reconcileOrdersWithPurchases,
+  processPendingTimeoutAndFailedCleanup,
+  getArchivedOrdersAdmin
 } from '../../services/orderService';
 import {
   getPublicSettings,
@@ -220,6 +224,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
   const [orderStatusFilter, setOrderStatusFilter] = useState<string>('all');
   const [reconcilingOrders, setReconcilingOrders] = useState(false);
   const [reconcileMessage, setReconcileMessage] = useState<string | null>(null);
+  const [policyRunDetails, setPolicyRunDetails] = useState<ReconcileAndCleanupResult | null>(null);
+  const [orderViewMode, setOrderViewMode] = useState<'active' | 'archived'>('active');
+  const [archivedOrders, setArchivedOrders] = useState<Order[]>([]);
+  const [loadingArchivedOrders, setLoadingArchivedOrders] = useState(false);
 
   useEffect(() => {
     loadAllAdminData();
@@ -573,19 +581,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
     }
   };
 
-  const handleReconcileOrders = async () => {
+  const loadArchivedOrders = async () => {
+    setLoadingArchivedOrders(true);
+    try {
+      const arch = await getArchivedOrdersAdmin();
+      setArchivedOrders(arch);
+    } catch (e) {
+      console.warn('Failed to load archived orders:', e);
+    } finally {
+      setLoadingArchivedOrders(false);
+    }
+  };
+
+  const handleReconcileOrders = async (forceAgeTest: boolean = false) => {
     setReconcilingOrders(true);
     setReconcileMessage(null);
+    setPolicyRunDetails(null);
     try {
-      const res = await reconcileOrdersWithPurchases();
-      if (res.reconciledCount > 0) {
-        setReconcileMessage(`Successfully reconciled and marked ${res.reconciledCount} pending ${res.reconciledCount === 1 ? 'order' : 'orders'} as Paid based on verified student purchase entitlements.`);
-      } else {
-        setReconcileMessage('All order payment statuses are already up-to-date and in sync with verified purchases.');
+      const res = await processPendingTimeoutAndFailedCleanup(
+        forceAgeTest ? { force24hAgeTest: true, force30dAgeTest: true } : undefined
+      );
+      setPolicyRunDetails(res);
+      setReconcileMessage(
+        `Policy Execution Completed: Examined ${res.totalPendingExamined} pending, verified & marked ${res.recoveredPaidCount} Paid, changed ${res.markedFailedCount} to Failed (24h timeout), safely kept ${res.skippedUncertainCount} pending (uncertain), and archived ${res.archivedFailedCount} failed records (>30 days).`
+      );
+      if (orderViewMode === 'archived') {
+        loadArchivedOrders();
       }
-      setTimeout(() => setReconcileMessage(null), 6000);
+      setTimeout(() => setReconcileMessage(null), 10000);
     } catch (err: any) {
-      setReconcileMessage(err.message || 'Failed to reconcile orders');
+      setReconcileMessage(err.message || 'Failed to execute payment policy sync');
     } finally {
       setReconcilingOrders(false);
     }
@@ -2769,6 +2794,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
           )}
           {currentTab === 'orders' && (
             <div className="space-y-6 animate-in fade-in">
+              {/* Header and Search */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <h2 className="text-xl font-extrabold text-stone-900 font-sans">
@@ -2780,21 +2806,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
                 </div>
 
                 <div className="flex items-center space-x-2.5">
-                  <button
-                    type="button"
-                    onClick={handleReconcileOrders}
-                    disabled={reconcilingOrders}
-                    className="px-3.5 py-1.5 rounded-xl bg-stone-900 hover:bg-stone-800 disabled:bg-stone-400 text-white font-bold text-xs flex items-center space-x-1.5 shadow-xs transition-all cursor-pointer"
-                    title="Automatically sync any pending orders that already have matching verified student purchases"
-                  >
-                    {reconcilingOrders ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    ) : (
-                      <RefreshCw className="w-3.5 h-3.5" />
-                    )}
-                    <span>{reconcilingOrders ? 'Syncing...' : 'Reconcile Purchases'}</span>
-                  </button>
-
                   <div className="relative max-w-xs">
                     <input
                       type="text"
@@ -2806,6 +2817,74 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
                     <Search className="w-3.5 h-3.5 text-stone-400 absolute left-2.5 top-2" />
                   </div>
                 </div>
+              </div>
+
+              {/* Automatic Payment Policy Banner */}
+              <div className="p-4 bg-gradient-to-r from-stone-900 via-stone-850 to-stone-900 text-white rounded-2xl border border-stone-800 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div className="flex items-start md:items-center space-x-3">
+                  <div className="w-9 h-9 rounded-xl bg-red-600/20 text-red-400 flex items-center justify-center shrink-0 border border-red-500/30">
+                    <ShieldCheck className="w-5 h-5 text-red-400" />
+                  </div>
+                  <div>
+                    <div className="flex items-center space-x-2">
+                      <span className="font-bold text-sm text-stone-100">Automatic Payment Policy Engine</span>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                        Daily Automation Active
+                      </span>
+                    </div>
+                    <p className="text-xs text-stone-300 mt-1 leading-relaxed">
+                      <strong className="text-white">Pending → Failed after 24 hours:</strong> Live status is verified with Razorpay before marking Failed. Verified payments are never marked Failed.<br />
+                      <strong className="text-white">30-Day Cleanup:</strong> Failed entries are cleared from active lists and preserved permanently in the financial audit archive.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center space-x-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => handleReconcileOrders(false)}
+                    disabled={reconcilingOrders}
+                    className="px-3.5 py-2 rounded-xl bg-red-600 hover:bg-red-700 disabled:bg-stone-700 text-white font-bold text-xs flex items-center space-x-1.5 transition-all cursor-pointer shadow-xs"
+                    title="Execute live Razorpay status verification for pending orders and 30-day failed archival"
+                  >
+                    {reconcilingOrders ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <RefreshCw className="w-3.5 h-3.5" />
+                    )}
+                    <span>{reconcilingOrders ? 'Syncing...' : 'Run Policy Sync'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* View Switcher: Active Orders vs Audit Archive */}
+              <div className="flex items-center space-x-2 border-b border-stone-200 pb-2">
+                <button
+                  type="button"
+                  onClick={() => setOrderViewMode('active')}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    orderViewMode === 'active'
+                      ? 'bg-stone-900 text-white shadow-xs'
+                      : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                  }`}
+                >
+                  Active Orders ({orders.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOrderViewMode('archived');
+                    loadArchivedOrders();
+                  }}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition-all cursor-pointer ${
+                    orderViewMode === 'archived'
+                      ? 'bg-stone-900 text-white shadow-xs'
+                      : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                  }`}
+                >
+                  <Archive className="w-3.5 h-3.5" />
+                  <span>Audit Archive / Cleared Failed ({archivedOrders.length})</span>
+                </button>
               </div>
 
               {reconcileMessage && (
@@ -2823,7 +2902,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
                 </div>
               )}
 
-              {/* 4 Key Order Metric Cards */}
+              {orderViewMode === 'active' ? (
+                <>
+                  {/* 4 Key Order Metric Cards */}
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                 <div className="bg-stone-50 p-3.5 rounded-2xl border border-stone-200 space-y-1">
                   <div className="flex items-center justify-between text-[10px] font-bold uppercase text-stone-400">
@@ -3036,6 +3117,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
                               {o.status === 'failed' && <AlertCircle className="w-3 h-3 text-rose-600" />}
                               <span>{o.status}</span>
                             </span>
+                            {o.status === 'failed' && (
+                              <div className="mt-1">
+                                {o.failureReason && (
+                                  <p className="text-[10px] text-rose-600 font-sans line-clamp-2 max-w-[170px]" title={o.failureReason}>
+                                    {o.failureReason}
+                                  </p>
+                                )}
+                                {o.failedAt && (
+                                  <p className="text-[9px] text-stone-400 font-mono">
+                                    Failed: {new Date(o.failedAt).toLocaleDateString()}
+                                  </p>
+                                )}
+                              </div>
+                            )}
+                            {o.lastVerifiedWithRazorpayAt && (
+                              <p className="text-[9px] text-stone-400 font-mono mt-0.5" title={`Checked Razorpay at ${o.lastVerifiedWithRazorpayAt}`}>
+                                Razorpay: {o.razorpayStatusSnapshot || 'checked'}
+                              </p>
+                            )}
                           </td>
                           <td className="py-3 px-4 text-stone-500 text-[11px]">
                             <p>{new Date(o.createdAt).toLocaleDateString()}</p>
@@ -3094,6 +3194,114 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
                   </tbody>
                 </table>
               </div>
+            </>
+          ) : (
+                /* ARCHIVED ORDERS AUDIT VIEW */
+                <div className="space-y-4 animate-in fade-in">
+                  <div className="p-4 bg-amber-50/80 border border-amber-200/90 rounded-2xl text-amber-900 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+                    <div className="flex items-start space-x-2.5">
+                      <Archive className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-bold text-amber-900 text-sm">Financial Audit Archive — Preserved Historical Records</p>
+                        <p className="text-xs text-amber-800 mt-1 leading-relaxed">
+                          Failed transaction records cleared from active listings after exceeding the 30-day threshold from their server-side <code>failedAt</code> timestamp.
+                          All original student details, transaction IDs, timestamps, and failure causes are permanently retained here for financial audit and compliance.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={loadArchivedOrders}
+                      disabled={loadingArchivedOrders}
+                      className="px-3.5 py-2 rounded-xl bg-amber-800 hover:bg-amber-900 text-white font-bold text-xs shrink-0 flex items-center space-x-1.5 cursor-pointer shadow-xs"
+                    >
+                      {loadingArchivedOrders ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                      <span>Refresh Archive</span>
+                    </button>
+                  </div>
+
+                  <div className="border border-stone-200 rounded-2xl overflow-hidden shadow-2xs">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-stone-50 border-b border-stone-200 text-stone-500 uppercase text-[10px] font-bold">
+                        <tr>
+                          <th className="py-3 px-4">Archived Order ID</th>
+                          <th className="py-3 px-4">Student & Contact</th>
+                          <th className="py-3 px-4">Product Snapshot</th>
+                          <th className="py-3 px-4">Amount</th>
+                          <th className="py-3 px-4">Failed Details</th>
+                          <th className="py-3 px-4">Archived At</th>
+                          <th className="py-3 px-4 text-right">Audit Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-stone-100">
+                        {loadingArchivedOrders ? (
+                          <tr>
+                            <td colSpan={7} className="py-12 text-center text-stone-500">
+                              <Loader2 className="w-6 h-6 animate-spin text-stone-400 mx-auto mb-2" />
+                              <p className="text-xs">Loading archived audit records from Firestore...</p>
+                            </td>
+                          </tr>
+                        ) : archivedOrders.length === 0 ? (
+                          <tr>
+                            <td colSpan={7} className="py-12 text-center text-stone-500">
+                              <Archive className="w-8 h-8 text-stone-300 mx-auto mb-2" />
+                              <p className="font-semibold text-stone-700">No archived failed records</p>
+                              <p className="text-[11px] text-stone-400">Failed orders older than 30 days will be preserved and cataloged here automatically.</p>
+                            </td>
+                          </tr>
+                        ) : (
+                          archivedOrders.map((ao) => (
+                            <tr key={ao.id} className="hover:bg-stone-50/60 transition-colors">
+                              <td className="py-3 px-4 font-mono">
+                                <span className="font-bold text-stone-900">{ao.id}</span>
+                                {ao.razorpayOrderId && (
+                                  <p className="text-[10px] text-stone-500 truncate max-w-[140px]">
+                                    RZP: {ao.razorpayOrderId}
+                                  </p>
+                                )}
+                              </td>
+                              <td className="py-3 px-4">
+                                <p className="font-bold text-stone-800">{ao.studentName || 'Student'}</p>
+                                <p className="text-[10px] text-stone-500 font-mono">{ao.studentPhone || 'No Phone'}</p>
+                              </td>
+                              <td className="py-3 px-4 max-w-[180px]">
+                                <p className="font-medium text-stone-800 truncate">{ao.productTitleSnapshot || 'Educational Notes'}</p>
+                              </td>
+                              <td className="py-3 px-4 font-bold text-stone-700">
+                                ₹{((ao.amountPaise || 0) / 100).toFixed(0)}
+                              </td>
+                              <td className="py-3 px-4">
+                                <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-200">
+                                  Failed
+                                </span>
+                                {ao.failureReason && (
+                                  <p className="text-[10px] text-rose-600 mt-1 max-w-[160px] truncate" title={ao.failureReason}>
+                                    {ao.failureReason}
+                                  </p>
+                                )}
+                                {ao.failedAt && (
+                                  <p className="text-[9px] text-stone-400 font-mono mt-0.5">
+                                    {new Date(ao.failedAt).toLocaleDateString()}
+                                  </p>
+                                )}
+                              </td>
+                              <td className="py-3 px-4 text-stone-500 text-[11px]">
+                                <p>{ao.archivedAt ? new Date(ao.archivedAt).toLocaleDateString() : '30-day policy'}</p>
+                                <p className="text-[10px] text-stone-400">{ao.archiveReason || 'Cleared after 30 days'}</p>
+                              </td>
+                              <td className="py-3 px-4 text-right">
+                                <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-stone-100 text-stone-700 border border-stone-200">
+                                  Audit Preserved
+                                </span>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

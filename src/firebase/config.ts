@@ -1,6 +1,6 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
+import { getFirestore, doc, getDocFromServer, setLogLevel } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import firebaseConfig from '../../firebase-applet-config.json';
 
@@ -34,6 +34,13 @@ export const app = getApps().length === 0 ? initializeApp(resolvedFirebaseConfig
 export const auth = getAuth(app);
 export const db = firestoreDatabaseId ? getFirestore(app, firestoreDatabaseId) : getFirestore(app);
 export const storage = getStorage(app);
+
+// Suppress internal gRPC idle stream disconnect logs
+try {
+  setLogLevel('error');
+} catch {
+  // Ignore in environments where setLogLevel might not be permitted
+}
 
 // Authorized Super Admin Email
 export const ADMIN_EMAIL = 'muktar9085mkr@gmail.com';

@@ -28,25 +28,49 @@ interface FreePdfsViewProps {
   freeNotes?: Product[];
   onViewDetails: (product: Product) => void;
   onNavigateToAdmin?: () => void;
+  selectedSubjectId?: string | null;
+  onSelectSubject?: (subjectId: string | null) => void;
+  previewPdf?: Product | null;
+  onPreviewPdf?: (product: Product | null) => void;
 }
 
 export const FreePdfsView: React.FC<FreePdfsViewProps> = ({
   products = [],
   freeNotes,
   onViewDetails,
-  onNavigateToAdmin
+  onNavigateToAdmin,
+  selectedSubjectId: propSubjectId,
+  onSelectSubject,
+  previewPdf: propPreviewPdf,
+  onPreviewPdf
 }) => {
   const { isAdmin } = useAuth();
 
-  // Active Subject Selection: null = Subject Cards Overview, string = specific subject selected ('mathematics', 'science', etc.)
-  const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
+  // Active Subject Selection: controlled or internal fallback
+  const [internalSubjectId, setInternalSubjectId] = useState<string | null>(null);
+  const selectedSubjectId = propSubjectId !== undefined ? propSubjectId : internalSubjectId;
+  const setSelectedSubjectId = (id: string | null) => {
+    if (onSelectSubject) {
+      onSelectSubject(id);
+    } else {
+      setInternalSubjectId(id);
+    }
+  };
 
   // Search & Sorting state (scoped to current view)
   const [search, setSearch] = useState('');
   const [sortOrder, setSortOrder] = useState<'newest' | 'oldest' | 'title'>('newest');
 
-  // In-App PDF Preview state
-  const [previewPdf, setPreviewPdf] = useState<Product | null>(null);
+  // In-App PDF Preview state: controlled or internal fallback
+  const [internalPreviewPdf, setInternalPreviewPdf] = useState<Product | null>(null);
+  const previewPdf = propPreviewPdf !== undefined ? propPreviewPdf : internalPreviewPdf;
+  const setPreviewPdf = (prod: Product | null) => {
+    if (onPreviewPdf) {
+      onPreviewPdf(prod);
+    } else {
+      setInternalPreviewPdf(prod);
+    }
+  };
 
   // Filter only published Free Notes from dedicated freeNotes collection or fallback products
   const allFreeNotes = useMemo(() => {

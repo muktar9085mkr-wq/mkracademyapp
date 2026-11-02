@@ -5,6 +5,8 @@
 
 [build.environment]
   NODE_VERSION = "20"
+  NETLIFY_FEEDBACK_DRAWER = "false"
+  FEEDBACK_DRAWER = "false"
 
 # Route /api/* requests to Netlify Functions
 [[redirects]]

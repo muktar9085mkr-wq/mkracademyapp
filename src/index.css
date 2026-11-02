@@ -35,3 +35,28 @@ body {
   display: flex;
   flex-direction: column;
 }
+
+/* Mobile Safe-Area utilities (Android gesture bar and iOS home indicator) */
+:root {
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Ensure mobile navigation stays strictly above any floating overlays */
+@media (max-width: 767px) {
+  #netlify-feedback-drawer,
+  [data-netlify-drawer],
+  .netlify-badge,
+  [data-netlify-badge],
+  div[class*="netlify"],
+  a[href*="netlify.com"] {
+    display: none !important;
+    pointer-events: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    z-index: -9999 !important;
+  }
+}

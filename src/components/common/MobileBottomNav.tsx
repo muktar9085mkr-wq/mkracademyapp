@@ -37,45 +37,51 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   return (
     <nav
       aria-label="Mobile navigation"
-      className="md:hidden fixed bottom-0 left-0 right-0 z-40 w-full max-w-full overflow-hidden bg-white/95 backdrop-blur-md border-t border-stone-200/90 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] pb-safe transition-all"
+      className="md:hidden fixed z-[9999] left-2.5 right-2.5 bottom-[calc(env(safe-area-inset-bottom,0px)+10px)] max-w-md mx-auto bg-white/95 backdrop-blur-md border border-stone-200/90 rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.12)] transition-all pointer-events-auto select-none"
     >
-      <div className="grid grid-cols-5 h-16 w-full max-w-lg mx-auto px-1">
+      <div className="grid grid-cols-5 h-15 w-full items-center px-1">
         {/* 1. Home */}
         <button
           onClick={() => onNavigate('home')}
-          className={`flex flex-col items-center justify-center py-1 transition-all relative ${
+          type="button"
+          aria-label="Navigate to Home"
+          className={`flex flex-col items-center justify-center py-1 transition-all relative touch-manipulation cursor-pointer active:scale-95 ${
             currentView === 'home' ? 'text-red-700 font-bold' : 'text-stone-500 hover:text-stone-800'
           }`}
         >
           <div className="relative">
             <Home className={`w-5 h-5 transition-transform ${currentView === 'home' ? 'scale-110 text-red-700' : ''}`} />
           </div>
-          <span className="text-[10px] mt-1 tracking-tight">Home</span>
+          <span className="text-[10px] mt-0.5 tracking-tight font-medium">Home</span>
           {currentView === 'home' && (
-            <span className="absolute bottom-1 w-6 h-0.5 bg-red-700 rounded-full" />
+            <span className="absolute -bottom-0.5 w-5 h-0.5 bg-red-700 rounded-full" />
           )}
         </button>
 
         {/* 2. All Notes */}
         <button
           onClick={() => onNavigate('browse')}
-          className={`flex flex-col items-center justify-center py-1 transition-all relative ${
+          type="button"
+          aria-label="Browse Notes"
+          className={`flex flex-col items-center justify-center py-1 transition-all relative touch-manipulation cursor-pointer active:scale-95 ${
             currentView === 'browse' ? 'text-red-700 font-bold' : 'text-stone-500 hover:text-stone-800'
           }`}
         >
           <div className="relative">
             <BookOpen className={`w-5 h-5 transition-transform ${currentView === 'browse' ? 'scale-110 text-red-700' : ''}`} />
           </div>
-          <span className="text-[10px] mt-1 tracking-tight">Notes</span>
+          <span className="text-[10px] mt-0.5 tracking-tight font-medium">Notes</span>
           {currentView === 'browse' && (
-            <span className="absolute bottom-1 w-6 h-0.5 bg-red-700 rounded-full" />
+            <span className="absolute -bottom-0.5 w-5 h-0.5 bg-red-700 rounded-full" />
           )}
         </button>
 
         {/* 3. Free PDFs (Highlighted Center Tab) */}
         <button
           onClick={() => onNavigate('free-pdfs')}
-          className={`flex flex-col items-center justify-center py-1 transition-all relative group ${
+          type="button"
+          aria-label="Free PDFs"
+          className={`flex flex-col items-center justify-center py-1 transition-all relative group touch-manipulation cursor-pointer active:scale-95 ${
             currentView === 'free-pdfs' ? 'text-emerald-700 font-bold' : 'text-stone-600 hover:text-emerald-700'
           }`}
         >
@@ -87,7 +93,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
                   : 'bg-emerald-100 text-emerald-800 group-hover:bg-emerald-200'
               }`}
             >
-              <Sparkles className="w-4 h-4 animate-pulse" />
+              <Sparkles className="w-3.5 h-3.5 animate-pulse" />
             </div>
             {/* Tiny "FREE" badge */}
             <span className="absolute -top-1 -right-2 bg-emerald-600 text-[8px] font-black text-white px-1 py-0.2 rounded-full uppercase leading-none shadow-xs">
@@ -98,14 +104,16 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
             Free PDFs
           </span>
           {currentView === 'free-pdfs' && (
-            <span className="absolute bottom-1 w-6 h-0.5 bg-emerald-600 rounded-full" />
+            <span className="absolute -bottom-0.5 w-5 h-0.5 bg-emerald-600 rounded-full" />
           )}
         </button>
 
         {/* 4. My Purchases */}
         <button
           onClick={() => onNavigate('purchases')}
-          className={`flex flex-col items-center justify-center py-1 transition-all relative ${
+          type="button"
+          aria-label="My Purchases"
+          className={`flex flex-col items-center justify-center py-1 transition-all relative touch-manipulation cursor-pointer active:scale-95 ${
             currentView === 'purchases' ? 'text-red-700 font-bold' : 'text-stone-500 hover:text-stone-800'
           }`}
         >
@@ -117,9 +125,9 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
               </span>
             )}
           </div>
-          <span className="text-[10px] mt-1 tracking-tight">Purchases</span>
+          <span className="text-[10px] mt-0.5 tracking-tight font-medium">Purchases</span>
           {currentView === 'purchases' && (
-            <span className="absolute bottom-1 w-6 h-0.5 bg-red-700 rounded-full" />
+            <span className="absolute -bottom-0.5 w-5 h-0.5 bg-red-700 rounded-full" />
           )}
         </button>
 
@@ -127,22 +135,26 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
         {isAdmin ? (
           <button
             onClick={() => onNavigate('admin')}
-            className={`flex flex-col items-center justify-center py-1 transition-all relative ${
+            type="button"
+            aria-label="Admin Dashboard"
+            className={`flex flex-col items-center justify-center py-1 transition-all relative touch-manipulation cursor-pointer active:scale-95 ${
               currentView === 'admin' ? 'text-red-700 font-bold' : 'text-stone-500 hover:text-stone-800'
             }`}
           >
             <div className="relative">
               <ShieldCheck className={`w-5 h-5 transition-transform ${currentView === 'admin' ? 'scale-110 text-red-700' : 'text-stone-700'}`} />
             </div>
-            <span className="text-[10px] mt-1 tracking-tight font-semibold">Admin</span>
+            <span className="text-[10px] mt-0.5 tracking-tight font-semibold">Admin</span>
             {currentView === 'admin' && (
-              <span className="absolute bottom-1 w-6 h-0.5 bg-red-700 rounded-full" />
+              <span className="absolute -bottom-0.5 w-5 h-0.5 bg-red-700 rounded-full" />
             )}
           </button>
         ) : (
           <button
             onClick={handleAccountClick}
-            className="flex flex-col items-center justify-center py-1 text-stone-500 hover:text-stone-800 transition-all relative"
+            type="button"
+            aria-label={user ? 'User Account' : 'Student Login'}
+            className="flex flex-col items-center justify-center py-1 text-stone-500 hover:text-stone-800 transition-all relative touch-manipulation cursor-pointer active:scale-95"
           >
             <div className="relative">
               {user ? (
@@ -153,7 +165,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
                 <User className="w-5 h-5" />
               )}
             </div>
-            <span className="text-[10px] mt-1 tracking-tight">
+            <span className="text-[10px] mt-0.5 tracking-tight font-medium">
               {user ? 'Account' : 'Login'}
             </span>
           </button>

@@ -1,6 +1,8 @@
 import express, { Request, Response, Router } from 'express';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
+import { queryRazorpayPaymentStatus } from './paymentReconciliation';
+import { runServerPaymentMaintenance, getLastSchedulerStatus } from './cron';
 
 dotenv.config();
 
@@ -78,73 +80,49 @@ export function createApiApp() {
       const keyId = getRazorpayKeyId();
       const keySecret = getRazorpayKeySecret();
 
-      // If Razorpay credentials are present and not placeholder, call Razorpay Orders API
-      const hasLiveCredentials = Boolean(
-        keyId &&
-        keySecret &&
-        !keyId.includes('your_key_id') &&
-        !keySecret.includes('your_razorpay')
-      );
-
-      if (hasLiveCredentials) {
-        try {
-          const authHeader = 'Basic ' + Buffer.from(`${keyId}:${keySecret}`).toString('base64');
-          const rzpResponse = await fetch('https://api.razorpay.com/v1/orders', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': authHeader
-            },
-            body: JSON.stringify({
-              amount: amountPaise,
-              currency: 'INR',
-              receipt: orderReceipt,
-              notes: {
-                productId,
-                productTitle: (productTitle || '').substring(0, 40),
-                studentPhone: studentInfo.phoneNumber,
-                studentEmail: studentInfo.email || ''
-              }
-            })
-          });
-
-          if (rzpResponse.ok) {
-            const rzpOrder = await rzpResponse.json();
-            res.json({
-              success: true,
-              orderId: rzpOrder.id,
-              receipt: orderReceipt,
-              amount: rzpOrder.amount,
-              currency: rzpOrder.currency,
-              keyId,
-              isLive: keyId.startsWith('rzp_live_')
-            });
-            return;
-          } else {
-            const errorBody = await rzpResponse.json().catch(() => ({}));
-            console.warn('Razorpay API response non-ok:', rzpResponse.status, errorBody);
-            // If razorpay returned an authorization error or other issue
-            if (errorBody?.error?.description) {
-              res.status(400).json({
-                error: `Razorpay Error: ${errorBody.error.description}`,
-                code: errorBody.error.code
-              });
-              return;
-            }
-          }
-        } catch (err: any) {
-          console.warn('Real Razorpay API call failed with network error:', err);
-        }
+      if (!keyId || !keySecret) {
+        res.status(500).json({ error: 'Razorpay payment gateway credentials are not configured on server' });
+        return;
       }
 
-      // Safe fallback order if API network is momentarily unavailable
-      const testOrderId = `order_${Math.random().toString(36).substring(2, 14)}`;
+      // Create live order via Razorpay Orders API
+      const authHeader = 'Basic ' + Buffer.from(`${keyId}:${keySecret}`).toString('base64');
+      const rzpResponse = await fetch('https://api.razorpay.com/v1/orders', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': authHeader
+        },
+        body: JSON.stringify({
+          amount: amountPaise,
+          currency: 'INR',
+          receipt: orderReceipt,
+          notes: {
+            productId,
+            productTitle: (productTitle || '').substring(0, 40),
+            studentPhone: studentInfo.phoneNumber,
+            studentEmail: studentInfo.email || ''
+          }
+        })
+      });
+
+      if (!rzpResponse.ok) {
+        const errorBody = await rzpResponse.json().catch(() => ({}));
+        console.error('Razorpay API error creating order:', rzpResponse.status, errorBody);
+        res.status(rzpResponse.status || 502).json({
+          error: errorBody?.error?.description || 'Razorpay order creation failed. Please verify live credentials and amount.',
+          code: errorBody?.error?.code
+        });
+        return;
+      }
+
+      const rzpOrder = await rzpResponse.json();
       res.json({
         success: true,
-        orderId: testOrderId,
+        orderId: rzpOrder.id,
         receipt: orderReceipt,
-        amount: amountPaise,
-        currency: 'INR',
+        amount: rzpOrder.amount,
+        currency: rzpOrder.currency,
         keyId,
         isLive: keyId.startsWith('rzp_live_')
       });
@@ -186,8 +164,9 @@ export function createApiApp() {
 
       let isValid = false;
       const keySecret = getRazorpayKeySecret();
+      const keyId = getRazorpayKeyId();
 
-      // Check if signature verification applies
+      // 1. Strict HMAC SHA256 signature check
       if (razorpaySignature && keySecret) {
         const generatedSignature = crypto
           .createHmac('sha256', keySecret)
@@ -197,15 +176,28 @@ export function createApiApp() {
         isValid = (generatedSignature === razorpaySignature);
       }
 
-      // Development / sandbox fallback for testing
-      if (!isValid && (razorpaySignature === 'verified_dev_signature' || razorpaySignature === 'dev_sandbox_signature')) {
-        isValid = Boolean(razorpayPaymentId && razorpayOrderId);
+      // 2. Double-check live capture directly with Razorpay API
+      if (!isValid && razorpayPaymentId.startsWith('pay_') && keyId && keySecret) {
+        try {
+          const authHeader = 'Basic ' + Buffer.from(`${keyId}:${keySecret}`).toString('base64');
+          const pRes = await fetch(`https://api.razorpay.com/v1/payments/${razorpayPaymentId}`, {
+            headers: { 'Authorization': authHeader }
+          });
+          if (pRes.ok) {
+            const pData = await pRes.json();
+            if (pData.status === 'captured') {
+              isValid = true;
+            }
+          }
+        } catch (captureErr) {
+          console.warn('Direct Razorpay capture check error:', captureErr);
+        }
       }
 
       if (!isValid) {
         res.status(400).json({
           success: false,
-          error: 'Invalid payment signature. Verification failed.'
+          error: 'Invalid payment signature. Payment verification failed.'
         });
         return;
       }
@@ -226,6 +218,31 @@ export function createApiApp() {
     } catch (error: any) {
       console.error('Error verifying payment:', error);
       res.status(500).json({ error: error?.message || 'Server error verifying payment' });
+    }
+  });
+
+  /**
+   * Rule 1: Check Payment Status directly with Razorpay
+   * Mandatory check before marking any 24h+ pending order as Failed.
+   * Never marks a verified successful payment as Failed.
+   */
+  router.post('/payment/check-status', async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { razorpayOrderId, razorpayPaymentId, orderCreatedAt } = req.body;
+      const statusResult = await queryRazorpayPaymentStatus({
+        razorpayOrderId,
+        razorpayPaymentId,
+        orderCreatedAt,
+        keyId: getRazorpayKeyId(),
+        keySecret: getRazorpayKeySecret()
+      });
+      res.json(statusResult);
+    } catch (err: any) {
+      console.error('Error checking Razorpay payment status:', err);
+      res.status(500).json({
+        status: 'uncertain',
+        error: err?.message || 'Server error checking status'
+      });
     }
   });
 
@@ -292,6 +309,41 @@ export function createApiApp() {
 
     // Redirect directly to Google Drive so no example/sample dummy PDF is shown
     res.redirect(`https://drive.google.com/drive/my-drive`);
+  });
+
+  /**
+   * Status of automatic payment policy scheduler
+   */
+  router.get('/cron/status', (_req: Request, res: Response): void => {
+    res.json({
+      policy: 'Pending -> Failed after 24 hours (verified with Razorpay); Failed entries -> cleared after 30 days',
+      ...getLastSchedulerStatus()
+    });
+  });
+
+  /**
+   * Secure trigger for daily payment reconciliation and cleanup
+   * Can be called by Cloud Scheduler, cron job, or admin
+   */
+  router.all('/cron/payment-reconciliation-cleanup', async (req: Request, res: Response): Promise<void> => {
+    try {
+      const authHeader = req.headers.authorization;
+      const cronSecret = process.env.CRON_SECRET || 'mkr_cron_daily_secure_key_2026';
+      const providedSecret = req.headers['x-cron-token'] || (authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null);
+
+      if (process.env.CRON_SECRET && providedSecret !== cronSecret) {
+        res.status(401).json({ error: 'Unauthorized cron request' });
+        return;
+      }
+
+      const runResult = await runServerPaymentMaintenance();
+      res.json({
+        policy: 'Pending -> Failed after 24h (Razorpay verified); Failed entries archived after 30d',
+        ...runResult
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || 'Reconciliation cron failed' });
+    }
   });
 
   // Mount router at both /api and root / to support Netlify rewrites as well as local express server

@@ -62,10 +62,17 @@ service cloud.firestore {
           'razorpayPaymentId',
           'razorpayOrderId',
           'verifiedAt',
-          'updatedAt'
+          'updatedAt',
+          'failedAt',
+          'failureReason'
         ])
       );
       allow delete: if isAdmin();
+    }
+
+    // Archived Orders: Long-term financial audit records for failed orders cleared after 30 days
+    match /archived_orders/{orderId} {
+      allow read, write: if isAdmin();
     }
 
     // Purchases entitlements: Students can read/list their own purchases; Admins can read all
@@ -78,6 +85,12 @@ service cloud.firestore {
 
     // Public app settings (banners, social links, contact info)
     match /appSettings/public {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Homepage Promotional Banners (16:9 dynamic slider)
+    match /homepage_banners/{bannerId} {
       allow read: if true;
       allow write: if isAdmin();
     }

@@ -104,8 +104,23 @@ export interface Order {
   createdAt: string;
   updatedAt?: string;
   verifiedAt?: string;
+  failedAt?: string;
   refundStatus?: string;
   failureReason?: string;
+  isArchived?: boolean;
+  archivedAt?: string;
+  archiveReason?: string;
+  lastVerifiedWithRazorpayAt?: string;
+  razorpayStatusSnapshot?: string;
+}
+
+export interface ReconcileAndCleanupResult {
+  totalPendingExamined: number;
+  recoveredPaidCount: number;
+  markedFailedCount: number;
+  skippedUncertainCount: number;
+  archivedFailedCount: number;
+  details: string[];
 }
 
 export interface Purchase {

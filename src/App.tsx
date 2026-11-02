@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Product, Purchase, AppPublicSettings } from './types';
 import {
@@ -46,13 +46,123 @@ function AppContent() {
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Modals
+  // Modals & In-App Readers (Controlled for 1-step back navigation)
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [checkoutProduct, setCheckoutProduct] = useState<Product | null>(null);
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authInitialMode, setAuthInitialMode] = useState<'login' | 'register'>('login');
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [policyType, setPolicyType] = useState<'privacy' | 'terms' | 'refund' | 'contact' | null>(null);
+
+  // In-App Free Notes Reader & Subject Selection
+  const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
+  const [previewPdf, setPreviewPdf] = useState<Product | null>(null);
+
+  // In-App Purchased Notes Reader
+  const [selectedReaderPurchase, setSelectedReaderPurchase] = useState<Purchase | null>(null);
+
+  // Native Android Double-Back to Exit Toast
+  const [showExitToast, setShowExitToast] = useState(false);
+
+  // Refs to allow popstate event handler to inspect current state synchronously
+  const currentViewRef = useRef(currentView);
+  const selectedProductRef = useRef(selectedProduct);
+  const checkoutProductRef = useRef(checkoutProduct);
+  const authModalOpenRef = useRef(authModalOpen);
+  const profileModalOpenRef = useRef(profileModalOpen);
+  const policyTypeRef = useRef(policyType);
+  const selectedSubjectIdRef = useRef(selectedSubjectId);
+  const previewPdfRef = useRef(previewPdf);
+  const selectedReaderPurchaseRef = useRef(selectedReaderPurchase);
+  const lastBackPressTimeRef = useRef<number>(0);
+
+  // Keep refs in sync with state
+  useEffect(() => { currentViewRef.current = currentView; }, [currentView]);
+  useEffect(() => { selectedProductRef.current = selectedProduct; }, [selectedProduct]);
+  useEffect(() => { checkoutProductRef.current = checkoutProduct; }, [checkoutProduct]);
+  useEffect(() => { authModalOpenRef.current = authModalOpen; }, [authModalOpen]);
+  useEffect(() => { profileModalOpenRef.current = profileModalOpen; }, [profileModalOpen]);
+  useEffect(() => { policyTypeRef.current = policyType; }, [policyType]);
+  useEffect(() => { selectedSubjectIdRef.current = selectedSubjectId; }, [selectedSubjectId]);
+  useEffect(() => { previewPdfRef.current = previewPdf; }, [previewPdf]);
+  useEffect(() => { selectedReaderPurchaseRef.current = selectedReaderPurchase; }, [selectedReaderPurchase]);
+
+  // Global Android / Browser 1-Step Back Navigation Controller
+  useEffect(() => {
+    // Initialize root history entry so device back button has a stack frame
+    if (!window.history.state) {
+      window.history.replaceState({ step: 'root', view: 'home' }, '');
+    }
+
+    const handlePopState = () => {
+      // 1. If any in-app PDF reader / preview is open, close it (1 step back)
+      if (previewPdfRef.current) {
+        setPreviewPdf(null);
+        return;
+      }
+      if (selectedReaderPurchaseRef.current) {
+        setSelectedReaderPurchase(null);
+        return;
+      }
+      // 2. If checkout modal is open, close it (1 step back)
+      if (checkoutProductRef.current) {
+        setCheckoutProduct(null);
+        return;
+      }
+      // 3. If product details modal is open, close it (1 step back)
+      if (selectedProductRef.current) {
+        setSelectedProduct(null);
+        return;
+      }
+      // 4. If auth modal is open, close it (1 step back)
+      if (authModalOpenRef.current) {
+        setAuthModalOpen(false);
+        return;
+      }
+      // 5. If profile modal is open, close it (1 step back)
+      if (profileModalOpenRef.current) {
+        setProfileModalOpen(false);
+        return;
+      }
+      // 6. If policy modal is open, close it (1 step back)
+      if (policyTypeRef.current) {
+        setPolicyType(null);
+        return;
+      }
+      // 7. If inside Free Notes and a specific subject is open, go back to all subjects (1 step back)
+      if (selectedSubjectIdRef.current) {
+        setSelectedSubjectId(null);
+        return;
+      }
+      // 8. If in any secondary view (browse, free-pdfs, purchases, admin), go back to home (1 step back)
+      if (currentViewRef.current !== 'home') {
+        setCurrentView('home');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+
+      // 9. If already on Home Screen with no modals open:
+      // Standard Android UX: Double-tap back within 2 seconds to exit, otherwise show toast
+      const now = Date.now();
+      if (now - lastBackPressTimeRef.current < 2000) {
+        // Allow app exit
+        window.history.back();
+      } else {
+        lastBackPressTimeRef.current = now;
+        // Re-push root state to trap single back press and protect from accidental app close
+        window.history.pushState({ step: 'root', view: 'home' }, '');
+        setShowExitToast(true);
+        setTimeout(() => {
+          setShowExitToast(false);
+        }, 2000);
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, []);
 
   // 1. Load public settings and subscribe to published study materials in real-time
   useEffect(() => {
@@ -155,14 +265,14 @@ function AppContent() {
 
   const purchasedProductIds = new Set(purchases.map((p) => p.productId));
 
+  // Controlled Navigation with history stack tracking
   const handleNavigate = (view: string, filterParam?: any) => {
+    if (view === currentView) return;
+
+    window.history.pushState({ step: 'view', view }, '');
     if (view === 'admin') {
       setCurrentView('admin');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      return;
-    }
-
-    if (view === 'free-pdfs') {
+    } else if (view === 'free-pdfs') {
       setCurrentView('free-pdfs');
     } else if (view === 'browse') {
       setBrowseFilters(filterParam || {});
@@ -175,32 +285,126 @@ function AppContent() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  // 1-Step Back Controlled Open & Close Handlers
+  const handleOpenProductDetails = (product: Product) => {
+    window.history.pushState({ step: 'product-details', id: product.id }, '');
+    setSelectedProduct(product);
+  };
+
+  const handleCloseProductDetails = () => {
+    if (window.history.state?.step === 'product-details') {
+      window.history.back();
+    } else {
+      setSelectedProduct(null);
+    }
+  };
+
+  const handleBuyNow = (product: Product) => {
+    window.history.pushState({ step: 'checkout', id: product.id }, '');
+    setCheckoutProduct(product);
+  };
+
+  const handleCloseCheckout = () => {
+    if (window.history.state?.step === 'checkout') {
+      window.history.back();
+    } else {
+      setCheckoutProduct(null);
+    }
+  };
+
   const handleOpenAuth = (mode: 'login' | 'register' = 'login') => {
+    window.history.pushState({ step: 'auth', mode }, '');
     setAuthInitialMode(mode);
     setAuthModalOpen(true);
   };
 
-  const handleBuyNow = (product: Product) => {
-    setCheckoutProduct(product);
+  const handleCloseAuth = () => {
+    if (window.history.state?.step === 'auth') {
+      window.history.back();
+    } else {
+      setAuthModalOpen(false);
+    }
+  };
+
+  const handleOpenProfile = () => {
+    window.history.pushState({ step: 'profile' }, '');
+    setProfileModalOpen(true);
+  };
+
+  const handleCloseProfile = () => {
+    if (window.history.state?.step === 'profile') {
+      window.history.back();
+    } else {
+      setProfileModalOpen(false);
+    }
+  };
+
+  const handleOpenPolicy = (type: 'privacy' | 'terms' | 'refund' | 'contact') => {
+    window.history.pushState({ step: 'policy', type }, '');
+    setPolicyType(type);
+  };
+
+  const handleClosePolicy = () => {
+    if (window.history.state?.step === 'policy') {
+      window.history.back();
+    } else {
+      setPolicyType(null);
+    }
+  };
+
+  const handleSelectFreeSubject = (subjectId: string | null) => {
+    if (subjectId) {
+      window.history.pushState({ step: 'free-subject', subjectId }, '');
+      setSelectedSubjectId(subjectId);
+    } else {
+      if (window.history.state?.step === 'free-subject') {
+        window.history.back();
+      } else {
+        setSelectedSubjectId(null);
+      }
+    }
+  };
+
+  const handlePreviewFreePdf = (prod: Product | null) => {
+    if (prod) {
+      window.history.pushState({ step: 'pdf-preview', id: prod.id }, '');
+      setPreviewPdf(prod);
+    } else {
+      if (window.history.state?.step === 'pdf-preview') {
+        window.history.back();
+      } else {
+        setPreviewPdf(null);
+      }
+    }
+  };
+
+  const handleSelectReaderPurchase = (purchase: Purchase | null) => {
+    if (purchase) {
+      window.history.pushState({ step: 'purchase-reader', id: purchase.orderId }, '');
+      setSelectedReaderPurchase(purchase);
+    } else {
+      if (window.history.state?.step === 'purchase-reader') {
+        window.history.back();
+      } else {
+        setSelectedReaderPurchase(null);
+      }
+    }
   };
 
   const handleDownloadNotes = (product: Product) => {
-    // Har EK PDF student kharidne ke bad actual Google Drive file link hi open hoga
     const purchase = purchases.find((p) => p.productId === product.id);
     const driveUrl = product.driveFileLink || purchase?.driveFileLink;
     if (driveUrl) {
       window.open(driveUrl, '_blank', 'noopener,noreferrer');
       return;
     }
-    // Fallback: If no direct drive link stored, redirect to Google Drive
     window.open('https://drive.google.com', '_blank');
   };
 
   const handleExecuteSearch = () => {
     if (searchQuery.trim()) {
       setBrowseFilters({ search: searchQuery });
-      setCurrentView('browse');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      handleNavigate('browse');
     }
   };
 
@@ -232,7 +436,7 @@ function AppContent() {
         currentView={currentView}
         onNavigate={handleNavigate}
         onOpenAuth={handleOpenAuth}
-        onOpenProfile={() => setProfileModalOpen(true)}
+        onOpenProfile={handleOpenProfile}
         purchaseCount={purchases.length}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
@@ -241,7 +445,7 @@ function AppContent() {
       />
 
       {/* Main Content View with mobile safe-padding */}
-      <main className="flex-1 w-full max-w-full min-w-0 pb-16 md:pb-0">
+      <main className="flex-1 w-full max-w-full min-w-0 pb-28 md:pb-0">
         {loading ? (
           <div className="py-24 text-center space-y-4">
             <div className="w-10 h-10 border-3 border-red-700 border-t-transparent rounded-full animate-spin mx-auto"></div>
@@ -255,7 +459,7 @@ function AppContent() {
             settings={settings}
             purchasedProductIds={purchasedProductIds}
             onNavigate={handleNavigate}
-            onViewDetails={(prod) => setSelectedProduct(prod)}
+            onViewDetails={handleOpenProductDetails}
             onBuyNow={handleBuyNow}
             onDownloadNotes={handleDownloadNotes}
             searchQuery={searchQuery}
@@ -266,14 +470,18 @@ function AppContent() {
           <FreePdfsView
             products={products}
             freeNotes={freeNotes}
-            onViewDetails={(prod) => setSelectedProduct(prod)}
+            onViewDetails={handleOpenProductDetails}
             onNavigateToAdmin={() => handleNavigate('admin')}
+            selectedSubjectId={selectedSubjectId}
+            onSelectSubject={handleSelectFreeSubject}
+            previewPdf={previewPdf}
+            onPreviewPdf={handlePreviewFreePdf}
           />
         ) : currentView === 'browse' ? (
           <BrowseNotesView
             products={products}
             purchasedProductIds={purchasedProductIds}
-            onViewDetails={(prod) => setSelectedProduct(prod)}
+            onViewDetails={handleOpenProductDetails}
             onBuyNow={handleBuyNow}
             onDownloadNotes={handleDownloadNotes}
             initialFilters={browseFilters}
@@ -282,6 +490,8 @@ function AppContent() {
           <MyPurchasesView
             onBrowseNotes={() => handleNavigate('browse')}
             onOpenAuth={() => handleOpenAuth('login')}
+            selectedReaderPurchase={selectedReaderPurchase}
+            onSelectReaderPurchase={handleSelectReaderPurchase}
           />
         )}
       </main>
@@ -289,7 +499,7 @@ function AppContent() {
       {/* Footer */}
       <Footer
         onNavigate={handleNavigate}
-        onOpenPolicy={(p) => setPolicyType(p)}
+        onOpenPolicy={handleOpenPolicy}
         socialLinks={settings?.social}
         settings={settings}
       />
@@ -299,7 +509,7 @@ function AppContent() {
         currentView={currentView}
         onNavigate={handleNavigate}
         onOpenAuth={handleOpenAuth}
-        onOpenProfile={() => setProfileModalOpen(true)}
+        onOpenProfile={handleOpenProfile}
         purchaseCount={purchases.length}
       />
 
@@ -308,7 +518,7 @@ function AppContent() {
         <ProductDetailsModal
           product={selectedProduct}
           isPurchased={purchasedProductIds.has(selectedProduct.id)}
-          onClose={() => setSelectedProduct(null)}
+          onClose={handleCloseProductDetails}
           onBuyNow={handleBuyNow}
           onDownloadNotes={handleDownloadNotes}
         />
@@ -318,7 +528,7 @@ function AppContent() {
       {checkoutProduct && (
         <CheckoutModal
           product={checkoutProduct}
-          onClose={() => setCheckoutProduct(null)}
+          onClose={handleCloseCheckout}
           onSuccess={handlePurchaseSuccess}
           onRequireAuth={() => handleOpenAuth('login')}
         />
@@ -327,23 +537,30 @@ function AppContent() {
       {/* Auth Modal */}
       <AuthModal
         isOpen={authModalOpen}
-        onClose={() => setAuthModalOpen(false)}
+        onClose={handleCloseAuth}
         initialMode={authInitialMode}
       />
 
       {/* Student Profile Modal */}
       <StudentProfileModal
         isOpen={profileModalOpen}
-        onClose={() => setProfileModalOpen(false)}
+        onClose={handleCloseProfile}
         onNavigateToPurchases={() => handleNavigate('purchases')}
       />
 
       {/* Legal & Policy Modals */}
       <PolicyModal
         type={policyType}
-        onClose={() => setPolicyType(null)}
+        onClose={handleClosePolicy}
         socialLinks={settings?.social}
       />
+
+      {/* Native Android Double-Back to Exit Toast */}
+      {showExitToast && (
+        <div className="fixed bottom-28 left-1/2 -translate-x-1/2 z-[10000] bg-stone-900/95 text-white text-xs font-semibold px-4 py-2.5 rounded-full shadow-2xl border border-stone-700 animate-in fade-in slide-in-from-bottom-2 duration-150 flex items-center space-x-2 pointer-events-none">
+          <span>Press back again to exit MKR Academy</span>
+        </div>
+      )}
     </div>
   );
 }

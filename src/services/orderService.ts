@@ -5,15 +5,17 @@ import {
   getDoc,
   setDoc,
   updateDoc,
+  deleteDoc,
   query,
   where,
   orderBy,
   onSnapshot
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase/config';
-import { Order, Purchase, UserProfile, OrderStatus } from '../types';
+import { Order, Purchase, UserProfile, OrderStatus, ReconcileAndCleanupResult } from '../types';
 
 export const ORDERS_COLLECTION = 'orders';
+export const ARCHIVED_ORDERS_COLLECTION = 'archived_orders';
 export const PURCHASES_COLLECTION = 'purchases';
 export const USERS_COLLECTION = 'users';
 
@@ -101,6 +103,8 @@ export async function recordFailedOrder(orderId: string, reason?: string): Promi
       orderRef,
       {
         status: 'failed',
+        failedAt: now,
+        failureReason: reason || 'Payment cancelled or failed',
         refundStatus: reason || 'Payment cancelled or failed',
         updatedAt: now
       },
@@ -400,3 +404,261 @@ export async function getAllStudentsAdmin(): Promise<UserProfile[]> {
     return [];
   }
 }
+
+/**
+ * Step 1 Helper: Call backend to verify status with Razorpay
+ */
+export async function checkPaymentStatusWithRazorpay(params: {
+  razorpayOrderId?: string;
+  razorpayPaymentId?: string;
+  orderCreatedAt?: string;
+}): Promise<{
+  status: 'paid' | 'failed' | 'abandoned' | 'pending' | 'uncertain';
+  razorpayPaymentId?: string;
+  razorpayOrderId?: string;
+  amountPaise?: number;
+  reason?: string;
+  verifiedAt?: string;
+  error?: string;
+}> {
+  try {
+    const res = await fetch('/api/payment/check-status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params)
+    });
+    if (!res.ok) {
+      return { status: 'uncertain', error: `Server status error ${res.status}` };
+    }
+    return await res.json();
+  } catch (err: any) {
+    console.warn('checkPaymentStatusWithRazorpay fetch failed:', err);
+    return { status: 'uncertain', error: err?.message || 'Network error verifying with server' };
+  }
+}
+
+/**
+ * Core Policy Engine:
+ * 1. Pending -> Failed after 24 hours, subject to Razorpay payment verification.
+ *    - Never mark a verified successful payment as Failed.
+ *    - If uncertain or network error, leaves status as pending for retry.
+ * 2. Failed entries -> cleared from the active list after 30 days from server failedAt.
+ *    - Preserves necessary financial audit records in 'archived_orders' collection.
+ *    - NEVER automatically deletes or touches paid records, refunded transactions,
+ *      student accounts, products, or purchased notes.
+ */
+export async function processPendingTimeoutAndFailedCleanup(options?: {
+  force24hAgeTest?: boolean;
+  force30dAgeTest?: boolean;
+}): Promise<ReconcileAndCleanupResult> {
+  const result: ReconcileAndCleanupResult = {
+    totalPendingExamined: 0,
+    recoveredPaidCount: 0,
+    markedFailedCount: 0,
+    skippedUncertainCount: 0,
+    archivedFailedCount: 0,
+    details: []
+  };
+
+  const now = new Date();
+  const nowIso = now.toISOString();
+  const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
+  const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+
+  try {
+    const [ordersSnap, purchasesSnap] = await Promise.all([
+      getDocs(collection(db, ORDERS_COLLECTION)),
+      getDocs(collection(db, PURCHASES_COLLECTION))
+    ]);
+
+    const activePurchasesByOrder = new Map<string, Purchase>();
+    const activePurchasesByUserProduct = new Map<string, Purchase>();
+
+    purchasesSnap.forEach((docSnap) => {
+      const p = docSnap.data() as Purchase;
+      if (p.entitlementStatus === 'active') {
+        if (p.orderId) activePurchasesByOrder.set(p.orderId, p);
+        if (p.uid && p.productId) activePurchasesByUserProduct.set(`${p.uid}_${p.productId}`, p);
+      }
+    });
+
+    for (const docSnap of ordersSnap.docs) {
+      const order = { id: docSnap.id, ...(docSnap.data() as Omit<Order, 'id'>) } as Order;
+      const orderRef = doc(db, ORDERS_COLLECTION, docSnap.id);
+
+      // ========================================================
+      // RULE 1: Pending to Failed after 24 hours (with Razorpay Verification)
+      // ========================================================
+      if (order.status === 'pending') {
+        result.totalPendingExamined++;
+        const createdAtTime = new Date(order.createdAt || 0).getTime();
+        const ageMs = now.getTime() - createdAtTime;
+        const isOlderThan24h = ageMs >= TWENTY_FOUR_HOURS_MS;
+
+        if (isOlderThan24h || options?.force24hAgeTest) {
+          // Check 1: Does this order or student already have an active purchase entitlement?
+          const existingPurchase =
+            activePurchasesByOrder.get(order.id) ||
+            activePurchasesByUserProduct.get(`${order.uid}_${order.productId}`);
+
+          if (existingPurchase) {
+            // Already active in student account! Definitively PAID.
+            await setDoc(
+              orderRef,
+              {
+                status: 'paid',
+                verifiedAt: existingPurchase.purchasedAt || nowIso,
+                updatedAt: nowIso,
+                lastVerifiedWithRazorpayAt: nowIso,
+                razorpayStatusSnapshot: 'verified_active_entitlement'
+              },
+              { merge: true }
+            );
+            result.recoveredPaidCount++;
+            result.details.push(`Order ${order.id}: Verified as PAID via active student entitlement.`);
+            continue;
+          }
+
+          // Check 2: Verify live status directly with Razorpay API
+          try {
+            const razorpayStatus = await checkPaymentStatusWithRazorpay({
+              razorpayOrderId: order.razorpayOrderId,
+              razorpayPaymentId: order.razorpayPaymentId,
+              orderCreatedAt: order.createdAt
+            });
+
+            if (razorpayStatus.status === 'paid') {
+              // Razorpay confirmed payment was captured!
+              // NEVER mark as Failed!
+              await setDoc(
+                orderRef,
+                {
+                  status: 'paid',
+                  razorpayPaymentId: razorpayStatus.razorpayPaymentId || order.razorpayPaymentId || '',
+                  razorpayOrderId: razorpayStatus.razorpayOrderId || order.razorpayOrderId || '',
+                  verifiedAt: razorpayStatus.verifiedAt || nowIso,
+                  updatedAt: nowIso,
+                  lastVerifiedWithRazorpayAt: nowIso,
+                  razorpayStatusSnapshot: 'captured'
+                },
+                { merge: true }
+              );
+
+              // Fulfill purchase entitlement so student can access notes
+              const purchaseId = `pur_${order.uid}_${order.productId}`.replace(/[^a-zA-Z0-9_-]/g, '_');
+              const purchaseRef = doc(db, PURCHASES_COLLECTION, purchaseId);
+              const purchaseDoc: Purchase = {
+                id: purchaseId,
+                uid: order.uid,
+                productId: order.productId,
+                orderId: order.id,
+                productTitle: order.productTitleSnapshot || 'MKR Academy Notes',
+                coverImagePath: '',
+                entitlementStatus: 'active',
+                purchasedAt: nowIso,
+                createdAt: nowIso
+              };
+              await setDoc(purchaseRef, purchaseDoc, { merge: true });
+
+              result.recoveredPaidCount++;
+              result.details.push(`Order ${order.id}: Verified PAID with Razorpay (${razorpayStatus.razorpayPaymentId || 'captured'}). Entitlement granted.`);
+            } else if (razorpayStatus.status === 'failed' || razorpayStatus.status === 'abandoned') {
+              // Definitively verified that payment failed or was abandoned after 24h
+              await setDoc(
+                orderRef,
+                {
+                  status: 'failed',
+                  failedAt: nowIso,
+                  failureReason: razorpayStatus.reason || 'Pending timeout (24h) - Verified uncaptured with Razorpay',
+                  updatedAt: nowIso,
+                  lastVerifiedWithRazorpayAt: nowIso,
+                  razorpayStatusSnapshot: razorpayStatus.status
+                },
+                { merge: true }
+              );
+              result.markedFailedCount++;
+              result.details.push(`Order ${order.id}: Changed to FAILED after 24h timeout (Razorpay: ${razorpayStatus.status}).`);
+            } else {
+              // Uncertain, network error, or pending retry
+              // NEVER mark as failed when uncertain!
+              await setDoc(
+                orderRef,
+                {
+                  updatedAt: nowIso,
+                  lastVerifiedWithRazorpayAt: nowIso,
+                  razorpayStatusSnapshot: 'uncertain_retry_later'
+                },
+                { merge: true }
+              );
+              result.skippedUncertainCount++;
+              result.details.push(`Order ${order.id}: Verification uncertain (${razorpayStatus.error || 'pending'}). Preserved as pending.`);
+            }
+          } catch (verifyErr: any) {
+            console.warn(`Error verifying order ${order.id} with Razorpay:`, verifyErr);
+            result.skippedUncertainCount++;
+            result.details.push(`Order ${order.id}: Network/API error. Preserved as pending.`);
+          }
+        }
+      }
+
+      // ========================================================
+      // RULE 2: 30-Day Failed Payment Cleanup with Financial Audit Preservation
+      // ========================================================
+      if (order.status === 'failed' && !order.isArchived) {
+        // STRICT DATA PROTECTION: Only orders with status === 'failed' can be archived
+        // Never touch paid, refunded, products, or users!
+        const failedTimestamp = order.failedAt
+          ? new Date(order.failedAt).getTime()
+          : new Date(order.updatedAt || order.createdAt || 0).getTime();
+
+        const failedAgeMs = now.getTime() - failedTimestamp;
+        const isOlderThan30d = failedAgeMs >= THIRTY_DAYS_MS;
+
+        if (isOlderThan30d || options?.force30dAgeTest) {
+          try {
+            // 1. Archive to 'archived_orders' collection to preserve audit trail
+            const archiveRef = doc(db, ARCHIVED_ORDERS_COLLECTION, order.id);
+            await setDoc(archiveRef, {
+              ...order,
+              status: 'failed',
+              isArchived: true,
+              archivedAt: nowIso,
+              archiveReason: 'Expired failed payment (cleared from active list after 30 days per policy)'
+            });
+
+            // 2. Remove from active 'orders' collection
+            await deleteDoc(orderRef);
+
+            result.archivedFailedCount++;
+            result.details.push(`Order ${order.id}: Archived failed order (>30 days) to preserved audit archive.`);
+          } catch (archiveErr) {
+            console.warn(`Failed to archive order ${order.id}:`, archiveErr);
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error in processPendingTimeoutAndFailedCleanup:', error);
+  }
+
+  return result;
+}
+
+/**
+ * Admin: Fetch all archived failed orders for audit review
+ */
+export async function getArchivedOrdersAdmin(): Promise<Order[]> {
+  try {
+    const q = query(collection(db, ARCHIVED_ORDERS_COLLECTION));
+    const snap = await getDocs(q);
+    const archived: Order[] = [];
+    snap.forEach((docSnap) => {
+      archived.push({ id: docSnap.id, ...(docSnap.data() as Omit<Order, 'id'>) } as Order);
+    });
+    return archived.sort((a, b) => new Date(b.archivedAt || b.createdAt || 0).getTime() - new Date(a.archivedAt || a.createdAt || 0).getTime());
+  } catch (err) {
+    console.warn('Could not read archived orders:', err);
+    return [];
+  }
+}
+

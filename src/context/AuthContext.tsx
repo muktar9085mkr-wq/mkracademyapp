@@ -7,6 +7,8 @@ import {
   signOut,
   sendPasswordResetEmail,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   GoogleAuthProvider,
   updateProfile as updateFirebaseProfile
 } from 'firebase/auth';
@@ -73,12 +75,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsAdmin(isUserAdmin);
 
       if (userSnap.exists()) {
-        setProfile(userSnap.data() as UserProfile);
+        const existing = userSnap.data() as UserProfile;
+        // If profile previously lacked name or had placeholder, update with Google details
+        if ((!existing.displayName || existing.displayName === 'Student') && firebaseUser.displayName) {
+          try {
+            await updateDoc(userRef, {
+              displayName: firebaseUser.displayName,
+              updatedAt: new Date().toISOString()
+            });
+            existing.displayName = firebaseUser.displayName;
+          } catch {
+            // Ignore if updateDoc restricted
+          }
+        }
+        setProfile(existing);
       } else {
         // Create initial profile in Firestore
         const newProfile: UserProfile = {
           uid: firebaseUser.uid,
-          displayName: firebaseUser.displayName || 'Student',
+          displayName: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Student',
           email: firebaseUser.email || '',
           phoneNumber: firebaseUser.phoneNumber || '',
           role: isUserAdmin ? 'admin' : 'student',
@@ -108,6 +123,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     testConnection();
+
+    // Check for incoming redirect sign-in result (mobile / popup-blocked fallback)
+    getRedirectResult(auth)
+      .then(async (result) => {
+        if (result && result.user) {
+          setUser(result.user);
+          await syncProfile(result.user);
+        }
+      })
+      .catch((err) => {
+        if (err && err.code) {
+          console.warn('Redirect sign-in error:', err);
+          const msg = getFriendlyErrorMessage(err.code, err.message);
+          setAuthError(msg);
+        }
+      });
 
     // Single source of truth for authentication state
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -187,11 +218,41 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setAuthError(null);
     try {
       const provider = new GoogleAuthProvider();
-      const res = await signInWithPopup(auth, provider);
-      setUser(res.user);
-      await syncProfile(res.user);
+      provider.addScope('email');
+      provider.addScope('profile');
+      provider.setCustomParameters({
+        prompt: 'select_account'
+      });
+
+      let res;
+      try {
+        res = await signInWithPopup(auth, provider);
+      } catch (popupErr: any) {
+        console.warn('signInWithPopup encountered an issue:', popupErr);
+        // If popup was blocked by browser or in restricted iframe, fallback to redirect
+        if (
+          popupErr.code === 'auth/popup-blocked' ||
+          popupErr.code === 'auth/cancelled-popup-request' ||
+          (popupErr.message && popupErr.message.includes('popup'))
+        ) {
+          try {
+            await signInWithRedirect(auth, provider);
+            return;
+          } catch (redirectErr: any) {
+            console.error('signInWithRedirect also failed:', redirectErr);
+            throw popupErr;
+          }
+        }
+        throw popupErr;
+      }
+
+      if (res && res.user) {
+        setUser(res.user);
+        await syncProfile(res.user);
+      }
     } catch (err: any) {
-      const message = getFriendlyErrorMessage(err.code);
+      console.error('Google Sign-In Error:', err);
+      const message = getFriendlyErrorMessage(err.code, err.message);
       setAuthError(message);
       throw new Error(message);
     } finally {
@@ -271,7 +332,9 @@ export const useAuth = () => {
   return context;
 };
 
-function getFriendlyErrorMessage(code: string): string {
+function getFriendlyErrorMessage(code?: string, fallbackMessage?: string): string {
+  const currentHost = typeof window !== 'undefined' ? window.location.hostname : '';
+
   switch (code) {
     case 'auth/invalid-email':
       return 'Please enter a valid email address.';
@@ -287,8 +350,23 @@ function getFriendlyErrorMessage(code: string): string {
     case 'auth/weak-password':
       return 'Password is too weak. Please use at least 6 characters.';
     case 'auth/popup-closed-by-user':
-      return 'Google sign-in popup was closed before completion.';
+      return 'Google sign-in popup was closed before completion. Please try again.';
+    case 'auth/popup-blocked':
+      return 'Google sign-in popup was blocked by your browser. Please allow popups or try again.';
+    case 'auth/cancelled-popup-request':
+      return 'Google sign-in request was cancelled. Please try again.';
+    case 'auth/unauthorized-domain':
+      return `Domain (${currentHost}) is not authorized for Google Sign-In in Firebase. Please add "${currentHost}" in Firebase Console > Authentication > Settings > Authorized domains.`;
+    case 'auth/operation-not-allowed':
+      return 'Google Sign-In is not enabled in Firebase Console. Please enable the Google provider in Firebase Console > Authentication > Sign-in method.';
+    case 'auth/account-exists-with-different-credential':
+      return 'An account already exists with the same email address using a different sign-in method.';
+    case 'auth/network-request-failed':
+      return 'Network connection error. Please check your internet connection and try again.';
     default:
+      if (fallbackMessage && !fallbackMessage.includes('[object Object]')) {
+        return fallbackMessage;
+      }
       return 'Authentication failed. Please verify your details and try again.';
   }
 }

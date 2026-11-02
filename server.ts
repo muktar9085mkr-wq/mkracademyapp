@@ -12,6 +12,9 @@ const __dirname = path.dirname(__filename);
 const app = createApiApp();
 const PORT = parseInt(process.env.PORT || '3000', 10);
 
+// Serve public assets (icons, manifest, .well-known/assetlinks.json)
+app.use(express.static(path.join(__dirname, 'public'), { dotfiles: 'allow' }));
+
 // Setup Vite middleware in dev or static files in production
 async function startServer() {
   if (process.env.NODE_ENV === 'production') {

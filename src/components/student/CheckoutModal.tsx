@@ -37,21 +37,33 @@ function loadRazorpayScript(): Promise<boolean> {
     if (typeof window === 'undefined') return resolve(false);
     if (window.Razorpay) return resolve(true);
 
+    const checkInterval = setInterval(() => {
+      if (window.Razorpay) {
+        clearInterval(checkInterval);
+        resolve(true);
+      }
+    }, 150);
+
     const existing = document.querySelector('script[src*="checkout.razorpay.com"]');
-    if (existing) {
-      existing.addEventListener('load', () => resolve(Boolean(window.Razorpay)));
-      existing.addEventListener('error', () => resolve(false));
-      setTimeout(() => resolve(Boolean(window.Razorpay)), 2500);
-      return;
+    if (!existing) {
+      const script = document.createElement('script');
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+      script.async = true;
+      script.onload = () => {
+        clearInterval(checkInterval);
+        resolve(Boolean(window.Razorpay));
+      };
+      script.onerror = () => {
+        clearInterval(checkInterval);
+        resolve(false);
+      };
+      document.body.appendChild(script);
     }
 
-    const script = document.createElement('script');
-    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-    script.async = true;
-    script.onload = () => resolve(true);
-    script.onerror = () => resolve(false);
-    document.body.appendChild(script);
-    setTimeout(() => resolve(Boolean(window.Razorpay)), 3500);
+    setTimeout(() => {
+      clearInterval(checkInterval);
+      resolve(Boolean(window.Razorpay));
+    }, 5000);
   });
 }
 
@@ -83,6 +95,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [orderSummaryId, setOrderSummaryId] = useState<string>('');
 
   useEffect(() => {
+    loadRazorpayScript().catch(() => {});
     if (user) {
       setStudentName(profile?.displayName || user.displayName || '');
       setStudentEmail(profile?.email || user.email || '');
@@ -211,61 +224,64 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       });
 
       // Step 7: Ensure Razorpay Checkout script is ready
-      await loadRazorpayScript();
+      const scriptReady = await loadRazorpayScript();
 
-      if (typeof window !== 'undefined' && window.Razorpay) {
-        const options: any = {
-          key: keyId,
-          amount: product.sellingPricePaise,
-          currency: 'INR',
-          name: 'MKR Academy',
-          description: product.title.substring(0, 40),
-          image: 'https://images.unsplash.com/photo-1532094349884-543bc11b234d?auto=format&fit=crop&w=128&q=80',
-          order_id: razorpayOrderId && razorpayOrderId.startsWith('order_') ? razorpayOrderId : undefined,
-          prefill: {
-            name: studentName,
-            email: user.email || studentEmail,
-            contact: `+91${cleanedPhone}`
-          },
-          theme: {
-            color: '#b91c1c' // MKR Academy crimson red
-          },
-          handler: async function (response: any) {
-            await handleVerificationAndCompletion({
-              orderId,
-              razorpayOrderId: response.razorpay_order_id || razorpayOrderId,
-              razorpayPaymentId: response.razorpay_payment_id || `pay_${Date.now()}`,
-              razorpaySignature: response.razorpay_signature || ''
-            });
-          },
-          modal: {
-            ondismiss: function () {
-              setIsSubmitting(false);
-              setStep('review');
-            }
-          }
-        };
-
-        const rzp = new window.Razorpay(options);
-        rzp.on('payment.failed', function (response: any) {
-          console.error('Razorpay payment failed:', response.error);
-          recordFailedOrder(orderId, response.error?.description || 'Payment failed').catch(() => {});
-          setErrorMessage(response.error?.description || 'Payment was unsuccessful or cancelled. You have not been charged.');
-          setStep('failed');
-          setIsSubmitting(false);
-        });
-
-        rzp.open();
-      } else {
-        // Fallback for sandbox dev test if script is blocked
-        const simulatedPaymentId = `pay_sim_${Date.now()}`;
-        await handleVerificationAndCompletion({
-          orderId,
-          razorpayOrderId,
-          razorpayPaymentId: simulatedPaymentId,
-          razorpaySignature: 'dev_sandbox_signature'
-        });
+      if (!scriptReady || typeof window === 'undefined' || !window.Razorpay) {
+        setIsSubmitting(false);
+        setStep('review');
+        setErrorMessage('Razorpay payment gateway is still initializing. Please check your internet connection or click Pay Now again.');
+        return;
       }
+
+      const options: any = {
+        key: keyId,
+        amount: product.sellingPricePaise,
+        currency: 'INR',
+        name: 'MKR Academy',
+        description: product.title.substring(0, 40),
+        image: 'https://images.unsplash.com/photo-1532094349884-543bc11b234d?auto=format&fit=crop&w=128&q=80',
+        order_id: razorpayOrderId,
+        prefill: {
+          name: studentName.trim(),
+          email: user.email || studentEmail.trim(),
+          contact: `+91${cleanedPhone}`
+        },
+        theme: {
+          color: '#b91c1c' // MKR Academy crimson red
+        },
+        handler: async function (response: any) {
+          if (!response.razorpay_payment_id || !response.razorpay_signature) {
+            console.error('Missing payment signature in Razorpay response:', response);
+            setErrorMessage('Payment completion error: Missing signature from Razorpay. You have not been charged.');
+            setStep('failed');
+            setIsSubmitting(false);
+            return;
+          }
+          await handleVerificationAndCompletion({
+            orderId,
+            razorpayOrderId: response.razorpay_order_id || razorpayOrderId,
+            razorpayPaymentId: response.razorpay_payment_id,
+            razorpaySignature: response.razorpay_signature
+          });
+        },
+        modal: {
+          ondismiss: function () {
+            setIsSubmitting(false);
+            setStep('review');
+          }
+        }
+      };
+
+      const rzp = new window.Razorpay(options);
+      rzp.on('payment.failed', function (response: any) {
+        console.error('Razorpay payment failed:', response.error);
+        recordFailedOrder(orderId, response.error?.description || 'Payment failed').catch(() => {});
+        setErrorMessage(response.error?.description || 'Payment was unsuccessful or cancelled. You have not been charged.');
+        setStep('failed');
+        setIsSubmitting(false);
+      });
+
+      rzp.open();
     } catch (err: any) {
       console.error('Checkout error:', err);
       setErrorMessage(err.message || 'Payment processing error. Please try again.');
