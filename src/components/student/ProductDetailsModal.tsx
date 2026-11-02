@@ -39,8 +39,8 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
       : 0;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-stone-900/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl max-w-3xl w-full max-h-[92vh] overflow-y-auto shadow-2xl border border-stone-200 relative flex flex-col">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-stone-900/70 backdrop-blur-xs flex items-center justify-center p-2.5 sm:p-6 py-3 sm:py-6 animate-in fade-in duration-200">
+      <div className="bg-white rounded-2xl sm:rounded-3xl w-[95%] sm:w-full max-w-3xl max-h-[calc(100dvh-24px)] overflow-y-auto shadow-2xl border border-stone-200 relative flex flex-col my-auto">
         
         {/* Sticky Header Close Button */}
         <button

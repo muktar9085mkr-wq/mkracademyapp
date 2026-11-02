@@ -110,25 +110,26 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   // Step 2: Require login if not authenticated
   if (!user) {
     return (
-      <div className="fixed inset-0 z-50 overflow-y-auto bg-stone-900/70 backdrop-blur-xs flex items-center justify-center p-4">
-        <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-stone-200 text-center space-y-5">
-          <div className="w-14 h-14 rounded-2xl bg-red-50 text-red-700 flex items-center justify-center mx-auto">
-            <Lock className="w-7 h-7" />
+      <div className="fixed inset-0 z-50 overflow-y-auto bg-stone-900/70 backdrop-blur-xs flex items-center justify-center p-2.5 sm:p-4">
+        <div className="bg-white rounded-2xl sm:rounded-3xl w-[95%] sm:w-full max-w-md p-4 sm:p-6 shadow-2xl border border-stone-200 text-center space-y-3.5 my-auto max-h-[calc(100dvh-24px)] overflow-y-auto">
+          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-red-50 text-red-700 flex items-center justify-center mx-auto">
+            <Lock className="w-5 h-5 sm:w-6 sm:h-6" />
           </div>
           <div>
-            <h3 className="text-xl font-bold text-stone-900">Student Sign In Required</h3>
-            <p className="text-stone-600 text-sm mt-1">
-              Please sign in or create an account to purchase and permanently keep your notes.
+            <h3 className="text-base sm:text-lg font-bold text-stone-900">Sign In Required</h3>
+            <p className="text-stone-600 text-xs mt-0.5">
+              Please sign in to purchase and access your notes.
             </p>
           </div>
-          <div className="p-3 bg-stone-50 rounded-xl border border-stone-200 text-left text-xs space-y-1">
-            <p className="font-semibold text-stone-900">{product.title}</p>
-            <p className="text-stone-500">Price: ₹{product.sellingPricePaise / 100}</p>
+          <div className="p-2.5 bg-stone-50 rounded-xl border border-stone-200 text-left text-xs space-y-0.5">
+            <p className="font-semibold text-stone-900 line-clamp-1">{product.title}</p>
+            <p className="text-stone-500 text-[11px]">Payable: ₹{product.sellingPricePaise / 100}</p>
           </div>
-          <div className="grid grid-cols-2 gap-3 pt-2">
+          <div className="grid grid-cols-2 gap-2 pt-1">
             <button
               onClick={onClose}
-              className="py-2.5 px-4 rounded-xl border border-stone-300 font-semibold text-stone-700 text-sm hover:bg-stone-50"
+              type="button"
+              className="py-2 px-3 rounded-xl border border-stone-300 font-semibold text-stone-700 text-xs hover:bg-stone-50 cursor-pointer"
             >
               Cancel
             </button>
@@ -137,7 +138,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 onClose();
                 onRequireAuth();
               }}
-              className="py-2.5 px-4 rounded-xl bg-red-700 hover:bg-red-800 font-bold text-white text-sm shadow-md"
+              type="button"
+              className="py-2 px-3 rounded-xl bg-red-700 hover:bg-red-800 font-bold text-white text-xs shadow-md cursor-pointer"
             >
               Log In / Register
             </button>
@@ -357,118 +359,128 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-stone-900/70 backdrop-blur-xs flex justify-center p-3 sm:p-6 py-6 sm:py-8 animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-stone-200 relative my-auto">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-stone-900/70 backdrop-blur-xs flex items-center justify-center p-2.5 sm:p-6 py-3 sm:py-6 animate-in fade-in duration-200">
+      <div className="bg-white rounded-2xl sm:rounded-3xl w-[95%] sm:w-full max-w-md sm:max-w-lg overflow-hidden shadow-2xl border border-stone-200 relative my-auto max-h-[calc(100dvh-24px)] flex flex-col">
         
-        {/* Header */}
-        <div className="bg-stone-900 text-white p-5 flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <ShieldCheck className="w-5 h-5 text-red-500" />
-            <h3 className="font-bold text-base">
+        {/* Compact Header */}
+        <div className="bg-stone-900 text-white px-3.5 py-2.5 sm:px-5 sm:py-3.5 flex items-center justify-between shrink-0">
+          <div className="flex items-center space-x-1.5">
+            <ShieldCheck className="w-4 h-4 text-red-500" />
+            <h3 className="font-bold text-xs sm:text-sm">
               {step === 'success' ? 'Order Confirmed!' : 'Secure Checkout — MKR Academy'}
             </h3>
           </div>
           {step !== 'processing' && (
             <button
               onClick={onClose}
-              className="w-8 h-8 rounded-full bg-stone-800 hover:bg-stone-700 text-stone-300 flex items-center justify-center transition-colors"
+              type="button"
+              aria-label="Close Checkout"
+              className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-stone-800 hover:bg-stone-700 text-stone-300 flex items-center justify-center transition-colors cursor-pointer"
             >
-              <X className="w-4 h-4" />
+              <X className="w-3.5 h-3.5" />
             </button>
           )}
         </div>
 
         {/* Body content based on step */}
         {step === 'review' && (
-          <div className="p-6 space-y-5">
-            {/* Step 4: Order Summary Card */}
-            <div className="bg-stone-50 rounded-2xl p-4 border border-stone-200 space-y-3">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-red-700 bg-red-100 px-2 py-0.5 rounded">
-                    {product.classLevel}
-                  </span>
-                  <h4 className="font-bold text-stone-900 text-sm mt-1 leading-snug">
+          <div className="p-3.5 sm:p-5 space-y-2.5 sm:space-y-3.5 overflow-y-auto flex-1">
+            {/* Step 4: Compact Order Summary Card */}
+            <div className="bg-stone-50 rounded-xl p-2.5 sm:p-3 border border-stone-200 space-y-1.5">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center space-x-1.5">
+                    <span className="text-[9px] font-bold uppercase tracking-wider text-red-700 bg-red-100 px-1.5 py-0.2 rounded shrink-0">
+                      {product.classLevel}
+                    </span>
+                    <span className="text-[10px] text-stone-500 truncate">
+                      {product.medium} • PDF
+                    </span>
+                  </div>
+                  <h4 className="font-bold text-stone-900 text-xs sm:text-sm mt-0.5 leading-snug line-clamp-1">
                     {product.title}
                   </h4>
-                  <p className="text-stone-500 text-xs mt-0.5">{product.medium} • PDF Format</p>
                 </div>
               </div>
 
               {/* Price Breakdown */}
-              <div className="border-t border-stone-200 pt-3 space-y-1.5 text-xs">
-                <div className="flex justify-between text-stone-600">
+              <div className="border-t border-stone-200 pt-1.5 space-y-1 text-xs">
+                <div className="flex justify-between text-[11px] text-stone-500">
                   <span>Original Price</span>
                   <span className="line-through">₹{originalPrice}</span>
                 </div>
                 {discountAmount > 0 && (
-                  <div className="flex justify-between text-emerald-700 font-semibold">
-                    <span>Special Educational Discount</span>
+                  <div className="flex justify-between text-[11px] text-emerald-700 font-semibold">
+                    <span>Educational Discount</span>
                     <span>- ₹{discountAmount}</span>
                   </div>
                 )}
-                <div className="flex justify-between text-stone-900 font-extrabold text-base pt-1 border-t border-stone-200">
-                  <span>Total Payable Amount</span>
-                  <span className="text-red-700">₹{sellingPrice}</span>
+                <div className="flex justify-between items-center text-stone-900 font-extrabold text-xs sm:text-sm pt-1 border-t border-stone-200">
+                  <span>Total Payable</span>
+                  <span className="text-red-700 text-sm sm:text-base font-black">₹{sellingPrice}</span>
                 </div>
               </div>
             </div>
 
-            {/* Student Contact Verification (Step 3: Compulsory Phone & Name) */}
-            <div className="space-y-3">
-              <h4 className="text-xs font-bold text-stone-900 uppercase tracking-wider flex items-center space-x-1.5">
-                <UserIcon className="w-3.5 h-3.5 text-stone-500" />
+            {/* Student Contact Verification */}
+            <div className="space-y-2">
+              <h4 className="text-[10px] sm:text-[11px] font-bold text-stone-400 uppercase tracking-wider flex items-center space-x-1">
+                <UserIcon className="w-3 h-3 text-stone-400" />
                 <span>Student Details & Receipt</span>
               </h4>
 
-              <div className="space-y-3 text-xs">
+              <div className="space-y-2 text-xs">
                 <div>
-                  <label className="block text-stone-600 font-medium mb-1">
-                    Student Full Name <span className="text-red-600">*</span>
+                  <label className="block text-stone-600 font-medium mb-0.5 text-[11px]">
+                    Full Name <span className="text-red-600">*</span>
                   </label>
                   <input
                     type="text"
+                    required
                     value={studentName}
                     onChange={(e) => setStudentName(e.target.value)}
                     placeholder="e.g. Rahul Sharma"
-                    className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3.5 py-2.5 text-stone-900 focus:bg-white focus:outline-none focus:border-red-600"
+                    className="w-full bg-stone-50 border border-stone-300 rounded-lg sm:rounded-xl px-3 py-1.5 sm:py-2 text-xs text-stone-900 focus:bg-white focus:outline-none focus:border-red-600"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-stone-600 font-medium mb-1">
-                    Mobile Number (Compulsory for download receipts) <span className="text-red-600">*</span>
+                  <label className="block text-stone-600 font-medium mb-0.5 text-[11px]">
+                    Mobile Number <span className="text-red-600">*</span>
                   </label>
                   <div className="relative">
-                    <span className="absolute left-3 top-2.5 text-stone-400 font-mono font-medium text-xs">
+                    <span className="absolute left-2.5 top-1.5 sm:top-2 text-stone-400 font-mono text-xs">
                       +91
                     </span>
                     <input
                       type="tel"
+                      required
                       value={studentPhone}
                       onChange={(e) => handlePhoneChange(e.target.value)}
-                      placeholder="10-digit mobile number (e.g. 9864012345)"
+                      placeholder="10-digit mobile number"
                       maxLength={10}
-                      className={`w-full bg-stone-50 border rounded-xl pl-12 pr-3.5 py-2.5 font-mono text-stone-900 focus:bg-white focus:outline-none ${
+                      className={`w-full bg-stone-50 border rounded-lg sm:rounded-xl pl-10 pr-3 py-1.5 sm:py-2 font-mono text-xs text-stone-900 focus:bg-white focus:outline-none ${
                         phoneError ? 'border-red-500 bg-red-50/50' : 'border-stone-300 focus:border-red-600'
                       }`}
                     />
                   </div>
                   {phoneError && (
-                    <p className="text-[11px] text-red-600 mt-1 flex items-center space-x-1">
-                      <AlertCircle className="w-3 h-3" />
+                    <p className="text-[10px] text-red-600 mt-0.5 flex items-center space-x-1">
+                      <AlertCircle className="w-3 h-3 shrink-0" />
                       <span>{phoneError}</span>
                     </p>
                   )}
                 </div>
 
                 <div>
-                  <label className="block text-stone-600 font-medium mb-1">Email Address</label>
+                  <label className="block text-stone-600 font-medium mb-0.5 text-[11px]">
+                    Email Address <span className="text-stone-400 font-normal">(Optional)</span>
+                  </label>
                   <input
                     type="email"
                     value={user.email || studentEmail}
                     disabled
-                    className="w-full bg-stone-100 border border-stone-200 rounded-xl px-3.5 py-2 text-stone-500 cursor-not-allowed"
+                    className="w-full bg-stone-100 border border-stone-200 rounded-lg sm:rounded-xl px-3 py-1.5 sm:py-2 text-xs text-stone-500 cursor-not-allowed"
                   />
                 </div>
               </div>
@@ -476,37 +488,32 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
             {/* Error Display */}
             {errorMessage && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-start space-x-2">
-                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <div className="p-2.5 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-start space-x-1.5">
+                <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
                 <span>{errorMessage}</span>
               </div>
             )}
 
-            {/* Security Guarantee Note */}
-            <div className="bg-emerald-50/70 border border-emerald-200/80 p-3 rounded-2xl space-y-1.5">
-              <div className="flex items-center justify-between text-xs font-bold text-emerald-900">
-                <span className="flex items-center space-x-1.5">
-                  <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span>Razorpay Live Gateway Secured</span>
-                </span>
-                <span className="text-[10px] font-mono bg-emerald-200/70 text-emerald-950 px-2 py-0.5 rounded-full font-bold">
-                  256-Bit SSL
-                </span>
-              </div>
-              <p className="text-[11px] text-emerald-800 leading-snug">
-                Supports instant UPI (Google Pay, PhonePe, Paytm, BHIM), RuPay/Visa/Mastercard, and all Indian NetBanking banks.
-              </p>
+            {/* Compact Razorpay Security Indicator */}
+            <div className="bg-emerald-50/70 border border-emerald-200/80 px-2.5 py-1.5 rounded-xl flex items-center justify-between text-[11px] text-emerald-900">
+              <span className="flex items-center space-x-1 font-medium truncate">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span className="truncate">Razorpay Live Secured (UPI, Cards, NetBanking)</span>
+              </span>
+              <span className="text-[9px] font-mono bg-emerald-200/70 text-emerald-950 px-1.5 py-0.2 rounded font-bold shrink-0 ml-1">
+                256-Bit SSL
+              </span>
             </div>
 
-            {/* Pay Now Button */}
+            {/* Compact Pay Now Button */}
             <button
               onClick={handlePayNow}
               disabled={isSubmitting}
-              className="w-full py-3.5 px-4 rounded-xl bg-red-700 hover:bg-red-800 disabled:bg-stone-300 text-white font-bold text-sm shadow-lg shadow-red-800/25 flex items-center justify-center space-x-2 transition-all cursor-pointer"
+              className="w-full py-2.5 sm:py-3 px-4 rounded-xl bg-red-700 hover:bg-red-800 disabled:bg-stone-300 text-white font-bold text-xs sm:text-sm shadow-md flex items-center justify-center space-x-2 transition-all cursor-pointer active:scale-98"
             >
-              <Lock className="w-4 h-4" />
+              <Lock className="w-3.5 h-3.5" />
               <span>Proceed to Pay ₹{sellingPrice}</span>
-              <ArrowRight className="w-4 h-4" />
+              <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>
         )}
@@ -524,20 +531,20 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
         {/* Step 11: Success Confirmation */}
         {step === 'success' && (
-          <div className="p-8 text-center space-y-5">
-            <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto shadow-inner">
-              <CheckCircle2 className="w-9 h-9" />
+          <div className="p-4 sm:p-6 text-center space-y-3 sm:space-y-4 overflow-y-auto">
+            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto shadow-inner">
+              <CheckCircle2 className="w-7 h-7 sm:w-8 sm:h-8" />
             </div>
 
-            <div className="space-y-1">
-              <h3 className="text-xl font-extrabold text-stone-900">Payment Verified & Successful!</h3>
-              <p className="text-stone-600 text-xs">
+            <div className="space-y-0.5">
+              <h3 className="text-base sm:text-lg font-extrabold text-stone-900">Payment Verified & Successful!</h3>
+              <p className="text-stone-600 text-[11px] sm:text-xs">
                 Your notes entitlement has been activated and saved to your account.
               </p>
             </div>
 
             {/* Receipt Summary */}
-            <div className="bg-stone-50 p-4 rounded-2xl border border-stone-200 text-left text-xs space-y-2">
+            <div className="bg-stone-50 p-3 sm:p-4 rounded-xl border border-stone-200 text-left text-xs space-y-1.5">
               <div className="flex justify-between">
                 <span className="text-stone-500">Order ID:</span>
                 <span className="font-mono font-bold text-stone-800">{completedPurchase?.orderId}</span>
