@@ -249,6 +249,15 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         theme: {
           color: '#b91c1c' // MKR Academy crimson red
         },
+        // CRITICAL FOR ANDROID APK / WEBVIEW:
+        // Enables Razorpay UPI Intent flow (Google Pay, PhonePe, Paytm, BHIM)
+        webview_intent: true,
+        send_sms_hash: true,
+        retry: {
+          enabled: true,
+          max_count: 3
+        },
+        timeout: 900,
         handler: async function (response: any) {
           if (!response.razorpay_payment_id || !response.razorpay_signature) {
             console.error('Missing payment signature in Razorpay response:', response);
