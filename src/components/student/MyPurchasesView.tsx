@@ -18,7 +18,7 @@ import {
   X
 } from 'lucide-react';
 import { Purchase, Product } from '../../types';
-import { getUserPurchases } from '../../services/orderService';
+import { getUserPurchases, subscribeToUserPurchases } from '../../services/orderService';
 import { useAuth } from '../../context/AuthContext';
 
 interface MyPurchasesViewProps {
@@ -69,23 +69,29 @@ export const MyPurchasesView: React.FC<MyPurchasesViewProps> = ({
   };
 
   useEffect(() => {
-    async function loadPurchases() {
-      if (!user) {
-        setLoading(false);
-        return;
-      }
-      try {
-        setLoading(true);
-        const userPurchases = await getUserPurchases(user.uid);
-        setPurchases(userPurchases);
-      } catch (err) {
-        console.error('Failed to load user purchases:', err);
-      } finally {
-        setLoading(false);
-      }
+    if (!user) {
+      setPurchases([]);
+      setLoading(false);
+      return;
     }
 
-    loadPurchases();
+    setLoading(true);
+    // Real-time synchronization: immediately unlocks notes when Admin manually approves payment
+    const unsubscribe = subscribeToUserPurchases(
+      user.uid,
+      (userPurchases) => {
+        setPurchases(userPurchases);
+        setLoading(false);
+      },
+      (err) => {
+        console.warn('Real-time purchases subscription error:', err);
+        setLoading(false);
+      }
+    );
+
+    return () => {
+      unsubscribe();
+    };
   }, [user]);
 
   if (!user) {
@@ -199,10 +205,17 @@ export const MyPurchasesView: React.FC<MyPurchasesViewProps> = ({
                       className="w-full h-full object-cover"
                     />
                     <div className="absolute top-2.5 right-2.5">
-                      <span className="bg-emerald-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center space-x-1 shadow-xs">
-                        <ShieldCheck className="w-3 h-3" />
-                        <span>Verified Active</span>
-                      </span>
+                      {purchase.approvalMethod === 'admin_manual' ? (
+                        <span className="bg-emerald-700 text-white text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center space-x-1 shadow-xs" title={`Manually approved by ${purchase.approvedByAdminEmail || 'Admin'}`}>
+                          <ShieldCheck className="w-3 h-3 text-emerald-200" />
+                          <span>Approved by Admin</span>
+                        </span>
+                      ) : (
+                        <span className="bg-emerald-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center space-x-1 shadow-xs">
+                          <ShieldCheck className="w-3 h-3" />
+                          <span>Verified Active</span>
+                        </span>
+                      )}
                     </div>
                   </div>
 

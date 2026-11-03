@@ -70,6 +70,7 @@ import {
   getAllStudentsAdmin,
   subscribeToAllOrdersAdmin,
   updateOrderStatusAdmin,
+  manualApproveOrderAdmin,
   reconcileOrdersWithPurchases,
   processPendingTimeoutAndFailedCleanup,
   getArchivedOrdersAdmin
@@ -229,6 +230,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
   const [archivedOrders, setArchivedOrders] = useState<Order[]>([]);
   const [loadingArchivedOrders, setLoadingArchivedOrders] = useState(false);
 
+  // Manual Payment Approval System State
+  const [approvingOrder, setApprovingOrder] = useState<Order | null>(null);
+  const [approvalPaymentId, setApprovalPaymentId] = useState('');
+  const [approvalRemark, setApprovalRemark] = useState('');
+  const [approvalProcessing, setApprovalProcessing] = useState(false);
+  const [approvalError, setApprovalError] = useState<string | null>(null);
+  const [approvalSuccessMessage, setApprovalSuccessMessage] = useState<string | null>(null);
+  const [approvalAuditOrder, setApprovalAuditOrder] = useState<Order | null>(null);
+
   useEffect(() => {
     loadAllAdminData();
     fetchGatewayConfig();
@@ -380,7 +390,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
   ];
 
   // Calculated Metrics
-  const verifiedPaidOrders = orders.filter((o) => o.status === 'paid');
+  const verifiedPaidOrders = orders.filter((o) => o.status === 'paid' || o.status === 'manually_approved');
+  const manuallyApprovedOrders = orders.filter((o) => o.status === 'manually_approved');
+  const gatewayPaidOrders = orders.filter((o) => o.status === 'paid');
   const pendingOrders = orders.filter((o) => o.status === 'pending');
   const failedOrders = orders.filter((o) => o.status === 'failed');
   const refundedOrders = orders.filter((o) => o.status === 'refunded');
@@ -536,7 +548,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
   const productBreakdown = Array.from(productStatsMap.values()).sort((a, b) => b.revenue - a.revenue);
 
   const filteredOrdersRevenue = filteredOrdersList
-    .filter((o) => o.status === 'paid')
+    .filter((o) => o.status === 'paid' || o.status === 'manually_approved')
     .reduce((sum, o) => sum + (o.amountPaise || 0), 0) / 100;
 
   // Open Quick Price Editor (Paise & Rupees)
@@ -622,6 +634,41 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
       await updateOrderStatusAdmin(orderId, newStatus);
     } catch (err: any) {
       alert(`Could not update order status: ${err.message || err}`);
+    }
+  };
+
+  const handleOpenApproveModal = (order: Order) => {
+    setApprovingOrder(order);
+    setApprovalPaymentId(order.razorpayPaymentId || '');
+    setApprovalRemark('');
+    setApprovalError(null);
+  };
+
+  const handleConfirmManualApproval = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!approvingOrder || !user) return;
+    setApprovalProcessing(true);
+    setApprovalError(null);
+
+    try {
+      await manualApproveOrderAdmin({
+        orderId: approvingOrder.id,
+        adminEmail: user.email || 'muktar9085mkr@gmail.com',
+        adminUid: user.uid,
+        razorpayPaymentId: approvalPaymentId.trim() || undefined,
+        remark: approvalRemark.trim() || undefined
+      });
+
+      setApprovalSuccessMessage(
+        `Payment approved successfully for ${approvingOrder.studentName || 'Student'}! Instant access to "${approvingOrder.productTitleSnapshot}" has been activated.`
+      );
+      setApprovingOrder(null);
+      setTimeout(() => setApprovalSuccessMessage(null), 8000);
+    } catch (err: any) {
+      console.error('Manual approval failed:', err);
+      setApprovalError(err.message || 'Failed to approve payment. Please check network/permissions.');
+    } finally {
+      setApprovalProcessing(false);
     }
   };
 
@@ -2902,6 +2949,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
                 </div>
               )}
 
+              {/* Success Notification for Manual Approval */}
+              {approvalSuccessMessage && (
+                <div className="p-4 bg-emerald-50 border border-emerald-300 rounded-2xl flex items-center justify-between text-xs text-emerald-900 animate-in fade-in shadow-xs">
+                  <div className="flex items-center space-x-2.5">
+                    <div className="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0">
+                      <CheckCircle2 className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <span className="font-bold text-emerald-950">Manual Payment Approval Successful</span>
+                      <p className="text-[11px] text-emerald-800">{approvalSuccessMessage}</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setApprovalSuccessMessage(null)}
+                    className="text-emerald-700 hover:text-emerald-950 font-bold ml-2 cursor-pointer text-sm"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+
               {orderViewMode === 'active' ? (
                 <>
                   {/* 4 Key Order Metric Cards */}
@@ -2921,16 +2989,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                   </div>
                   <p className="text-xl font-black text-stone-900">{verifiedPaidOrders.length}</p>
-                  <p className="text-[10px] text-emerald-600 font-medium">Paid & Delivered</p>
+                  <p className="text-[10px] text-emerald-700 font-medium">
+                    {gatewayPaidOrders.length} gateway • {manuallyApprovedOrders.length} manual
+                  </p>
                 </div>
 
-                <div className="bg-stone-50 p-3.5 rounded-2xl border border-stone-200 space-y-1">
+                <div
+                  onClick={() => setOrderStatusFilter('pending')}
+                  className="bg-stone-50 hover:bg-amber-50/50 transition-colors p-3.5 rounded-2xl border border-stone-200 space-y-1 cursor-pointer"
+                  title="Click to view all pending approval orders"
+                >
                   <div className="flex items-center justify-between text-[10px] font-bold uppercase text-stone-400">
                     <span>Pending Payments</span>
                     <Clock className="w-3.5 h-3.5 text-amber-600" />
                   </div>
                   <p className="text-xl font-black text-amber-700">{pendingOrders.length}</p>
-                  <p className="text-[10px] text-amber-600 font-medium">Awaiting payment / sync</p>
+                  <p className="text-[10px] text-amber-600 font-medium font-semibold">
+                    {pendingOrders.length > 0 ? '⚡ Needs Admin Review' : 'All clear'}
+                  </p>
                 </div>
 
                 <div className="bg-stone-50 p-3.5 rounded-2xl border border-stone-200 space-y-1">
@@ -2981,15 +3057,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
                     ))}
                   </select>
 
-                  {/* 5-Status Filter (All, Paid, Pending, Failed, Refunded) */}
+                  {/* 6-Status Filter (All, Pending, Paid, Manually Approved, Failed, Refunded) */}
                   <select
                     value={orderStatusFilter}
                     onChange={(e) => setOrderStatusFilter(e.target.value)}
                     className="bg-white border border-stone-200 text-stone-800 rounded-xl px-2.5 py-1.5 font-semibold focus:outline-none focus:border-red-600 cursor-pointer shadow-2xs"
                   >
                     <option value="all">All Statuses ({orders.length})</option>
-                    <option value="paid">Paid & Verified ({verifiedPaidOrders.length})</option>
-                    <option value="pending">Pending ({pendingOrders.length})</option>
+                    <option value="pending">Pending Approval ({pendingOrders.length})</option>
+                    <option value="paid">Paid via Gateway ({gatewayPaidOrders.length})</option>
+                    <option value="manually_approved">Manually Approved ({manuallyApprovedOrders.length})</option>
                     <option value="failed">Failed ({failedOrders.length})</option>
                     <option value="refunded">Refunded ({refundedOrders.length})</option>
                   </select>
@@ -3101,22 +3178,46 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
                             ₹{((o.amountPaise || 0) / 100).toFixed(0)}
                           </td>
                           <td className="py-3 px-4">
-                            <span
-                              className={`inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${
-                                o.status === 'paid'
-                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                                  : o.status === 'pending'
-                                  ? 'bg-amber-100 text-amber-800 border border-amber-200'
-                                  : o.status === 'refunded'
-                                  ? 'bg-purple-100 text-purple-800 border border-purple-200'
-                                  : 'bg-rose-100 text-rose-800 border border-rose-200'
-                              }`}
-                            >
-                              {o.status === 'paid' && <CheckCircle2 className="w-3 h-3 text-emerald-600" />}
-                              {o.status === 'pending' && <Clock className="w-3 h-3 text-amber-600" />}
-                              {o.status === 'failed' && <AlertCircle className="w-3 h-3 text-rose-600" />}
-                              <span>{o.status}</span>
-                            </span>
+                            {o.status === 'manually_approved' ? (
+                              <div>
+                                <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-emerald-100 text-emerald-900 border border-emerald-300 shadow-2xs">
+                                  <ShieldCheck className="w-3 h-3 text-emerald-700" />
+                                  <span>Manually Approved</span>
+                                </span>
+                                <div className="mt-1 space-y-0.5 text-[10px]">
+                                  <p className="text-emerald-900 font-semibold truncate max-w-[170px]" title={o.approvedByAdminEmail || 'Admin'}>
+                                    By: {o.approvedByAdminEmail || 'Admin'}
+                                  </p>
+                                  {o.approvedAt && (
+                                    <p className="text-stone-400 font-mono text-[9px]">
+                                      {new Date(o.approvedAt).toLocaleDateString()} {new Date(o.approvedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    </p>
+                                  )}
+                                  {o.approvalRemark && (
+                                    <p className="text-stone-600 italic line-clamp-1 max-w-[170px]" title={o.approvalRemark}>
+                                      "{o.approvalRemark}"
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            ) : (
+                              <span
+                                className={`inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${
+                                  o.status === 'paid'
+                                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                    : o.status === 'pending'
+                                    ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                                    : o.status === 'refunded'
+                                    ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                                    : 'bg-rose-100 text-rose-800 border border-rose-200'
+                                }`}
+                              >
+                                {o.status === 'paid' && <CheckCircle2 className="w-3 h-3 text-emerald-600" />}
+                                {o.status === 'pending' && <Clock className="w-3 h-3 text-amber-600" />}
+                                {o.status === 'failed' && <AlertCircle className="w-3 h-3 text-rose-600" />}
+                                <span>{o.status === 'pending' ? 'Pending Approval' : o.status}</span>
+                              </span>
+                            )}
                             {o.status === 'failed' && (
                               <div className="mt-1">
                                 {o.failureReason && (
@@ -3147,40 +3248,68 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
                                 <>
                                   <button
                                     type="button"
-                                    onClick={() => handleUpdateOrderStatus(o.id, 'paid')}
-                                    className="px-2 py-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-[10px] font-bold shadow-2xs transition-colors cursor-pointer"
-                                    title="Mark order as Paid"
+                                    onClick={() => handleOpenApproveModal(o)}
+                                    className="px-2.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold shadow-xs flex items-center space-x-1 transition-all cursor-pointer"
+                                    title="Manually verify & approve payment, grant instant student note access"
                                   >
-                                    Mark Paid
+                                    <CheckCircle2 className="w-3.5 h-3.5" />
+                                    <span>Approve Payment</span>
                                   </button>
                                   <button
                                     type="button"
                                     onClick={() => handleUpdateOrderStatus(o.id, 'failed')}
-                                    className="px-2 py-1 bg-stone-200 hover:bg-rose-100 hover:text-rose-800 text-stone-700 rounded-lg text-[10px] font-bold transition-colors cursor-pointer"
+                                    className="px-2 py-1.5 bg-stone-100 hover:bg-rose-100 hover:text-rose-800 text-stone-600 rounded-lg text-[10px] font-semibold transition-colors cursor-pointer"
                                     title="Mark order as Failed"
                                   >
                                     Mark Failed
                                   </button>
                                 </>
                               )}
+                              {o.status === 'manually_approved' && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => setApprovalAuditOrder(o)}
+                                    className="px-2.5 py-1 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-lg text-[10px] font-bold transition-colors cursor-pointer flex items-center space-x-1"
+                                    title="View manual approval audit log & details"
+                                  >
+                                    <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                                    <span>Audit Info</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUpdateOrderStatus(o.id, 'refunded')}
+                                    className="px-2 py-1 bg-stone-100 hover:bg-purple-100 hover:text-purple-800 text-stone-600 rounded-lg text-[10px] font-bold transition-colors cursor-pointer"
+                                    title="Mark order as Refunded"
+                                  >
+                                    Refund
+                                  </button>
+                                </>
+                              )}
                               {o.status === 'paid' && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleUpdateOrderStatus(o.id, 'refunded')}
-                                  className="px-2 py-1 bg-stone-100 hover:bg-purple-100 hover:text-purple-800 text-stone-600 rounded-lg text-[10px] font-bold transition-colors cursor-pointer"
-                                  title="Mark order as Refunded"
-                                >
-                                  Refund
-                                </button>
+                                <>
+                                  <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                                    Delivered
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUpdateOrderStatus(o.id, 'refunded')}
+                                    className="px-2 py-1 bg-stone-100 hover:bg-purple-100 hover:text-purple-800 text-stone-600 rounded-lg text-[10px] font-bold transition-colors cursor-pointer"
+                                    title="Mark order as Refunded"
+                                  >
+                                    Refund
+                                  </button>
+                                </>
                               )}
                               {o.status === 'failed' && (
                                 <button
                                   type="button"
-                                  onClick={() => handleUpdateOrderStatus(o.id, 'paid')}
-                                  className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-lg text-[10px] font-bold transition-colors cursor-pointer"
-                                  title="Change to Paid"
+                                  onClick={() => handleOpenApproveModal(o)}
+                                  className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-lg text-[10px] font-bold flex items-center space-x-1 transition-colors cursor-pointer"
+                                  title="Student paid successfully but status marked failed? Click to manually approve and grant access"
                                 >
-                                  Mark Paid
+                                  <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                  <span>Approve Payment</span>
                                 </button>
                               )}
                               {o.status === 'refunded' && (
@@ -4168,6 +4297,250 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Manual Payment Approval Confirmation Modal */}
+      {approvingOrder && (
+        <div className="fixed inset-0 z-50 bg-stone-950/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-stone-200 space-y-4 max-h-[92vh] overflow-y-auto">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-stone-100">
+              <div className="flex items-center space-x-2.5">
+                <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">
+                  <ShieldCheck className="w-5 h-5 text-emerald-700" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-sm sm:text-base text-stone-900">
+                    Manual Payment Approval
+                  </h3>
+                  <p className="text-[11px] text-stone-500">
+                    Grant instant course/notes access to student
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setApprovingOrder(null)}
+                className="w-7 h-7 rounded-lg text-stone-400 hover:text-stone-700 hover:bg-stone-100 flex items-center justify-center cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Error Message */}
+            {approvalError && (
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 flex items-center space-x-2">
+                <AlertCircle className="w-4 h-4 text-rose-700 shrink-0" />
+                <span>{approvalError}</span>
+              </div>
+            )}
+
+            {/* Confirmation Question */}
+            <div className="p-3.5 bg-amber-50/80 border border-amber-200 rounded-2xl text-xs text-amber-900 leading-relaxed font-medium">
+              <p className="font-bold text-amber-950 mb-1">
+                ⚠️ Are you sure you want to manually approve this payment?
+              </p>
+              Confirming this will instantly unlock Google Drive notes in the student's dashboard and permanently record this approval in Firestore.
+            </div>
+
+            {/* Order & Student Details Snapshot */}
+            <div className="bg-stone-50 p-4 rounded-2xl border border-stone-200 space-y-2 text-xs">
+              <div className="flex items-start justify-between">
+                <div>
+                  <span className="text-[10px] text-stone-400 font-semibold uppercase tracking-wider">Product / Notes</span>
+                  <p className="font-bold text-stone-900 text-sm">{approvingOrder.productTitleSnapshot}</p>
+                </div>
+                <div className="text-right">
+                  <span className="text-[10px] text-stone-400 font-semibold uppercase tracking-wider">Amount</span>
+                  <p className="font-black text-emerald-700 text-base">₹{((approvingOrder.amountPaise || 0) / 100).toFixed(0)}</p>
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-stone-200 grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                <div>
+                  <span className="text-stone-400">Student Name:</span>{' '}
+                  <strong className="text-stone-800">{approvingOrder.studentName || 'Student'}</strong>
+                </div>
+                <div>
+                  <span className="text-stone-400">Mobile Phone:</span>{' '}
+                  <strong className="text-stone-800 font-mono">+91 {approvingOrder.studentPhone || 'N/A'}</strong>
+                </div>
+                <div className="sm:col-span-2">
+                  <span className="text-stone-400">Email:</span>{' '}
+                  <strong className="text-stone-800">{approvingOrder.studentEmail || 'N/A'}</strong>
+                </div>
+                <div className="sm:col-span-2">
+                  <span className="text-stone-400">Order ID:</span>{' '}
+                  <code className="text-stone-700 font-mono bg-white px-1.5 py-0.5 rounded border border-stone-200">{approvingOrder.id}</code>
+                </div>
+              </div>
+            </div>
+
+            {/* Approval Input Form */}
+            <form onSubmit={handleConfirmManualApproval} className="space-y-3.5 text-xs">
+              <div>
+                <label className="block text-stone-700 font-bold mb-1">
+                  Razorpay Payment ID / UTR Number (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={approvalPaymentId}
+                  onChange={(e) => setApprovalPaymentId(e.target.value)}
+                  placeholder="e.g. pay_Nabc123 or UTR 40291823719"
+                  className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 font-mono text-stone-900 focus:bg-white focus:outline-none focus:border-emerald-600"
+                />
+                <p className="text-[10px] text-stone-400 mt-0.5">
+                  Enter UTR from payment screenshot or UPI receipt for accounting records.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-stone-700 font-bold mb-1">
+                  Admin Approval Remark / Note (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={approvalRemark}
+                  onChange={(e) => setApprovalRemark(e.target.value)}
+                  placeholder="e.g. Verified via WhatsApp payment screenshot"
+                  className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-stone-900 focus:bg-white focus:outline-none focus:border-emerald-600"
+                />
+              </div>
+
+              {/* What happens next checklist */}
+              <div className="p-3 bg-emerald-50/70 rounded-xl border border-emerald-200 text-[11px] text-emerald-900 space-y-1">
+                <p className="font-bold flex items-center space-x-1 text-emerald-950">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700" />
+                  <span>Immediate Actions upon Approval:</span>
+                </p>
+                <p>• Student account receives immediate Google Drive access in My Purchases.</p>
+                <p>• Real-time synchronization updates student dashboard without page reload.</p>
+                <p>• Approved by admin email (<strong className="font-mono">{user?.email || 'Admin'}</strong>) saved in audit trail.</p>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-end space-x-2.5 pt-2 border-t border-stone-100">
+                <button
+                  type="button"
+                  onClick={() => setApprovingOrder(null)}
+                  disabled={approvalProcessing}
+                  className="px-4 py-2 rounded-xl border border-stone-300 text-stone-700 hover:bg-stone-50 font-bold transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={approvalProcessing}
+                  className="px-5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 disabled:bg-stone-300 text-white font-bold flex items-center space-x-2 shadow-md transition-all cursor-pointer"
+                >
+                  {approvalProcessing ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                  )}
+                  <span>{approvalProcessing ? 'Approving...' : 'Confirm & Approve Payment'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Manual Approval Audit Details Modal */}
+      {approvalAuditOrder && (
+        <div className="fixed inset-0 z-50 bg-stone-950/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-stone-200 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-stone-100">
+              <div className="flex items-center space-x-2.5">
+                <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                  <ShieldCheck className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-sm text-stone-900">
+                    Approval Audit Record
+                  </h3>
+                  <p className="text-[11px] text-stone-500 font-mono">
+                    Order #{approvalAuditOrder.id}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setApprovalAuditOrder(null)}
+                className="w-7 h-7 rounded-lg text-stone-400 hover:text-stone-700 hover:bg-stone-100 flex items-center justify-center cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-2.5 text-xs">
+              <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800">Status</span>
+                <p className="font-extrabold text-emerald-950 text-sm">Manually Approved by Administrator</p>
+              </div>
+
+              <div className="space-y-2 bg-stone-50 p-3.5 rounded-xl border border-stone-200 text-[11px]">
+                <div className="flex justify-between">
+                  <span className="text-stone-500">Student:</span>
+                  <span className="font-bold text-stone-800">{approvalAuditOrder.studentName}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-stone-500">Phone:</span>
+                  <span className="font-mono text-stone-800">+91 {approvalAuditOrder.studentPhone}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-stone-500">Email:</span>
+                  <span className="text-stone-800">{approvalAuditOrder.studentEmail}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-stone-500">Course / Notes:</span>
+                  <span className="font-medium text-stone-800 text-right truncate max-w-[200px]">{approvalAuditOrder.productTitleSnapshot}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-stone-500">Amount Paid:</span>
+                  <span className="font-bold text-emerald-700">₹{(approvalAuditOrder.amountPaise || 0) / 100}</span>
+                </div>
+              </div>
+
+              <div className="space-y-2 bg-stone-50 p-3.5 rounded-xl border border-stone-200 text-[11px]">
+                <div>
+                  <span className="text-stone-500 block">Approved By Admin:</span>
+                  <span className="font-bold text-stone-800 font-mono">{approvalAuditOrder.approvedByAdminEmail || 'muktar9085mkr@gmail.com'}</span>
+                </div>
+                <div>
+                  <span className="text-stone-500 block">Approval Timestamp:</span>
+                  <span className="font-medium text-stone-800 font-mono">
+                    {approvalAuditOrder.approvedAt ? new Date(approvalAuditOrder.approvedAt).toLocaleString() : 'N/A'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-stone-500 block">UTR / Payment ID:</span>
+                  <code className="text-emerald-800 font-bold font-mono bg-white px-2 py-0.5 rounded border border-emerald-200 block mt-0.5">
+                    {approvalAuditOrder.razorpayPaymentId || 'N/A'}
+                  </code>
+                </div>
+                {approvalAuditOrder.approvalRemark && (
+                  <div>
+                    <span className="text-stone-500 block">Admin Remark:</span>
+                    <p className="text-stone-700 italic bg-white p-2 rounded border border-stone-200 mt-0.5">
+                      "{approvalAuditOrder.approvalRemark}"
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-2 border-t border-stone-100">
+              <button
+                type="button"
+                onClick={() => setApprovalAuditOrder(null)}
+                className="px-4 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
+              >
+                Close Audit View
+              </button>
+            </div>
           </div>
         </div>
       )}

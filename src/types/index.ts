@@ -86,7 +86,7 @@ export interface UserProfile {
   updatedAt?: string;
 }
 
-export type OrderStatus = 'pending' | 'paid' | 'failed' | 'refunded';
+export type OrderStatus = 'pending' | 'paid' | 'failed' | 'refunded' | 'manually_approved';
 
 export interface Order {
   id: string;
@@ -112,6 +112,12 @@ export interface Order {
   archiveReason?: string;
   lastVerifiedWithRazorpayAt?: string;
   razorpayStatusSnapshot?: string;
+  // Manual Payment Approval audit fields
+  approvedByAdminEmail?: string;
+  approvedByAdminUid?: string;
+  approvedAt?: string;
+  approvalRemark?: string;
+  approvalMethod?: 'razorpay_automatic' | 'admin_manual';
 }
 
 export interface ReconcileAndCleanupResult {
@@ -135,6 +141,11 @@ export interface Purchase {
   entitlementStatus: 'active' | 'revoked';
   purchasedAt: string;
   createdAt: string;
+  // Audit fields
+  approvalMethod?: 'razorpay_automatic' | 'admin_manual';
+  approvedByAdminEmail?: string;
+  approvedAt?: string;
+  approvalRemark?: string;
 }
 
 export interface PromotionalBanner {

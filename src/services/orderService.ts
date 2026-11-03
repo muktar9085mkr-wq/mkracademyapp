@@ -337,6 +337,154 @@ export async function updateOrderStatusAdmin(
 }
 
 /**
+ * Admin: Manually approve a pending or failed order.
+ * - Creates/activates student purchase entitlement in 'purchases' collection with deterministic ID.
+ * - Injects Google Drive file link and product cover.
+ * - Updates the order status to 'manually_approved' with full audit trail.
+ * - Calls server-side audit logging.
+ */
+export async function manualApproveOrderAdmin(params: {
+  orderId: string;
+  adminEmail: string;
+  adminUid: string;
+  razorpayPaymentId?: string;
+  remark?: string;
+}): Promise<Purchase> {
+  const { orderId, adminEmail, adminUid, razorpayPaymentId, remark } = params;
+  const now = new Date().toISOString();
+
+  // 1. Fetch the order
+  const orderRef = doc(db, ORDERS_COLLECTION, orderId);
+  const orderSnap = await getDoc(orderRef);
+  if (!orderSnap.exists()) {
+    throw new Error(`Order ${orderId} does not exist`);
+  }
+  const order = orderSnap.data() as Order;
+
+  // 2. Fetch the corresponding product details to get Drive links & cover
+  let productDriveLink = '';
+  let productCover = '';
+  let productPdfPath = '';
+  let productTitle = order.productTitleSnapshot || 'Educational Notes';
+
+  try {
+    const productRef = doc(db, 'products', order.productId);
+    const prodSnap = await getDoc(productRef);
+    if (prodSnap.exists()) {
+      const prodData = prodSnap.data() as any;
+      productDriveLink = prodData.driveFileLink || '';
+      productCover = prodData.coverImagePath || '';
+      productPdfPath = prodData.pdfStoragePath || '';
+      productTitle = prodData.title || productTitle;
+    }
+  } catch (err) {
+    console.warn('Could not fetch product details during manual approval, using order snapshot:', err);
+  }
+
+  // 3. Create or update deterministic purchase entitlement
+  const purchaseId = `pur_${order.uid}_${order.productId}`.replace(/[^a-zA-Z0-9_-]/g, '_');
+  const purchaseRef = doc(db, PURCHASES_COLLECTION, purchaseId);
+
+  const paymentIdentifier = razorpayPaymentId?.trim()
+    || order.razorpayPaymentId
+    || `MANUAL_${Date.now()}`;
+
+  const purchaseData: Purchase = {
+    id: purchaseId,
+    uid: order.uid,
+    productId: order.productId,
+    orderId: order.id,
+    productTitle,
+    coverImagePath: productCover,
+    driveFileLink: productDriveLink,
+    pdfStoragePath: productPdfPath,
+    entitlementStatus: 'active',
+    purchasedAt: now,
+    createdAt: now,
+    approvalMethod: 'admin_manual',
+    approvedByAdminEmail: adminEmail,
+    approvedAt: now,
+    approvalRemark: remark?.trim() || 'Manually approved by administrator'
+  };
+
+  await setDoc(purchaseRef, purchaseData, { merge: true });
+
+  // 4. Update the order document
+  const orderUpdate: Partial<Order> = {
+    status: 'manually_approved',
+    razorpayPaymentId: paymentIdentifier,
+    verifiedAt: now,
+    updatedAt: now,
+    approvedAt: now,
+    approvedByAdminEmail: adminEmail,
+    approvedByAdminUid: adminUid,
+    approvalRemark: remark?.trim() || 'Payment verified and approved manually',
+    approvalMethod: 'admin_manual'
+  };
+
+  await setDoc(orderRef, orderUpdate, { merge: true });
+
+  // 5. Fire background backend call for server-side audit logging
+  try {
+    fetch('/api/admin/approve-payment', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        orderId,
+        adminEmail,
+        adminUid,
+        razorpayPaymentId: paymentIdentifier,
+        remark: remark?.trim() || ''
+      })
+    }).catch((apiErr) => console.warn('Backend approval logging notice:', apiErr));
+  } catch (err) {
+    // Non-blocking
+  }
+
+  return purchaseData;
+}
+
+/**
+ * Real-time subscription to orders for a specific student.
+ */
+export function subscribeToUserOrders(
+  uid: string,
+  callback: (orders: Order[]) => void,
+  onError?: (error: Error) => void
+): () => void {
+  if (!uid) {
+    callback([]);
+    return () => {};
+  }
+  try {
+    const q = query(
+      collection(db, ORDERS_COLLECTION),
+      where('uid', '==', uid)
+    );
+    const unsubscribe = onSnapshot(
+      q,
+      (querySnapshot) => {
+        const orders: Order[] = [];
+        querySnapshot.forEach((docSnap) => {
+          orders.push(docSnap.data() as Order);
+        });
+        orders.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+        callback(orders);
+      },
+      (error) => {
+        console.warn('Real-time student orders listener error:', error);
+        if (onError) onError(error);
+      }
+    );
+    return unsubscribe;
+  } catch (err: any) {
+    console.warn('Failed to attach student orders listener:', err);
+    callback([]);
+    return () => {};
+  }
+}
+
+/**
  * Reconcile orphaned 'pending' orders with verified purchases
  * If a student has an active purchase record, the corresponding order is updated to 'paid'
  */

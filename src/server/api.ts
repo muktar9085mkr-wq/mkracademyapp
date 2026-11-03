@@ -247,6 +247,45 @@ export function createApiApp() {
   });
 
   /**
+   * Admin Manual Payment Approval Endpoint
+   * Allows authorized administrator (muktar9085mkr@gmail.com) to manually approve a payment
+   * and log the audit entry.
+   */
+  router.post('/admin/approve-payment', async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { orderId, adminEmail, adminUid, razorpayPaymentId, remark } = req.body;
+
+      if (!orderId) {
+        res.status(400).json({ error: 'Order ID is required' });
+        return;
+      }
+
+      const configuredAdminEmail = getAdminEmail().toLowerCase();
+      const requestingAdminEmail = (adminEmail || '').toLowerCase();
+
+      // Ensure caller is authorized admin
+      if (requestingAdminEmail !== configuredAdminEmail) {
+        res.status(403).json({ error: 'Unauthorized: Only MKR Academy administrator can approve payments' });
+        return;
+      }
+
+      const timestamp = new Date().toISOString();
+      console.log(`[MANUAL PAYMENT APPROVAL] Order ${orderId} manually approved by ${adminEmail} (UID: ${adminUid}) at ${timestamp}. UTR/PaymentID: ${razorpayPaymentId || 'N/A'}. Remark: ${remark || 'None'}`);
+
+      res.json({
+        success: true,
+        message: 'Payment successfully approved by administrator',
+        orderId,
+        approvedAt: timestamp,
+        approvedBy: adminEmail
+      });
+    } catch (err: any) {
+      console.error('Error in manual payment approval API:', err);
+      res.status(500).json({ error: err?.message || 'Failed to process manual payment approval' });
+    }
+  });
+
+  /**
    * Webhook handler for Razorpay async payment capture
    */
   router.post('/payment/webhook', (req: Request, res: Response): void => {

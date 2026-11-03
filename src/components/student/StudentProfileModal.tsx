@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { Order } from '../../types';
-import { getUserOrders } from '../../services/orderService';
+import { getUserOrders, subscribeToUserOrders } from '../../services/orderService';
 
 interface StudentProfileModalProps {
   isOpen: boolean;
@@ -40,22 +40,29 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
       setDisplayName(profile.displayName || '');
       setPhoneNumber(profile.phoneNumber || '');
     }
-    if (user) {
-      loadOrders(user.uid);
-    }
-  }, [profile, user]);
+  }, [profile]);
 
-  const loadOrders = async (uid: string) => {
-    try {
-      setLoadingOrders(true);
-      const userOrders = await getUserOrders(uid);
-      setOrders(userOrders);
-    } catch (err) {
-      console.error('Could not load user orders:', err);
-    } finally {
-      setLoadingOrders(false);
-    }
-  };
+  useEffect(() => {
+    if (!isOpen || !user) return;
+
+    setLoadingOrders(true);
+    // Real-time synchronization of student orders
+    const unsubscribe = subscribeToUserOrders(
+      user.uid,
+      (userOrders) => {
+        setOrders(userOrders);
+        setLoadingOrders(false);
+      },
+      (err) => {
+        console.warn('Real-time student orders error:', err);
+        setLoadingOrders(false);
+      }
+    );
+
+    return () => {
+      unsubscribe();
+    };
+  }, [isOpen, user]);
 
   if (!isOpen || !user) return null;
 
@@ -231,19 +238,31 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
                     </p>
                   </div>
 
-                  <div className="text-right shrink-0">
+                    <div className="text-right shrink-0">
                     <p className="font-extrabold text-stone-900 text-xs">₹{ord.amountPaise / 100}</p>
-                    <span
-                      className={`inline-block text-[9px] font-bold px-1.5 py-0.2 rounded uppercase ${
-                        ord.status === 'paid'
-                          ? 'bg-emerald-100 text-emerald-800'
-                          : ord.status === 'pending'
-                          ? 'bg-amber-100 text-amber-800'
-                          : 'bg-red-100 text-red-800'
-                      }`}
-                    >
-                      {ord.status}
-                    </span>
+                    {ord.status === 'manually_approved' ? (
+                      <span className="inline-flex items-center space-x-1 text-[9px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 uppercase shadow-2xs">
+                        <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
+                        <span>Access Granted</span>
+                      </span>
+                    ) : ord.status === 'paid' ? (
+                      <span className="inline-flex items-center space-x-1 text-[9px] font-extrabold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 uppercase">
+                        <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
+                        <span>Paid</span>
+                      </span>
+                    ) : ord.status === 'pending' ? (
+                      <span className="inline-block text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 uppercase">
+                        Pending
+                      </span>
+                    ) : ord.status === 'refunded' ? (
+                      <span className="inline-block text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-800 uppercase">
+                        Refunded
+                      </span>
+                    ) : (
+                      <span className="inline-block text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-red-100 text-red-800 uppercase">
+                        Failed
+                      </span>
+                    )}
                   </div>
                 </div>
               ))}

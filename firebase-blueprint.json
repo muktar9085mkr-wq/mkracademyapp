@@ -69,7 +69,7 @@
         "currency": { "type": "string", "maxLength": 10 },
         "razorpayOrderId": { "type": "string", "maxLength": 128 },
         "razorpayPaymentId": { "type": "string", "maxLength": 128 },
-        "status": { "type": "string", "enum": ["pending", "paid", "failed", "refunded"] },
+        "status": { "type": "string", "enum": ["pending", "paid", "failed", "refunded", "manually_approved"] },
         "createdAt": { "type": "string" },
         "verifiedAt": { "type": "string" },
         "failedAt": { "type": "string" },
@@ -79,6 +79,11 @@
         "archivedAt": { "type": "string" },
         "archiveReason": { "type": "string" },
         "lastVerifiedWithRazorpayAt": { "type": "string" },
+        "approvedByAdminEmail": { "type": "string" },
+        "approvedByAdminUid": { "type": "string" },
+        "approvedAt": { "type": "string" },
+        "approvalRemark": { "type": "string" },
+        "approvalMethod": { "type": "string", "enum": ["razorpay_automatic", "admin_manual"] },
         "updatedAt": { "type": "string" }
       },
       "required": ["uid", "productId", "amountPaise", "status"]
