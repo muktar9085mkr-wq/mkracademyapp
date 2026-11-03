@@ -1150,7 +1150,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
               <ShoppingBag className="w-4 h-4" />
               <span>Orders & Payments</span>
             </div>
-            <span className="text-[11px] opacity-80">{orders.length}</span>
+            <div className="flex items-center space-x-1.5">
+              {pendingOrders.length > 0 && (
+                <span className="bg-amber-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full animate-pulse shadow-xs">
+                  {pendingOrders.length} Pending
+                </span>
+              )}
+              <span className="text-[11px] opacity-80">{orders.length}</span>
+            </div>
           </button>
 
           <button
@@ -1289,6 +1296,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
                   <p className="text-[10px] text-stone-400">{todayPaidOrders.length} sales today • {students.length} students</p>
                 </div>
               </div>
+
+              {/* Pending Approvals Notice Banner on Main Dashboard */}
+              {pendingOrders.length > 0 && (
+                <div className="p-4 bg-gradient-to-r from-amber-600 via-amber-500 to-amber-600 text-white rounded-2xl shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-10 h-10 rounded-xl bg-white/20 text-white flex items-center justify-center font-bold shrink-0">
+                      <Clock className="w-5 h-5 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="font-extrabold text-sm sm:text-base">
+                        {pendingOrders.length} Pending Payment{pendingOrders.length > 1 ? 's' : ''} Require Manual Approval
+                      </h3>
+                      <p className="text-xs text-amber-100">
+                        Students have placed orders that are awaiting payment approval. Click below to review and grant instant notes access.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCurrentTab('orders');
+                      setOrderStatusFilter('pending');
+                    }}
+                    className="px-4 py-2.5 bg-white text-amber-950 hover:bg-amber-50 font-black text-xs rounded-xl shadow-xs transition-colors cursor-pointer shrink-0 flex items-center space-x-1.5"
+                  >
+                    <span>Approve Pending Payments ({pendingOrders.length})</span>
+                    <span>→</span>
+                  </button>
+                </div>
+              )}
 
               {/* REVENUE & EARNINGS ANALYTICS: MONTHLY & YEARLY BREAKDOWN */}
               <div className="bg-stone-50 border border-stone-200 rounded-3xl p-6 space-y-5">
@@ -3100,228 +3137,460 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
                 </div>
               </div>
 
-              {/* Orders Table */}
-              <div className="border border-stone-200 rounded-2xl overflow-hidden shadow-2xs">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-stone-50 border-b border-stone-200 text-stone-500 uppercase text-[10px] font-bold">
-                    <tr>
-                      <th className="py-3 px-4">Order & Payment IDs</th>
-                      <th className="py-3 px-4">Student & Contact</th>
-                      <th className="py-3 px-4">Product Snapshot</th>
-                      <th className="py-3 px-4">Amount</th>
-                      <th className="py-3 px-4">Status</th>
-                      <th className="py-3 px-4">Date</th>
-                      <th className="py-3 px-4 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-stone-100">
-                    {filteredOrdersList.length === 0 ? (
+              {/* Quick Alert: Pending Payments Awaiting Approval */}
+              {pendingOrders.length > 0 && orderStatusFilter !== 'pending' && (
+                <div className="p-4 bg-gradient-to-r from-amber-600 via-amber-500 to-amber-600 text-white rounded-2xl shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-10 h-10 rounded-xl bg-white/20 text-white flex items-center justify-center font-bold shrink-0">
+                      <Clock className="w-5 h-5 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="font-extrabold text-sm sm:text-base">
+                        {pendingOrders.length} Pending Payment{pendingOrders.length > 1 ? 's' : ''} Awaiting Approval
+                      </h3>
+                      <p className="text-xs text-amber-100">
+                        Click "Approve Payment" on any pending order to instantly unlock student notes.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setOrderStatusFilter('pending')}
+                    className="px-4 py-2 bg-white text-amber-950 hover:bg-amber-50 font-extrabold text-xs rounded-xl shadow-xs transition-colors cursor-pointer shrink-0"
+                  >
+                    View Pending Orders ({pendingOrders.length}) →
+                  </button>
+                </div>
+              )}
+
+              {/* 1. MOBILE & TABLET RESPONSIVE CARDS VIEW (Visible on mobile & tablet: block lg:hidden) */}
+              <div className="block lg:hidden space-y-3.5">
+                {filteredOrdersList.length === 0 ? (
+                  <div className="bg-stone-50 border-2 border-dashed border-stone-200 rounded-3xl p-8 text-center space-y-2">
+                    <ShoppingBag className="w-8 h-8 text-stone-300 mx-auto" />
+                    <p className="font-semibold text-stone-700 text-sm">No orders match this filter</p>
+                    <p className="text-xs text-stone-400">Try adjusting your status or search query.</p>
+                  </div>
+                ) : (
+                  filteredOrdersList.map((o) => (
+                    <div
+                      key={o.id}
+                      className="bg-white rounded-2xl border border-stone-200 p-4 space-y-3 shadow-xs hover:border-stone-300 transition-all"
+                    >
+                      {/* Top Row: Order ID, Date, Status */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="flex items-center space-x-1.5 font-mono">
+                            <span className="font-bold text-stone-900 text-xs sm:text-sm">{o.id}</span>
+                            <button
+                              type="button"
+                              onClick={() => navigator.clipboard.writeText(o.id)}
+                              title="Copy Order ID"
+                              className="text-stone-400 hover:text-stone-700 p-1 cursor-pointer"
+                            >
+                              <Copy className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                          <p className="text-[10px] text-stone-400">
+                            {new Date(o.createdAt).toLocaleDateString()} at{' '}
+                            {new Date(o.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </p>
+                        </div>
+
+                        {/* Status Badge */}
+                        <div>
+                          {o.status === 'manually_approved' ? (
+                            <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-emerald-100 text-emerald-900 border border-emerald-300 shadow-2xs">
+                              <ShieldCheck className="w-3 h-3 text-emerald-700" />
+                              <span>Manually Approved</span>
+                            </span>
+                          ) : (
+                            <span
+                              className={`inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${
+                                o.status === 'paid'
+                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                  : o.status === 'pending'
+                                  ? 'bg-amber-100 text-amber-800 border border-amber-300 animate-pulse'
+                                  : o.status === 'refunded'
+                                  ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                                  : 'bg-rose-100 text-rose-800 border border-rose-200'
+                              }`}
+                            >
+                              {o.status === 'paid' && <CheckCircle2 className="w-3 h-3 text-emerald-600" />}
+                              {o.status === 'pending' && <Clock className="w-3 h-3 text-amber-600" />}
+                              {o.status === 'failed' && <AlertCircle className="w-3 h-3 text-rose-600" />}
+                              <span>{o.status === 'pending' ? 'Pending Approval' : o.status}</span>
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Product Snapshot & Amount Paid */}
+                      <div className="bg-stone-50 p-3 rounded-xl border border-stone-200 flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-[10px] text-stone-400 font-semibold uppercase tracking-wider">Product / Notes</p>
+                          <p className="font-bold text-stone-900 text-xs sm:text-sm truncate">
+                            {o.productTitleSnapshot || 'Educational Notes'}
+                          </p>
+                          <p className="text-[10px] text-stone-400 font-mono">ID: {o.productId}</p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <span className="text-[10px] text-stone-400 font-semibold uppercase tracking-wider block">Price</span>
+                          <span className="text-base sm:text-lg font-black text-emerald-700">
+                            ₹{((o.amountPaise || 0) / 100).toFixed(0)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Student & Contact Info */}
+                      <div className="space-y-1 text-xs text-stone-600 bg-stone-50/50 p-2.5 rounded-xl border border-stone-100">
+                        <div className="flex items-center justify-between">
+                          <span className="text-stone-400 text-[11px]">Student:</span>
+                          <strong className="text-stone-900 font-semibold">{o.studentName || 'Student'}</strong>
+                        </div>
+                        {o.studentPhone && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-stone-400 text-[11px]">Phone:</span>
+                            <a
+                              href={`tel:${o.studentPhone}`}
+                              className="text-blue-700 font-mono font-bold hover:underline"
+                            >
+                              📱 +91 {o.studentPhone}
+                            </a>
+                          </div>
+                        )}
+                        <div className="flex items-center justify-between">
+                          <span className="text-stone-400 text-[11px]">Email:</span>
+                          <span className="text-stone-700 truncate max-w-[200px] text-[11px]">{o.studentEmail}</span>
+                        </div>
+                        {o.razorpayPaymentId && (
+                          <div className="flex items-center justify-between font-mono text-[10px] text-emerald-800 pt-1 border-t border-stone-200">
+                            <span>Payment ID:</span>
+                            <span className="font-bold truncate max-w-[170px]">{o.razorpayPaymentId}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Manual Approval Details (if already approved) */}
+                      {o.status === 'manually_approved' && (
+                        <div className="bg-emerald-50/80 p-2.5 rounded-xl border border-emerald-200 text-[11px] space-y-0.5">
+                          <p className="font-bold text-emerald-950 flex items-center space-x-1">
+                            <ShieldCheck className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                            <span>Approved By: {o.approvedByAdminEmail || 'Admin'}</span>
+                          </p>
+                          {o.approvedAt && (
+                            <p className="text-[10px] text-stone-500 font-mono">
+                              {new Date(o.approvedAt).toLocaleDateString()} at{' '}
+                              {new Date(o.approvedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </p>
+                          )}
+                          {o.approvalRemark && (
+                            <p className="text-[10px] text-stone-700 italic">"{o.approvalRemark}"</p>
+                          )}
+                        </div>
+                      )}
+
+                      {/* PRIMARY ACTION BUTTONS: Highly visible and prominent for Mobile & Tablet */}
+                      <div className="pt-2 border-t border-stone-100 flex flex-wrap items-center gap-2">
+                        {o.status === 'pending' && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenApproveModal(o)}
+                              className="flex-1 py-3 px-4 bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 text-white rounded-xl text-xs sm:text-sm font-black shadow-md flex items-center justify-center space-x-2 transition-all cursor-pointer"
+                            >
+                              <CheckCircle2 className="w-4 h-4 text-emerald-200" />
+                              <span>Approve Payment (मैन्युअल अप्रूव करें)</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateOrderStatus(o.id, 'failed')}
+                              className="py-3 px-3 bg-stone-100 hover:bg-rose-100 hover:text-rose-800 text-stone-600 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                            >
+                              Mark Failed
+                            </button>
+                          </>
+                        )}
+
+                        {o.status === 'manually_approved' && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => setApprovalAuditOrder(o)}
+                              className="flex-1 py-2.5 px-3 bg-stone-100 hover:bg-stone-200 text-stone-800 rounded-xl text-xs font-bold flex items-center justify-center space-x-1.5 transition-colors cursor-pointer"
+                            >
+                              <ShieldCheck className="w-3.5 h-3.5 text-emerald-700" />
+                              <span>View Audit Record</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateOrderStatus(o.id, 'refunded')}
+                              className="py-2.5 px-3 bg-stone-100 hover:bg-purple-100 hover:text-purple-800 text-stone-600 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                            >
+                              Refund
+                            </button>
+                          </>
+                        )}
+
+                        {o.status === 'paid' && (
+                          <>
+                            <span className="text-xs text-emerald-700 font-bold bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-200">
+                              ✓ Paid & Delivered
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateOrderStatus(o.id, 'refunded')}
+                              className="ml-auto py-2 px-3 bg-stone-100 hover:bg-purple-100 hover:text-purple-800 text-stone-600 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                            >
+                              Refund
+                            </button>
+                          </>
+                        )}
+
+                        {o.status === 'failed' && (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenApproveModal(o)}
+                            className="w-full py-2.5 px-4 bg-emerald-50 hover:bg-emerald-100 active:bg-emerald-200 text-emerald-800 border border-emerald-300 rounded-xl text-xs font-bold flex items-center justify-center space-x-2 transition-all cursor-pointer"
+                          >
+                            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                            <span>Approve Payment (Re-Verify)</span>
+                          </button>
+                        )}
+
+                        {o.status === 'refunded' && (
+                          <span className="text-xs text-stone-400 italic">Refunded</span>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* 2. DESKTOP RESPONSIVE TABLE VIEW (Visible on desktop: hidden lg:block with scrollable container) */}
+              <div className="hidden lg:block border border-stone-200 rounded-2xl overflow-hidden shadow-2xs">
+                <div className="overflow-x-auto w-full">
+                  <table className="w-full min-w-[980px] text-left text-xs">
+                    <thead className="bg-stone-50 border-b border-stone-200 text-stone-500 uppercase text-[10px] font-bold">
                       <tr>
-                        <td colSpan={7} className="py-12 text-center text-stone-500">
-                          <ShoppingBag className="w-8 h-8 text-stone-300 mx-auto mb-2" />
-                          <p className="font-semibold text-stone-700">No orders match this filter</p>
-                          <p className="text-[11px] text-stone-400">Try adjusting the status, year, or search query.</p>
-                        </td>
+                        <th className="py-3 px-4 w-48">Order & Payment IDs</th>
+                        <th className="py-3 px-4 w-48">Student & Contact</th>
+                        <th className="py-3 px-4 w-56">Product Snapshot</th>
+                        <th className="py-3 px-4 w-24">Amount</th>
+                        <th className="py-3 px-4 w-44">Status</th>
+                        <th className="py-3 px-4 w-28">Date</th>
+                        <th className="py-3 px-4 text-right w-48">Actions</th>
                       </tr>
-                    ) : (
-                      filteredOrdersList.map((o) => (
-                        <tr key={o.id} className="hover:bg-stone-50/60 transition-colors">
-                          <td className="py-3 px-4 font-mono">
-                            <div className="flex items-center space-x-1.5">
-                              <span className="font-bold text-stone-900">{o.id}</span>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  navigator.clipboard.writeText(o.id);
-                                }}
-                                title="Copy Order ID"
-                                className="text-stone-400 hover:text-stone-700 p-0.5"
-                              >
-                                <Copy className="w-3 h-3" />
-                              </button>
-                            </div>
-                            {o.razorpayPaymentId && (
-                              <div className="flex items-center space-x-1 text-[10px] text-emerald-700 font-semibold mt-0.5">
-                                <span className="truncate max-w-[140px]" title={o.razorpayPaymentId}>
-                                  💳 {o.razorpayPaymentId}
-                                </span>
+                    </thead>
+                    <tbody className="divide-y divide-stone-100">
+                      {filteredOrdersList.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="py-12 text-center text-stone-500">
+                            <ShoppingBag className="w-8 h-8 text-stone-300 mx-auto mb-2" />
+                            <p className="font-semibold text-stone-700">No orders match this filter</p>
+                            <p className="text-[11px] text-stone-400">Try adjusting the status, year, or search query.</p>
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredOrdersList.map((o) => (
+                          <tr key={o.id} className="hover:bg-stone-50/60 transition-colors">
+                            <td className="py-3 px-4 font-mono">
+                              <div className="flex items-center space-x-1.5">
+                                <span className="font-bold text-stone-900">{o.id}</span>
                                 <button
                                   type="button"
-                                  onClick={() => navigator.clipboard.writeText(o.razorpayPaymentId || '')}
-                                  title="Copy Razorpay Payment ID"
-                                  className="text-stone-400 hover:text-stone-700"
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(o.id);
+                                  }}
+                                  title="Copy Order ID"
+                                  className="text-stone-400 hover:text-stone-700 p-0.5 cursor-pointer"
                                 >
-                                  <Copy className="w-2.5 h-2.5" />
+                                  <Copy className="w-3 h-3" />
                                 </button>
                               </div>
-                            )}
-                            {o.razorpayOrderId && (
-                              <p className="text-[9px] text-stone-400 truncate max-w-[140px]" title={o.razorpayOrderId}>
-                                RZP Ord: {o.razorpayOrderId}
-                              </p>
-                            )}
-                          </td>
-                          <td className="py-3 px-4">
-                            <p className="font-bold text-stone-900">{o.studentName || 'Student'}</p>
-                            {o.studentPhone && (
-                              <p className="text-[11px] text-stone-600 font-mono">📱 +91 {o.studentPhone}</p>
-                            )}
-                            <p className="text-[10px] text-stone-400">{o.studentEmail}</p>
-                          </td>
-                          <td className="py-3 px-4 max-w-[200px]">
-                            <p className="font-medium text-stone-800 truncate" title={o.productTitleSnapshot}>
-                              {o.productTitleSnapshot || 'Educational Notes'}
-                            </p>
-                            <p className="text-[10px] text-stone-400 font-mono">ID: {o.productId}</p>
-                          </td>
-                          <td className="py-3 px-4 font-bold text-stone-900">
-                            ₹{((o.amountPaise || 0) / 100).toFixed(0)}
-                          </td>
-                          <td className="py-3 px-4">
-                            {o.status === 'manually_approved' ? (
-                              <div>
-                                <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-emerald-100 text-emerald-900 border border-emerald-300 shadow-2xs">
-                                  <ShieldCheck className="w-3 h-3 text-emerald-700" />
-                                  <span>Manually Approved</span>
-                                </span>
-                                <div className="mt-1 space-y-0.5 text-[10px]">
-                                  <p className="text-emerald-900 font-semibold truncate max-w-[170px]" title={o.approvedByAdminEmail || 'Admin'}>
-                                    By: {o.approvedByAdminEmail || 'Admin'}
-                                  </p>
-                                  {o.approvedAt && (
-                                    <p className="text-stone-400 font-mono text-[9px]">
-                                      {new Date(o.approvedAt).toLocaleDateString()} {new Date(o.approvedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                    </p>
-                                  )}
-                                  {o.approvalRemark && (
-                                    <p className="text-stone-600 italic line-clamp-1 max-w-[170px]" title={o.approvalRemark}>
-                                      "{o.approvalRemark}"
-                                    </p>
-                                  )}
-                                </div>
-                              </div>
-                            ) : (
-                              <span
-                                className={`inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${
-                                  o.status === 'paid'
-                                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                                    : o.status === 'pending'
-                                    ? 'bg-amber-100 text-amber-800 border border-amber-200'
-                                    : o.status === 'refunded'
-                                    ? 'bg-purple-100 text-purple-800 border border-purple-200'
-                                    : 'bg-rose-100 text-rose-800 border border-rose-200'
-                                }`}
-                              >
-                                {o.status === 'paid' && <CheckCircle2 className="w-3 h-3 text-emerald-600" />}
-                                {o.status === 'pending' && <Clock className="w-3 h-3 text-amber-600" />}
-                                {o.status === 'failed' && <AlertCircle className="w-3 h-3 text-rose-600" />}
-                                <span>{o.status === 'pending' ? 'Pending Approval' : o.status}</span>
-                              </span>
-                            )}
-                            {o.status === 'failed' && (
-                              <div className="mt-1">
-                                {o.failureReason && (
-                                  <p className="text-[10px] text-rose-600 font-sans line-clamp-2 max-w-[170px]" title={o.failureReason}>
-                                    {o.failureReason}
-                                  </p>
-                                )}
-                                {o.failedAt && (
-                                  <p className="text-[9px] text-stone-400 font-mono">
-                                    Failed: {new Date(o.failedAt).toLocaleDateString()}
-                                  </p>
-                                )}
-                              </div>
-                            )}
-                            {o.lastVerifiedWithRazorpayAt && (
-                              <p className="text-[9px] text-stone-400 font-mono mt-0.5" title={`Checked Razorpay at ${o.lastVerifiedWithRazorpayAt}`}>
-                                Razorpay: {o.razorpayStatusSnapshot || 'checked'}
-                              </p>
-                            )}
-                          </td>
-                          <td className="py-3 px-4 text-stone-500 text-[11px]">
-                            <p>{new Date(o.createdAt).toLocaleDateString()}</p>
-                            <p className="text-[10px] text-stone-400">{new Date(o.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
-                          </td>
-                          <td className="py-3 px-4 text-right">
-                            <div className="flex items-center justify-end space-x-1.5">
-                              {o.status === 'pending' && (
-                                <>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleOpenApproveModal(o)}
-                                    className="px-2.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold shadow-xs flex items-center space-x-1 transition-all cursor-pointer"
-                                    title="Manually verify & approve payment, grant instant student note access"
-                                  >
-                                    <CheckCircle2 className="w-3.5 h-3.5" />
-                                    <span>Approve Payment</span>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleUpdateOrderStatus(o.id, 'failed')}
-                                    className="px-2 py-1.5 bg-stone-100 hover:bg-rose-100 hover:text-rose-800 text-stone-600 rounded-lg text-[10px] font-semibold transition-colors cursor-pointer"
-                                    title="Mark order as Failed"
-                                  >
-                                    Mark Failed
-                                  </button>
-                                </>
-                              )}
-                              {o.status === 'manually_approved' && (
-                                <>
-                                  <button
-                                    type="button"
-                                    onClick={() => setApprovalAuditOrder(o)}
-                                    className="px-2.5 py-1 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-lg text-[10px] font-bold transition-colors cursor-pointer flex items-center space-x-1"
-                                    title="View manual approval audit log & details"
-                                  >
-                                    <ShieldCheck className="w-3 h-3 text-emerald-600" />
-                                    <span>Audit Info</span>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleUpdateOrderStatus(o.id, 'refunded')}
-                                    className="px-2 py-1 bg-stone-100 hover:bg-purple-100 hover:text-purple-800 text-stone-600 rounded-lg text-[10px] font-bold transition-colors cursor-pointer"
-                                    title="Mark order as Refunded"
-                                  >
-                                    Refund
-                                  </button>
-                                </>
-                              )}
-                              {o.status === 'paid' && (
-                                <>
-                                  <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
-                                    Delivered
+                              {o.razorpayPaymentId && (
+                                <div className="flex items-center space-x-1 text-[10px] text-emerald-700 font-semibold mt-0.5">
+                                  <span className="truncate max-w-[140px]" title={o.razorpayPaymentId}>
+                                    💳 {o.razorpayPaymentId}
                                   </span>
                                   <button
                                     type="button"
-                                    onClick={() => handleUpdateOrderStatus(o.id, 'refunded')}
-                                    className="px-2 py-1 bg-stone-100 hover:bg-purple-100 hover:text-purple-800 text-stone-600 rounded-lg text-[10px] font-bold transition-colors cursor-pointer"
-                                    title="Mark order as Refunded"
+                                    onClick={() => navigator.clipboard.writeText(o.razorpayPaymentId || '')}
+                                    title="Copy Razorpay Payment ID"
+                                    className="text-stone-400 hover:text-stone-700 cursor-pointer"
                                   >
-                                    Refund
+                                    <Copy className="w-2.5 h-2.5" />
                                   </button>
-                                </>
+                                </div>
+                              )}
+                              {o.razorpayOrderId && (
+                                <p className="text-[9px] text-stone-400 truncate max-w-[140px]" title={o.razorpayOrderId}>
+                                  RZP Ord: {o.razorpayOrderId}
+                                </p>
+                              )}
+                            </td>
+                            <td className="py-3 px-4">
+                              <p className="font-bold text-stone-900">{o.studentName || 'Student'}</p>
+                              {o.studentPhone && (
+                                <p className="text-[11px] text-stone-600 font-mono">📱 +91 {o.studentPhone}</p>
+                              )}
+                              <p className="text-[10px] text-stone-400">{o.studentEmail}</p>
+                            </td>
+                            <td className="py-3 px-4 max-w-[200px]">
+                              <p className="font-medium text-stone-800 truncate" title={o.productTitleSnapshot}>
+                                {o.productTitleSnapshot || 'Educational Notes'}
+                              </p>
+                              <p className="text-[10px] text-stone-400 font-mono">ID: {o.productId}</p>
+                            </td>
+                            <td className="py-3 px-4 font-bold text-stone-900">
+                              ₹{((o.amountPaise || 0) / 100).toFixed(0)}
+                            </td>
+                            <td className="py-3 px-4">
+                              {o.status === 'manually_approved' ? (
+                                <div>
+                                  <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-emerald-100 text-emerald-900 border border-emerald-300 shadow-2xs">
+                                    <ShieldCheck className="w-3 h-3 text-emerald-700" />
+                                    <span>Manually Approved</span>
+                                  </span>
+                                  <div className="mt-1 space-y-0.5 text-[10px]">
+                                    <p className="text-emerald-900 font-semibold truncate max-w-[170px]" title={o.approvedByAdminEmail || 'Admin'}>
+                                      By: {o.approvedByAdminEmail || 'Admin'}
+                                    </p>
+                                    {o.approvedAt && (
+                                      <p className="text-stone-400 font-mono text-[9px]">
+                                        {new Date(o.approvedAt).toLocaleDateString()} {new Date(o.approvedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                      </p>
+                                    )}
+                                    {o.approvalRemark && (
+                                      <p className="text-stone-600 italic line-clamp-1 max-w-[170px]" title={o.approvalRemark}>
+                                        "{o.approvalRemark}"
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                              ) : (
+                                <span
+                                  className={`inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${
+                                    o.status === 'paid'
+                                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                      : o.status === 'pending'
+                                      ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                                      : o.status === 'refunded'
+                                      ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                                      : 'bg-rose-100 text-rose-800 border border-rose-200'
+                                  }`}
+                                >
+                                  {o.status === 'paid' && <CheckCircle2 className="w-3 h-3 text-emerald-600" />}
+                                  {o.status === 'pending' && <Clock className="w-3 h-3 text-amber-600" />}
+                                  {o.status === 'failed' && <AlertCircle className="w-3 h-3 text-rose-600" />}
+                                  <span>{o.status === 'pending' ? 'Pending Approval' : o.status}</span>
+                                </span>
                               )}
                               {o.status === 'failed' && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleOpenApproveModal(o)}
-                                  className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-lg text-[10px] font-bold flex items-center space-x-1 transition-colors cursor-pointer"
-                                  title="Student paid successfully but status marked failed? Click to manually approve and grant access"
-                                >
-                                  <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                                  <span>Approve Payment</span>
-                                </button>
+                                <div className="mt-1">
+                                  {o.failureReason && (
+                                    <p className="text-[10px] text-rose-600 font-sans line-clamp-2 max-w-[170px]" title={o.failureReason}>
+                                      {o.failureReason}
+                                    </p>
+                                  )}
+                                  {o.failedAt && (
+                                    <p className="text-[9px] text-stone-400 font-mono">
+                                      Failed: {new Date(o.failedAt).toLocaleDateString()}
+                                    </p>
+                                  )}
+                                </div>
                               )}
-                              {o.status === 'refunded' && (
-                                <span className="text-[10px] text-stone-400 italic">Refunded</span>
+                              {o.lastVerifiedWithRazorpayAt && (
+                                <p className="text-[9px] text-stone-400 font-mono mt-0.5" title={`Checked Razorpay at ${o.lastVerifiedWithRazorpayAt}`}>
+                                  Razorpay: {o.razorpayStatusSnapshot || 'checked'}
+                                </p>
                               )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+                            </td>
+                            <td className="py-3 px-4 text-stone-500 text-[11px]">
+                              <p>{new Date(o.createdAt).toLocaleDateString()}</p>
+                              <p className="text-[10px] text-stone-400">{new Date(o.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                            </td>
+                            <td className="py-3 px-4 text-right">
+                              <div className="flex items-center justify-end space-x-1.5">
+                                {o.status === 'pending' && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenApproveModal(o)}
+                                      className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 text-white rounded-lg text-xs font-black shadow-xs flex items-center space-x-1.5 transition-all cursor-pointer"
+                                      title="Manually verify & approve payment, grant instant student note access"
+                                    >
+                                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-200" />
+                                      <span>Approve Payment</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleUpdateOrderStatus(o.id, 'failed')}
+                                      className="px-2.5 py-1.5 bg-stone-100 hover:bg-rose-100 hover:text-rose-800 text-stone-600 rounded-lg text-[10px] font-semibold transition-colors cursor-pointer"
+                                      title="Mark order as Failed"
+                                    >
+                                      Mark Failed
+                                    </button>
+                                  </>
+                                )}
+                                {o.status === 'manually_approved' && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => setApprovalAuditOrder(o)}
+                                      className="px-2.5 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-lg text-[10px] font-bold transition-colors cursor-pointer flex items-center space-x-1"
+                                      title="View manual approval audit log & details"
+                                    >
+                                      <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                                      <span>Audit Info</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleUpdateOrderStatus(o.id, 'refunded')}
+                                      className="px-2.5 py-1.5 bg-stone-100 hover:bg-purple-100 hover:text-purple-800 text-stone-600 rounded-lg text-[10px] font-bold transition-colors cursor-pointer"
+                                      title="Mark order as Refunded"
+                                    >
+                                      Refund
+                                    </button>
+                                  </>
+                                )}
+                                {o.status === 'paid' && (
+                                  <>
+                                    <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200">
+                                      Delivered
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleUpdateOrderStatus(o.id, 'refunded')}
+                                      className="px-2.5 py-1.5 bg-stone-100 hover:bg-purple-100 hover:text-purple-800 text-stone-600 rounded-lg text-[10px] font-bold transition-colors cursor-pointer"
+                                      title="Mark order as Refunded"
+                                    >
+                                      Refund
+                                    </button>
+                                  </>
+                                )}
+                                {o.status === 'failed' && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenApproveModal(o)}
+                                    className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-lg text-[10px] font-bold flex items-center space-x-1 transition-colors cursor-pointer"
+                                    title="Student paid successfully but status marked failed? Click to manually approve and grant access"
+                                  >
+                                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                    <span>Approve Payment</span>
+                                  </button>
+                                )}
+                                {o.status === 'refunded' && (
+                                  <span className="text-[10px] text-stone-400 italic">Refunded</span>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </>
           ) : (
