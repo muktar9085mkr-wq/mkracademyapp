@@ -334,6 +334,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         coverImagePath: product.coverImagePath,
         driveFileLink: product.driveFileLink || '',
         pdfStoragePath: product.pdfStoragePath || '',
+        pdfList: product.pdfList || [],
         razorpayPaymentId: params.razorpayPaymentId,
         razorpayOrderId: params.razorpayOrderId
       });

@@ -43,6 +43,8 @@
         "chapters": { "type": "array" },
         "coverImagePath": { "type": "string", "maxLength": 1000 },
         "pdfStoragePath": { "type": "string", "maxLength": 1000 },
+        "driveFileLink": { "type": "string", "maxLength": 1000 },
+        "pdfList": { "type": "array" },
         "fileType": { "type": "string", "maxLength": 50 },
         "pageCount": { "type": "number" },
         "originalPricePaise": { "type": "number" },
@@ -98,6 +100,8 @@
         "orderId": { "type": "string", "maxLength": 128 },
         "productTitle": { "type": "string", "maxLength": 250 },
         "coverImagePath": { "type": "string", "maxLength": 1000 },
+        "driveFileLink": { "type": "string", "maxLength": 1000 },
+        "pdfList": { "type": "array" },
         "entitlementStatus": { "type": "string", "enum": ["active", "revoked"] },
         "purchasedAt": { "type": "string" },
         "createdAt": { "type": "string" }

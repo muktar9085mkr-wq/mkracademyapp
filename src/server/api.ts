@@ -1,6 +1,7 @@
 import express, { Request, Response, Router } from 'express';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
+import JSZip from 'jszip';
 import { queryRazorpayPaymentStatus } from './paymentReconciliation';
 import { runServerPaymentMaintenance, getLastSchedulerStatus } from './cron';
 
@@ -348,6 +349,188 @@ export function createApiApp() {
 
     // Redirect directly to Google Drive so no example/sample dummy PDF is shown
     res.redirect(`https://drive.google.com/drive/my-drive`);
+  });
+
+  /**
+   * Multiple PDF ZIP Bundle Service
+   * Accepts list of PDF titles & Google Drive links, fetches/bundles them into a ZIP file
+   */
+  router.post('/notes/bundle-zip', async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { title, pdfList } = req.body;
+
+      if (!Array.isArray(pdfList) || pdfList.length === 0) {
+        res.status(400).json({ error: 'No PDF files provided to bundle' });
+        return;
+      }
+
+      const zip = new JSZip();
+      const sanitizedTitle = (title || 'MKR_Academy_Notes').replace(/[^a-zA-Z0-9_\u0980-\u09FF\s-]/g, '').trim().substring(0, 50) || 'MKR_Academy_Study_Notes';
+      
+      const linksSummary: Array<{ index: number; name: string; url: string; downloaded: boolean }> = [];
+
+      for (let i = 0; i < pdfList.length; i++) {
+        const item = pdfList[i];
+        if (!item || !item.driveUrl) continue;
+
+        const rawName = item.name?.trim() || `Chapter_${i + 1}`;
+        const cleanName = rawName.replace(/[/\\?%*:|"<>]/g, '_').substring(0, 60);
+        const fileNumber = String(i + 1).padStart(2, '0');
+        const fileName = `${fileNumber}_${cleanName}`;
+        const driveUrl = item.driveUrl.trim();
+
+        let addedAsBinary = false;
+
+        // Try extracting Google Drive file ID
+        const driveMatch = driveUrl.match(/\/d\/([a-zA-Z0-9_-]+)/) || driveUrl.match(/id=([a-zA-Z0-9_-]+)/);
+        if (driveMatch && driveMatch[1]) {
+          const fileId = driveMatch[1];
+          const directUrls = [
+            `https://drive.usercontent.google.com/download?id=${fileId}&export=download`,
+            `https://drive.google.com/uc?export=download&id=${fileId}`
+          ];
+
+          for (const downloadUrl of directUrls) {
+            try {
+              const fetchRes = await fetch(downloadUrl, {
+                headers: {
+                  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                  'Accept': 'application/pdf,*/*'
+                },
+                redirect: 'follow',
+                signal: AbortSignal.timeout(12000)
+              });
+
+              if (fetchRes.ok) {
+                const contentType = fetchRes.headers.get('content-type') || '';
+                const arrayBuf = await fetchRes.arrayBuffer();
+                const buf = Buffer.from(arrayBuf);
+
+                // Verify buffer is binary PDF or non-empty document (check %PDF header or not HTML)
+                const isPdfHeader = buf.length >= 4 && buf.subarray(0, 4).toString() === '%PDF';
+                const isHtml = contentType.includes('text/html') || (buf.length > 10 && buf.subarray(0, 10).toString().toLowerCase().includes('<html'));
+
+                if ((isPdfHeader || (!isHtml && buf.length > 500)) && buf.length > 0) {
+                  zip.file(`${fileName}.pdf`, buf);
+                  addedAsBinary = true;
+                  break;
+                }
+              }
+            } catch (err) {
+              // Try next direct URL or fallback
+            }
+          }
+        }
+
+        // Always also include a 1-click HTML launcher and web bookmark in case user is offline or file is large
+        const htmlLauncher = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>${cleanName} - MKR Academy</title>
+  <meta http-equiv="refresh" content="0; url=${driveUrl}">
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0c0a09; color: #fff; text-align: center; padding: 50px 20px; }
+    .card { background: #1c1917; max-width: 500px; margin: 0 auto; border-radius: 20px; padding: 30px; border: 1px solid #292524; }
+    h1 { font-size: 20px; color: #ef4444; margin-bottom: 10px; }
+    p { font-size: 14px; color: #a8a29e; line-height: 1.6; }
+    a { display: inline-block; background: #b91c1c; color: white; text-decoration: none; padding: 12px 24px; border-radius: 12px; font-weight: bold; margin-top: 20px; }
+    a:hover { background: #dc2626; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>MKR ACADEMY</h1>
+    <p>Opening <strong>${rawName}</strong> on Google Drive...</p>
+    <a href="${driveUrl}" target="_blank">Click Here to Open / Download PDF</a>
+  </div>
+</body>
+</html>`;
+
+        if (!addedAsBinary) {
+          zip.file(`${fileName}_(Open_In_Google_Drive).html`, htmlLauncher);
+        }
+
+        linksSummary.push({
+          index: i + 1,
+          name: rawName,
+          url: driveUrl,
+          downloaded: addedAsBinary
+        });
+      }
+
+      // Add a Master Study Material Index with all Google Drive direct links
+      const masterHtml = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>${sanitizedTitle} - MKR Academy</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f4; color: #1c1917; padding: 40px 20px; }
+    .container { max-width: 700px; margin: 0 auto; background: white; border-radius: 24px; padding: 32px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); border: 1px solid #e7e5e4; }
+    .header { text-align: center; border-bottom: 2px solid #b91c1c; padding-bottom: 20px; margin-bottom: 24px; }
+    h1 { color: #b91c1c; font-size: 24px; margin: 0 0 8px 0; }
+    p.sub { color: #78716c; font-size: 13px; margin: 0; }
+    .item { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; margin-bottom: 10px; background: #fafaf9; border: 1px solid #e7e5e4; border-radius: 14px; gap: 12px; }
+    .num { font-weight: 800; color: #b91c1c; font-size: 15px; min-width: 30px; }
+    .name { font-weight: 600; font-size: 14px; color: #1c1917; flex: 1; }
+    .btn { background: #b91c1c; color: white; text-decoration: none; padding: 8px 16px; border-radius: 10px; font-weight: 700; font-size: 12px; text-align: center; }
+    .btn:hover { background: #991b1b; }
+    .footer { margin-top: 30px; text-align: center; font-size: 12px; color: #a8a29e; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>MKR ACADEMY</h1>
+      <p class="sub">${sanitizedTitle} • Complete Study Materials</p>
+    </div>
+    <div class="list">
+      ${linksSummary.map(l => `
+        <div class="item">
+          <span class="num">${String(l.index).padStart(2, '0')}.</span>
+          <span class="name">${l.name}</span>
+          <a class="btn" href="${l.url}" target="_blank">Open on Drive</a>
+        </div>
+      `).join('')}
+    </div>
+    <div class="footer">
+      MKR Academy • Quality Notes • Better Results • WhatsApp Support Available
+    </div>
+  </div>
+</body>
+</html>`;
+
+      zip.file('00_ALL_CHAPTERS_INDEX.html', masterHtml);
+
+      // Plain-text Links Index
+      const plainTextIndex = `MKR ACADEMY - ${sanitizedTitle}
+Official Study Materials & Chapter Links
+==========================================
+
+${linksSummary.map(l => `${String(l.index).padStart(2, '0')}. ${l.name}\n   Drive Link: ${l.url}\n`).join('\n')}
+
+All files are permanently unlocked under your MKR Academy Student Account.
+Support: WhatsApp MKR Academy for any assistance.`;
+
+      zip.file('00_CHAPTER_LINKS_README.txt', plainTextIndex);
+
+      const zipBuffer = await zip.generateAsync({
+        type: 'nodebuffer',
+        compression: 'DEFLATE',
+        compressionOptions: { level: 6 }
+      });
+
+      const safeFilename = `${sanitizedTitle.replace(/\s+/g, '_')}_Materials.zip`;
+
+      res.setHeader('Content-Type', 'application/zip');
+      res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(safeFilename)}"`);
+      res.setHeader('Content-Length', zipBuffer.length);
+      res.send(zipBuffer);
+    } catch (err: any) {
+      console.error('Error generating bundle zip:', err);
+      res.status(500).json({ error: err?.message || 'Failed to generate ZIP archive' });
+    }
   });
 
   /**

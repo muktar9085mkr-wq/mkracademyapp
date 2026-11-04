@@ -44,10 +44,14 @@ import {
   School,
   RefreshCw,
   Archive,
-  Download
+  Download,
+  ArrowUp,
+  ArrowDown,
+  Plus,
+  ListOrdered
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { Product, Order, UserProfile, AppPublicSettings, AppLogoSettings, ReconcileAndCleanupResult } from '../../types';
+import { Product, Order, UserProfile, AppPublicSettings, AppLogoSettings, ReconcileAndCleanupResult, ProductPdfEntry } from '../../types';
 import { BrandLogo } from '../common/BrandLogo';
 import {
   getAllProductsAdmin,
@@ -63,7 +67,8 @@ import {
   syncFreeNotesToFirestore,
   FREE_NOTE_SUBJECTS,
   isFreeNote,
-  matchFreeNoteSubject
+  matchFreeNoteSubject,
+  getProductPdfList
 } from '../../services/productService';
 import {
   getAllOrdersAdmin,
@@ -125,6 +130,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
   const [prodChapters, setProdChapters] = useState<string>('');
   const [prodCoverUrl, setProdCoverUrl] = useState('');
   const [prodDriveLink, setProdDriveLink] = useState('');
+  const [prodPdfList, setProdPdfList] = useState<ProductPdfEntry[]>([
+    { id: 'pdf_init_1', name: '', driveUrl: '' }
+  ]);
   const [prodPdfPath, setProdPdfPath] = useState('');
   const [prodPdfFileName, setProdPdfFileName] = useState('');
   const [prodFileType, setProdFileType] = useState('PDF Document');
@@ -136,6 +144,44 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
   const [prodPublished, setProdPublished] = useState(true);
   const [formSaving, setFormSaving] = useState(false);
   const [formMessage, setFormMessage] = useState<string | null>(null);
+
+  // Multiple PDF Entries Management Handlers
+  const handleAddPdfEntry = () => {
+    setProdPdfList((prev) => [
+      ...prev,
+      {
+        id: `pdf_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        name: `Chapter ${prev.length + 1} Notes`,
+        driveUrl: ''
+      }
+    ]);
+  };
+
+  const handleUpdatePdfEntry = (id: string, field: 'name' | 'driveUrl', val: string) => {
+    setProdPdfList((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, [field]: val } : item))
+    );
+  };
+
+  const handleDeletePdfEntry = (id: string) => {
+    if (prodPdfList.length <= 1) {
+      setProdPdfList([{ id: `pdf_${Date.now()}`, name: '', driveUrl: '' }]);
+      return;
+    }
+    setProdPdfList((prev) => prev.filter((item) => item.id !== id));
+  };
+
+  const handleMovePdfEntry = (index: number, direction: 'up' | 'down') => {
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= prodPdfList.length) return;
+    setProdPdfList((prev) => {
+      const copy = [...prev];
+      const temp = copy[index];
+      copy[index] = copy[targetIndex];
+      copy[targetIndex] = temp;
+      return copy;
+    });
+  };
 
   // Quick Price Edit Modal State (Edit price in paise / rupees anytime)
   const [quickPriceModalProduct, setQuickPriceModalProduct] = useState<Product | null>(null);
@@ -687,6 +733,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
     setProdChapters(p.chapters?.join('\n') || '');
     setProdCoverUrl(p.coverImagePath || '');
     setProdDriveLink(p.driveFileLink || '');
+    const existingPdfs = getProductPdfList(p);
+    setProdPdfList(
+      existingPdfs.length > 0
+        ? existingPdfs
+        : [{ id: `pdf_${Date.now()}`, name: p.title || 'Chapter 1 Notes', driveUrl: p.driveFileLink || '' }]
+    );
     setProdPdfPath(p.pdfStoragePath || '');
     setProdPdfFileName(p.pdfFileName || '');
     setProdFileType(p.fileType || 'PDF Document');
@@ -715,6 +767,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
     setProdChapters('');
     setProdCoverUrl('');
     setProdDriveLink('');
+    setProdPdfList([{ id: `pdf_${Date.now()}`, name: '', driveUrl: '' }]);
     setProdPdfPath('');
     setProdPdfFileName('');
     setProdFileType('PDF Document');
@@ -742,6 +795,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
       const chaptersArray = prodChapters.split('\n').map((c) => c.trim()).filter(Boolean);
       const generatedSlug = prodSlug.trim() || prodTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 
+      const cleanedPdfList: ProductPdfEntry[] = prodPdfList
+        .map((item, idx) => ({
+          id: item.id || `pdf_${idx + 1}`,
+          name: item.name.trim() || `Chapter ${idx + 1} Notes`,
+          driveUrl: item.driveUrl.trim()
+        }))
+        .filter((item) => item.driveUrl.length > 0);
+
+      const primaryDriveLink = cleanedPdfList.length > 0 ? cleanedPdfList[0].driveUrl : prodDriveLink.trim();
+
       const payload: Partial<Product> = {
         title: prodTitle.trim(),
         slug: generatedSlug,
@@ -755,9 +818,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
         tags: tagsArray,
         chapters: chaptersArray,
         coverImagePath: prodCoverUrl.trim() || 'https://images.unsplash.com/photo-1532094349884-543bc11b234d?auto=format&fit=crop&w=800&q=80',
-        driveFileLink: prodDriveLink.trim(),
-        pdfStoragePath: prodPdfPath.trim() || (prodDriveLink.trim() ? '' : `notes/${generatedSlug}.pdf`),
-        pdfFileName: prodPdfFileName.trim() || `${generatedSlug}.pdf`,
+        driveFileLink: primaryDriveLink,
+        pdfList: cleanedPdfList,
+        pdfStoragePath: prodPdfPath.trim() || (primaryDriveLink ? '' : `notes/${generatedSlug}.pdf`),
+        pdfFileName: prodPdfFileName.trim() || (cleanedPdfList[0]?.name ? `${cleanedPdfList[0].name}.pdf` : `${generatedSlug}.pdf`),
         fileType: prodFileType.trim() || 'PDF Document',
         pageCount: Number(prodPageCount) || 1,
         originalPricePaise: Math.round(Number(prodOriginalPrice) * 100),
@@ -769,10 +833,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
 
       if (editingProduct) {
         await updateProduct(editingProduct.id, payload);
-        setFormMessage('Product and all information updated successfully!');
+        setFormMessage('Product and multiple PDF links updated successfully!');
       } else {
         await addProduct(payload as any);
-        setFormMessage('New educational product created successfully with Google Drive link!');
+        setFormMessage('New educational product created successfully with multiple PDF links!');
       }
 
       const refreshed = await getAllProductsAdmin();
@@ -1806,22 +1870,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
                                   <span className="text-[10px] text-red-700 font-semibold uppercase">
                                     {p.subject} • {p.category}
                                   </span>
-                                  {p.driveFileLink ? (
-                                    <a
-                                      href={p.driveFileLink}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="inline-flex items-center space-x-1 text-[9px] text-blue-700 bg-blue-50 hover:bg-blue-100 font-bold px-1.5 py-0.5 rounded border border-blue-200"
-                                      title="Open attached Google Drive file"
-                                    >
-                                      <ExternalLink className="w-2.5 h-2.5" />
-                                      <span>Drive Attached</span>
-                                    </a>
-                                  ) : (
-                                    <span className="text-[9px] text-stone-400 font-medium">
-                                      Storage: {p.pdfFileName || 'PDF'}
-                                    </span>
-                                  )}
+                                  {(() => {
+                                    const pdfs = getProductPdfList(p);
+                                    if (pdfs.length > 1) {
+                                      return (
+                                        <span className="inline-flex items-center space-x-1 text-[9px] text-indigo-700 bg-indigo-50 font-bold px-1.5 py-0.5 rounded border border-indigo-200">
+                                          <ListOrdered className="w-2.5 h-2.5" />
+                                          <span>{pdfs.length} PDFs</span>
+                                        </span>
+                                      );
+                                    }
+                                    if (p.driveFileLink || pdfs.length === 1) {
+                                      return (
+                                        <a
+                                          href={p.driveFileLink || pdfs[0]?.driveUrl}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="inline-flex items-center space-x-1 text-[9px] text-blue-700 bg-blue-50 hover:bg-blue-100 font-bold px-1.5 py-0.5 rounded border border-blue-200"
+                                          title="Open attached Google Drive file"
+                                        >
+                                          <ExternalLink className="w-2.5 h-2.5" />
+                                          <span>Drive PDF</span>
+                                        </a>
+                                      );
+                                    }
+                                    return (
+                                      <span className="text-[9px] text-stone-400 font-medium">
+                                        Storage: {p.pdfFileName || 'PDF'}
+                                      </span>
+                                    );
+                                  })()}
                                 </div>
                               </div>
                             </div>
@@ -2167,69 +2245,175 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
                   </div>
                 </div>
 
-                {/* 4. Google Drive Link & PDF Delivery (NEW & CRITICAL) */}
+                {/* 4. Multiple Google Drive PDF Links & Study Materials (MULTIPLE PDF SUPPORT) */}
                 <div className="bg-blue-50/70 p-4 sm:p-5 rounded-2xl border border-blue-200 space-y-4">
                   <div className="flex items-center justify-between flex-wrap gap-2">
                     <div className="flex items-center space-x-2">
                       <div className="w-6 h-6 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold text-xs">
-                        <ExternalLink className="w-3.5 h-3.5" />
+                        <ListOrdered className="w-3.5 h-3.5" />
                       </div>
                       <h3 className="text-xs font-bold text-blue-900 uppercase tracking-wider">
-                        4. Google Drive File Link & PDF File Settings
+                        4. Google Drive PDF Links ({prodPdfList.length} {prodPdfList.length === 1 ? 'File' : 'Files'})
                       </h3>
                     </div>
-                    <span className="text-[10px] font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full">
-                      Direct Student Access
-                    </span>
-                  </div>
-
-                  {/* Google Drive Link Input */}
-                  <div className="bg-white p-3.5 rounded-xl border border-blue-200 space-y-2">
-                    <label className="block text-stone-800 font-bold">
-                      Google Drive File Link (Share / View Link)
-                    </label>
-                    <div className="flex flex-col sm:flex-row gap-2">
-                      <input
-                        type="url"
-                        value={prodDriveLink}
-                        onChange={(e) => setProdDriveLink(e.target.value)}
-                        placeholder="https://drive.google.com/file/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs/view?usp=sharing"
-                        className="flex-1 bg-stone-50 border border-stone-300 rounded-xl px-3 py-2.5 font-mono text-stone-900 focus:bg-white focus:outline-none focus:border-blue-600 text-xs"
-                      />
-                      {prodDriveLink.trim() && (
-                        <a
-                          href={prodDriveLink}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="px-4 py-2.5 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-bold flex items-center justify-center space-x-1.5 shrink-0 transition-colors"
-                        >
-                          <ExternalLink className="w-3.5 h-3.5" />
-                          <span>Test Drive Link</span>
-                        </a>
-                      )}
+                    <div className="flex items-center space-x-2">
+                      <span className="text-[10px] font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full">
+                        Unlimited PDFs • Single Payment Unlock
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleAddPdfEntry}
+                        className="px-3 py-1.5 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs flex items-center space-x-1 shadow-xs transition-colors cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>+ Add Another PDF</span>
+                      </button>
                     </div>
-                    <p className="text-[11px] text-stone-500 leading-relaxed">
-                      💡 <strong>Tip:</strong> In Google Drive, click <em>Share &gt; Anyone with the link can view</em>. Paste that link here. Once verified students purchase notes, they get instant Google Drive access, download links, and an in-app viewer!
-                    </p>
                   </div>
 
-                  {/* PDF Meta details */}
-                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 bg-white/80 p-3.5 rounded-xl border border-blue-100">
+                  <p className="text-[11px] text-stone-600 leading-relaxed">
+                    Add unlimited chapter PDFs for this product. <strong>All PDFs unlock together after a single student purchase</strong>. You can name each chapter/part, test individual links, reorder them, or delete entries.
+                  </p>
+
+                  {/* List of PDF Entries */}
+                  <div className="space-y-3">
+                    {prodPdfList.map((entry, index) => {
+                      const displayNum = String(index + 1).padStart(2, '0');
+                      return (
+                        <div
+                          key={entry.id}
+                          className="bg-white p-3.5 sm:p-4 rounded-xl border border-blue-200 shadow-xs space-y-3 hover:border-blue-400 transition-colors"
+                        >
+                          {/* Entry Header: Number & Controls */}
+                          <div className="flex items-center justify-between border-b border-stone-100 pb-2">
+                            <div className="flex items-center space-x-2">
+                              <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-800 font-black text-xs flex items-center justify-center font-mono">
+                                {displayNum}
+                              </span>
+                              <span className="font-bold text-xs text-stone-800">
+                                PDF File #{index + 1}
+                              </span>
+                            </div>
+
+                            {/* Reorder and Delete Toolbar */}
+                            <div className="flex items-center space-x-1">
+                              <button
+                                type="button"
+                                disabled={index === 0}
+                                onClick={() => handleMovePdfEntry(index, 'up')}
+                                title="Move Up in order"
+                                className={`p-1.5 rounded-lg border text-xs font-semibold flex items-center ${
+                                  index === 0
+                                    ? 'border-stone-200 text-stone-300 cursor-not-allowed'
+                                    : 'border-stone-200 text-stone-600 hover:bg-stone-100 hover:text-stone-900 cursor-pointer'
+                                }`}
+                              >
+                                <ArrowUp className="w-3.5 h-3.5" />
+                              </button>
+
+                              <button
+                                type="button"
+                                disabled={index === prodPdfList.length - 1}
+                                onClick={() => handleMovePdfEntry(index, 'down')}
+                                title="Move Down in order"
+                                className={`p-1.5 rounded-lg border text-xs font-semibold flex items-center ${
+                                  index === prodPdfList.length - 1
+                                    ? 'border-stone-200 text-stone-300 cursor-not-allowed'
+                                    : 'border-stone-200 text-stone-600 hover:bg-stone-100 hover:text-stone-900 cursor-pointer'
+                                }`}
+                              >
+                                <ArrowDown className="w-3.5 h-3.5" />
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleDeletePdfEntry(entry.id)}
+                                title="Delete this PDF entry"
+                                className="p-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 text-xs font-semibold flex items-center cursor-pointer transition-colors"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Two Fields: Name & URL */}
+                          <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+                            {/* Field 1: PDF / Chapter Name */}
+                            <div className="md:col-span-5 space-y-1">
+                              <label className="block text-stone-700 font-bold text-xs">
+                                PDF Name / Chapter Name <span className="text-red-600">*</span>
+                              </label>
+                              <input
+                                type="text"
+                                value={entry.name}
+                                onChange={(e) => handleUpdatePdfEntry(entry.id, 'name', e.target.value)}
+                                placeholder={`e.g. Chapter ${index + 1}: Important Questions`}
+                                className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-stone-900 focus:bg-white focus:outline-none focus:border-blue-600 text-xs font-medium"
+                              />
+                            </div>
+
+                            {/* Field 2: Google Drive URL */}
+                            <div className="md:col-span-7 space-y-1">
+                              <label className="block text-stone-700 font-bold text-xs">
+                                Google Drive URL <span className="text-red-600">*</span>
+                              </label>
+                              <div className="flex gap-2">
+                                <input
+                                  type="url"
+                                  value={entry.driveUrl}
+                                  onChange={(e) => handleUpdatePdfEntry(entry.id, 'driveUrl', e.target.value)}
+                                  placeholder="https://drive.google.com/file/d/.../view?usp=sharing"
+                                  className="flex-1 bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-stone-900 focus:bg-white focus:outline-none focus:border-blue-600 text-xs font-mono"
+                                />
+                                {entry.driveUrl.trim() && (
+                                  <a
+                                    href={entry.driveUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="px-3 py-2 rounded-xl bg-blue-100 hover:bg-blue-200 text-blue-800 font-bold text-xs flex items-center space-x-1 shrink-0 transition-colors"
+                                    title="Open link to test"
+                                  >
+                                    <ExternalLink className="w-3.5 h-3.5" />
+                                    <span className="hidden sm:inline">Test Link</span>
+                                  </a>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Add Another PDF Button at Bottom */}
+                  <div className="flex justify-start pt-1">
+                    <button
+                      type="button"
+                      onClick={handleAddPdfEntry}
+                      className="px-4 py-2.5 rounded-xl bg-white border border-blue-300 hover:border-blue-500 hover:bg-blue-50/50 text-blue-800 font-bold text-xs flex items-center space-x-1.5 shadow-xs transition-all cursor-pointer"
+                    >
+                      <Plus className="w-4 h-4 text-blue-600" />
+                      <span>+ Add Another PDF Link</span>
+                    </button>
+                  </div>
+
+                  {/* Additional PDF Format Metadata */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-white/80 p-3.5 rounded-xl border border-blue-100 pt-2">
                     <div>
-                      <label className="block text-stone-700 font-semibold mb-1">
-                        PDF File Name
+                      <label className="block text-stone-700 font-semibold text-xs mb-1">
+                        Default PDF File Name
                       </label>
                       <input
                         type="text"
                         value={prodPdfFileName}
                         onChange={(e) => setProdPdfFileName(e.target.value)}
-                        placeholder="MKR_HSLC_2027_Science.pdf"
-                        className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-stone-900"
+                        placeholder="MKR_HSLC_2027_Notes.pdf"
+                        className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-stone-900 text-xs"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-stone-700 font-semibold mb-1">
+                      <label className="block text-stone-700 font-semibold text-xs mb-1">
                         File Format Type
                       </label>
                       <input
@@ -2237,33 +2421,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
                         value={prodFileType}
                         onChange={(e) => setProdFileType(e.target.value)}
                         placeholder="PDF Document"
-                        className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-stone-900"
+                        className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-stone-900 text-xs"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-stone-700 font-semibold mb-1">
-                        Total Page Count
+                      <label className="block text-stone-700 font-semibold text-xs mb-1">
+                        Approx. Total Page Count
                       </label>
                       <input
                         type="number"
                         min={1}
                         value={prodPageCount}
                         onChange={(e) => setProdPageCount(Number(e.target.value))}
-                        className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-stone-900"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-stone-700 font-semibold mb-1">
-                        PDF Cloud Storage Path
-                      </label>
-                      <input
-                        type="text"
-                        value={prodPdfPath}
-                        onChange={(e) => setProdPdfPath(e.target.value)}
-                        placeholder="notes/science-2027.pdf"
-                        className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 font-mono text-stone-900"
+                        className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-stone-900 text-xs"
                       />
                     </div>
                   </div>

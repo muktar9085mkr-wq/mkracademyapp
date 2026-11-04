@@ -12,7 +12,7 @@ import {
   onSnapshot
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase/config';
-import { Order, Purchase, UserProfile, OrderStatus, ReconcileAndCleanupResult } from '../types';
+import { Order, Purchase, UserProfile, OrderStatus, ReconcileAndCleanupResult, ProductPdfEntry } from '../types';
 
 export const ORDERS_COLLECTION = 'orders';
 export const ARCHIVED_ORDERS_COLLECTION = 'archived_orders';
@@ -129,6 +129,7 @@ export async function fulfillVerifiedPurchase(params: {
   razorpayOrderId?: string;
   driveFileLink?: string;
   pdfStoragePath?: string;
+  pdfList?: ProductPdfEntry[];
 }): Promise<Purchase> {
   const now = new Date().toISOString();
   const purchaseId = `pur_${params.uid}_${params.productId}`.replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -141,6 +142,7 @@ export async function fulfillVerifiedPurchase(params: {
     coverImagePath: params.coverImagePath,
     driveFileLink: params.driveFileLink || '',
     pdfStoragePath: params.pdfStoragePath || '',
+    pdfList: params.pdfList || [],
     entitlementStatus: 'active',
     purchasedAt: now,
     createdAt: now
@@ -366,6 +368,7 @@ export async function manualApproveOrderAdmin(params: {
   let productCover = '';
   let productPdfPath = '';
   let productTitle = order.productTitleSnapshot || 'Educational Notes';
+  let productPdfList: ProductPdfEntry[] = [];
 
   try {
     const productRef = doc(db, 'products', order.productId);
@@ -376,6 +379,9 @@ export async function manualApproveOrderAdmin(params: {
       productCover = prodData.coverImagePath || '';
       productPdfPath = prodData.pdfStoragePath || '';
       productTitle = prodData.title || productTitle;
+      if (Array.isArray(prodData.pdfList) && prodData.pdfList.length > 0) {
+        productPdfList = prodData.pdfList;
+      }
     }
   } catch (err) {
     console.warn('Could not fetch product details during manual approval, using order snapshot:', err);
@@ -398,6 +404,7 @@ export async function manualApproveOrderAdmin(params: {
     coverImagePath: productCover,
     driveFileLink: productDriveLink,
     pdfStoragePath: productPdfPath,
+    pdfList: productPdfList,
     entitlementStatus: 'active',
     purchasedAt: now,
     createdAt: now,

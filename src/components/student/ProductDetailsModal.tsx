@@ -10,9 +10,11 @@ import {
   HelpCircle,
   ExternalLink,
   Lock,
-  Layers
+  Layers,
+  ListOrdered
 } from 'lucide-react';
 import { Product } from '../../types';
+import { getProductPdfList } from '../../services/productService';
 
 interface ProductDetailsModalProps {
   product: Product | null;
@@ -129,6 +131,41 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
               {product.description}
             </p>
           </div>
+
+          {/* Included PDF Materials (All Unlocked With Single Payment) */}
+          {(() => {
+            const pdfs = getProductPdfList(product);
+            if (pdfs.length === 0) return null;
+
+            return (
+              <div className="space-y-3 bg-red-50/50 p-4 sm:p-5 rounded-2xl border border-red-100">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <h3 className="text-sm font-extrabold text-stone-900 flex items-center space-x-2">
+                    <ListOrdered className="w-4 h-4 text-red-700" />
+                    <span>Included PDF Files ({pdfs.length})</span>
+                  </h3>
+                  <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full">
+                    ✓ All Unlocked After 1 Payment
+                  </span>
+                </div>
+
+                <div className="space-y-1.5">
+                  {pdfs.map((pdf, idx) => (
+                    <div
+                      key={pdf.id || idx}
+                      className="flex items-center space-x-2.5 p-2.5 rounded-xl bg-white border border-stone-200 text-xs font-semibold text-stone-800"
+                    >
+                      <span className="w-6 h-6 rounded-lg bg-red-100 text-red-700 font-bold text-[11px] flex items-center justify-center font-mono shrink-0">
+                        {String(idx + 1).padStart(2, '0')}
+                      </span>
+                      <span className="truncate flex-1">{pdf.name}</span>
+                      <span className="text-[10px] text-stone-400 font-mono">PDF</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Included Chapters / Content Syllabus */}
           {product.chapters && product.chapters.length > 0 && (

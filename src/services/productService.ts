@@ -12,10 +12,49 @@ import {
   onSnapshot
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase/config';
-import { Product, FreeNote } from '../types';
+import { Product, FreeNote, ProductPdfEntry } from '../types';
 
 export const PRODUCTS_COLLECTION = 'products';
 export const FREE_NOTES_COLLECTION = 'freeNotes';
+
+/**
+ * Helper to retrieve all PDFs for a product or purchase.
+ * Provides complete backward compatibility: if pdfList exists and has items, returns it.
+ * Otherwise falls back to driveFileLink as the primary PDF item.
+ */
+export function getProductPdfList(
+  item?: Partial<Product> | Partial<{ pdfList?: ProductPdfEntry[]; driveFileLink?: string; pdfFileName?: string; title?: string; productTitle?: string }> | null
+): ProductPdfEntry[] {
+  if (!item) return [];
+
+  if (Array.isArray(item.pdfList) && item.pdfList.length > 0) {
+    const valid = item.pdfList
+      .filter((p) => p && typeof p === 'object' && p.driveUrl && p.driveUrl.trim())
+      .map((p, idx) => ({
+        id: p.id || `pdf_${idx + 1}`,
+        name: (p.name && p.name.trim()) || `Part ${String(idx + 1).padStart(2, '0')}`,
+        driveUrl: p.driveUrl.trim()
+      }));
+    if (valid.length > 0) return valid;
+  }
+
+  if (item.driveFileLink && item.driveFileLink.trim()) {
+    const singleName =
+      item.pdfFileName ||
+      item.title ||
+      ('productTitle' in item ? (item as any).productTitle : null) ||
+      'Complete Chapter Notes';
+    return [
+      {
+        id: 'pdf_primary',
+        name: singleName,
+        driveUrl: item.driveFileLink.trim()
+      }
+    ];
+  }
+
+  return [];
+}
 
 // Authentic Official MKR Academy Study Materials for Classes 10 & 9 and HSLC 2027
 // Preserves all 5 original authentic paid products

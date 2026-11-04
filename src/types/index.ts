@@ -24,6 +24,12 @@ export type ProductTag =
   | 'Revision Notes'
   | 'Practice Sets';
 
+export interface ProductPdfEntry {
+  id: string;
+  name: string;
+  driveUrl: string;
+}
+
 export interface Product {
   id: string;
   title: string;
@@ -41,6 +47,7 @@ export interface Product {
   pdfStoragePath?: string;
   pdfFileName?: string;
   driveFileLink?: string; // Google Drive share/view/preview link
+  pdfList?: ProductPdfEntry[]; // Multiple Google Drive PDF links under one product
   fileType: string;
   pageCount?: number;
   originalPricePaise: number; // Stored in paise (e.g. 19900 = ₹199)
@@ -138,6 +145,7 @@ export interface Purchase {
   coverImagePath: string;
   driveFileLink?: string;
   pdfStoragePath?: string;
+  pdfList?: ProductPdfEntry[];
   entitlementStatus: 'active' | 'revoked';
   purchasedAt: string;
   createdAt: string;
