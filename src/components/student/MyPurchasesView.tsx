@@ -12,11 +12,7 @@ import {
   ArrowRight,
   AlertCircle,
   Lock,
-  Loader2,
-  FolderArchive,
-  Layers,
-  ChevronDown,
-  ChevronUp,
+  ListOrdered,
   X
 } from 'lucide-react';
 import { Purchase, Product, ProductPdfEntry } from '../../types';
@@ -61,10 +57,6 @@ export const MyPurchasesView: React.FC<MyPurchasesViewProps> = ({
   const [loading, setLoading] = useState<boolean>(true);
   const [searchFilter, setSearchFilter] = useState('');
 
-  // ZIP download state per purchase ID
-  const [downloadingZipId, setDownloadingZipId] = useState<string | null>(null);
-  const [zipMessage, setZipMessage] = useState<{ id: string; text: string; isError?: boolean } | null>(null);
-
   // Controlled or internal fallback for reader
   const [internalReaderPurchase, setInternalReaderPurchase] = useState<Purchase | null>(null);
   const [activeReaderPdf, setActiveReaderPdf] = useState<ProductPdfEntry | null>(null);
@@ -79,7 +71,6 @@ export const MyPurchasesView: React.FC<MyPurchasesViewProps> = ({
     setActiveReaderPdf(initialPdf || null);
   };
 
-  // Real-time synchronization: sync purchases & live products catalog
   useEffect(() => {
     if (!user) {
       setPurchases([]);
@@ -89,7 +80,7 @@ export const MyPurchasesView: React.FC<MyPurchasesViewProps> = ({
 
     setLoading(true);
 
-    // 1. Subscribe to user purchases
+    // 1. Real-time subscription to user purchases
     const unsubscribePurchases = subscribeToUserPurchases(
       user.uid,
       (userPurchases) => {
@@ -102,7 +93,7 @@ export const MyPurchasesView: React.FC<MyPurchasesViewProps> = ({
       }
     );
 
-    // 2. Subscribe to live published products so newly added/updated PDFs sync in real-time
+    // 2. Real-time subscription to published products
     const unsubscribeProducts = subscribeToPublishedProducts((prods) => {
       const map = new Map<string, Product>();
       prods.forEach((p) => map.set(p.id, p));
@@ -114,53 +105,6 @@ export const MyPurchasesView: React.FC<MyPurchasesViewProps> = ({
       unsubscribeProducts();
     };
   }, [user]);
-
-  // Handle Download All as ZIP
-  const handleDownloadAllZip = async (purchase: Purchase, pdfs: ProductPdfEntry[]) => {
-    if (pdfs.length === 0) return;
-    setDownloadingZipId(purchase.id);
-    setZipMessage({ id: purchase.id, text: 'Preparing ZIP bundle with all chapter PDFs...', isError: false });
-
-    try {
-      const response = await fetch('/api/notes/bundle-zip', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: purchase.productTitle,
-          pdfList: pdfs
-        })
-      });
-
-      if (!response.ok) {
-        const errorJson = await response.json().catch(() => ({}));
-        throw new Error(errorJson.error || 'Server could not bundle ZIP file');
-      }
-
-      const blob = await response.blob();
-      const downloadUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = downloadUrl;
-      const cleanTitle = purchase.productTitle.replace(/[^a-zA-Z0-9_\u0980-\u09FF\s-]/g, '').trim().replace(/\s+/g, '_') || 'MKR_Academy_Notes';
-      link.download = `${cleanTitle}_All_Materials.zip`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(downloadUrl);
-
-      setZipMessage({ id: purchase.id, text: 'ZIP file downloaded successfully! All chapter files are included.', isError: false });
-      setTimeout(() => setZipMessage(null), 5000);
-    } catch (err: any) {
-      console.warn('Download ZIP failed:', err);
-      setZipMessage({
-        id: purchase.id,
-        text: `ZIP generation note: ${err?.message || 'Please use individual chapter download buttons below'}.`,
-        isError: true
-      });
-      setTimeout(() => setZipMessage(null), 7000);
-    } finally {
-      setDownloadingZipId(null);
-    }
-  };
 
   if (!user) {
     return (
@@ -204,7 +148,7 @@ export const MyPurchasesView: React.FC<MyPurchasesViewProps> = ({
             </h1>
           </div>
           <p className="text-stone-500 text-xs sm:text-sm mt-1">
-            Access, view online, or download all chapter PDF materials unlocked under your student account.
+            Access, view in browser, or download your official educational PDF materials anytime.
           </p>
         </div>
 
@@ -227,7 +171,7 @@ export const MyPurchasesView: React.FC<MyPurchasesViewProps> = ({
       {loading ? (
         <div className="py-20 text-center space-y-3">
           <div className="w-8 h-8 border-3 border-red-700 border-t-transparent rounded-full animate-spin mx-auto"></div>
-          <p className="text-xs text-stone-500">Retrieving your verified purchases & materials...</p>
+          <p className="text-xs text-stone-500">Retrieving your verified purchases...</p>
         </div>
       ) : purchases.length === 0 ? (
         /* Empty State */
@@ -250,8 +194,8 @@ export const MyPurchasesView: React.FC<MyPurchasesViewProps> = ({
           </button>
         </div>
       ) : (
-        /* Purchased Notes List */
-        <div className="space-y-6">
+        /* Purchased Notes Grid (Original clean MKR Academy layout) */
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredPurchases.map((purchase) => {
             const purchaseDateFormatted = new Date(purchase.purchasedAt).toLocaleDateString('en-IN', {
               year: 'numeric',
@@ -259,192 +203,155 @@ export const MyPurchasesView: React.FC<MyPurchasesViewProps> = ({
               day: 'numeric'
             });
 
-            // Retrieve all PDFs for this product: live product takes precedence for instant real-time sync
+            // Live product data synchronization
             const liveProduct = productsMap.get(purchase.productId);
             const pdfList = getProductPdfList(liveProduct || purchase);
-            const isDownloadingThisZip = downloadingZipId === purchase.id;
+            const primaryDriveLink = pdfList[0]?.driveUrl || purchase.driveFileLink || '';
 
             return (
               <div
                 key={purchase.id}
-                className="bg-white rounded-2xl sm:rounded-3xl border border-stone-200 overflow-hidden shadow-xs hover:shadow-md transition-all flex flex-col justify-between w-full max-w-full min-w-0"
+                className="bg-white rounded-2xl border border-stone-200 overflow-hidden shadow-xs hover:shadow-lg transition-all flex flex-col justify-between w-full max-w-full min-w-0"
               >
-                {/* Product Summary Header Card */}
-                <div className="p-4 sm:p-6 bg-gradient-to-r from-stone-900 to-stone-950 text-white flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  <div className="flex items-center space-x-4">
+                <div>
+                  {/* Cover */}
+                  <div className="relative aspect-16/9 bg-stone-100 overflow-hidden">
                     <img
                       src={purchase.coverImagePath || 'https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=800&q=80'}
                       alt={purchase.productTitle}
-                      className="w-16 h-16 sm:w-20 sm:h-20 object-cover rounded-2xl border border-stone-800 shrink-0"
+                      className="w-full h-full object-cover"
                     />
-                    <div className="space-y-1">
-                      <div className="flex items-center space-x-2 flex-wrap gap-1">
-                        <span className="bg-red-700 text-white text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
-                          Official MKR Notes
+                    <div className="absolute top-2.5 right-2.5">
+                      {purchase.approvalMethod === 'admin_manual' ? (
+                        <span className="bg-emerald-700 text-white text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center space-x-1 shadow-xs" title={`Manually approved by ${purchase.approvedByAdminEmail || 'Admin'}`}>
+                          <ShieldCheck className="w-3 h-3 text-emerald-200" />
+                          <span>Approved by Admin</span>
                         </span>
-                        {purchase.approvalMethod === 'admin_manual' ? (
-                          <span className="bg-emerald-700 text-white text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center space-x-1" title={`Manually approved by ${purchase.approvedByAdminEmail || 'Admin'}`}>
-                            <ShieldCheck className="w-3 h-3 text-emerald-200" />
-                            <span>Approved by Admin</span>
-                          </span>
-                        ) : (
-                          <span className="bg-emerald-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center space-x-1">
-                            <ShieldCheck className="w-3 h-3" />
-                            <span>Verified Active</span>
-                          </span>
-                        )}
-                      </div>
+                      ) : (
+                        <span className="bg-emerald-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center space-x-1 shadow-xs">
+                          <ShieldCheck className="w-3 h-3" />
+                          <span>Verified Active</span>
+                        </span>
+                      )}
+                    </div>
+                  </div>
 
-                      <h2 className="text-lg sm:text-xl font-extrabold text-white leading-snug">
-                        {purchase.productTitle}
-                      </h2>
+                  {/* Body */}
+                  <div className="p-4 sm:p-5 space-y-3">
+                    <h3 className="font-bold text-stone-900 text-base leading-snug line-clamp-2">
+                      {purchase.productTitle}
+                    </h3>
 
-                      <div className="flex items-center space-x-4 text-xs text-stone-300 pt-0.5 flex-wrap gap-y-1">
+                    <div className="space-y-1 text-xs text-stone-500 bg-stone-50 p-3 rounded-xl border border-stone-100">
+                      <div className="flex items-center justify-between">
                         <span className="flex items-center space-x-1">
-                          <Calendar className="w-3.5 h-3.5 text-stone-400" />
-                          <span>Purchased: {purchaseDateFormatted}</span>
+                          <Calendar className="w-3 h-3 text-stone-400" />
+                          <span>Purchased On:</span>
                         </span>
-                        <span>Order ID: <strong className="font-mono text-stone-200">{purchase.orderId}</strong></span>
+                        <span className="font-semibold text-stone-700">{purchaseDateFormatted}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span>Order ID:</span>
+                        <span className="font-mono text-stone-700">{purchase.orderId}</span>
                       </div>
                     </div>
-                  </div>
 
-                  {/* Top quick action: Download All as ZIP */}
-                  {pdfList.length > 0 && (
-                    <div className="shrink-0 flex items-center">
-                      <button
-                        type="button"
-                        disabled={isDownloadingThisZip}
-                        onClick={() => handleDownloadAllZip(purchase, pdfList)}
-                        className={`w-full sm:w-auto px-5 py-3 rounded-xl font-black text-xs flex items-center justify-center space-x-2 shadow-lg transition-all cursor-pointer ${
-                          isDownloadingThisZip
-                            ? 'bg-stone-700 text-stone-300 cursor-wait'
-                            : 'bg-red-700 hover:bg-red-600 text-white active:scale-95 shadow-red-950/40'
-                        }`}
-                      >
-                        {isDownloadingThisZip ? (
-                          <>
-                            <Loader2 className="w-4 h-4 animate-spin text-white" />
-                            <span>Generating ZIP...</span>
-                          </>
-                        ) : (
-                          <>
-                            <FolderArchive className="w-4 h-4 text-white" />
-                            <span>Download All (ZIP)</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  )}
-                </div>
+                    {/* Multiple PDF materials list if more than 1 file exists */}
+                    {pdfList.length > 1 && (
+                      <div className="space-y-2 pt-1 border-t border-stone-100">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-bold text-stone-800 flex items-center space-x-1">
+                            <ListOrdered className="w-3.5 h-3.5 text-red-700" />
+                            <span>Download Materials ({pdfList.length} PDFs)</span>
+                          </span>
+                          <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-md">
+                            All Unlocked
+                          </span>
+                        </div>
 
-                {/* Status message for ZIP download if any */}
-                {zipMessage && zipMessage.id === purchase.id && (
-                  <div className={`px-4 sm:px-6 py-2.5 text-xs font-semibold flex items-center space-x-2 border-b ${
-                    zipMessage.isError ? 'bg-amber-50 text-amber-900 border-amber-200' : 'bg-emerald-50 text-emerald-900 border-emerald-200'
-                  }`}>
-                    <AlertCircle className="w-4 h-4 shrink-0" />
-                    <span>{zipMessage.text}</span>
-                  </div>
-                )}
+                        <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                          {pdfList.map((pdf, idx) => {
+                            const fileNumber = String(idx + 1).padStart(2, '0');
+                            const downloadUrl = getGoogleDriveDownloadUrl(pdf.driveUrl) || pdf.driveUrl;
 
-                {/* 2. DEDICATED DOWNLOAD MATERIALS SECTION */}
-                <div className="p-4 sm:p-6 space-y-4">
-                  <div className="flex items-center justify-between border-b border-stone-100 pb-3">
-                    <div className="flex items-center space-x-2">
-                      <div className="w-7 h-7 rounded-lg bg-red-100 text-red-700 flex items-center justify-center font-bold text-xs">
-                        <Download className="w-4 h-4" />
-                      </div>
-                      <h3 className="text-sm font-extrabold text-stone-900 uppercase tracking-wider">
-                        Download Materials
-                      </h3>
-                      <span className="bg-stone-100 text-stone-700 font-bold text-xs px-2.5 py-0.5 rounded-full">
-                        {pdfList.length} {pdfList.length === 1 ? 'Chapter PDF' : 'Chapter PDFs'}
-                      </span>
-                    </div>
-
-                    <div className="text-[11px] text-stone-500 hidden sm:block">
-                      100% Unlocked • Permanent Access
-                    </div>
-                  </div>
-
-                  {/* List of All PDFs with clear numbering (01, 02, 03...) */}
-                  {pdfList.length === 0 ? (
-                    <div className="p-6 text-center text-xs text-stone-500 bg-stone-50 rounded-2xl border border-stone-200">
-                      Materials are being organized by the instructor. You will be able to access them shortly.
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 gap-2.5">
-                      {pdfList.map((pdf, idx) => {
-                        const fileNumber = String(idx + 1).padStart(2, '0');
-                        const downloadUrl = getGoogleDriveDownloadUrl(pdf.driveUrl) || pdf.driveUrl;
-
-                        return (
-                          <div
-                            key={pdf.id || idx}
-                            className="bg-stone-50 hover:bg-stone-100/80 transition-colors p-3.5 sm:p-4 rounded-2xl border border-stone-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
-                          >
-                            {/* File Numbering and PDF Name */}
-                            <div className="flex items-center space-x-3 min-w-0">
-                              <span className="w-8 h-8 rounded-xl bg-red-700 text-white font-extrabold text-xs flex items-center justify-center font-mono shrink-0 shadow-xs">
-                                {fileNumber}
-                              </span>
-                              <div className="min-w-0">
-                                <h4 className="font-bold text-stone-900 text-sm leading-snug truncate sm:whitespace-normal">
-                                  {pdf.name}
-                                </h4>
-                                <div className="flex items-center space-x-2 text-[11px] text-stone-500 pt-0.5">
-                                  <span className="inline-flex items-center space-x-1">
-                                    <FileText className="w-3 h-3 text-stone-400" />
-                                    <span>Verified PDF Document</span>
+                            return (
+                              <div
+                                key={pdf.id || idx}
+                                className="bg-stone-50 p-2 rounded-xl border border-stone-200 flex items-center justify-between gap-2 text-xs"
+                              >
+                                <div className="flex items-center space-x-1.5 min-w-0">
+                                  <span className="w-5 h-5 rounded-md bg-red-100 text-red-700 font-bold text-[10px] flex items-center justify-center font-mono shrink-0">
+                                    {fileNumber}
                                   </span>
-                                  <span>•</span>
-                                  <span className="text-emerald-700 font-semibold">Ready to Read & Save</span>
+                                  <span className="font-semibold text-stone-800 truncate" title={pdf.name}>
+                                    {pdf.name}
+                                  </span>
+                                </div>
+
+                                <div className="flex items-center space-x-1 shrink-0">
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedReaderPurchase(purchase, pdf)}
+                                    className="px-2 py-1 bg-white hover:bg-stone-100 text-stone-700 border border-stone-300 rounded-lg text-[10px] font-bold cursor-pointer"
+                                    title="Read online"
+                                  >
+                                    Read
+                                  </button>
+                                  <a
+                                    href={downloadUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="px-2 py-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-[10px] font-bold flex items-center space-x-1"
+                                    title="Download PDF"
+                                  >
+                                    <Download className="w-3 h-3" />
+                                    <span>PDF</span>
+                                  </a>
                                 </div>
                               </div>
-                            </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
 
-                            {/* Action Buttons: Download + Read Online + Drive Link */}
-                            <div className="flex items-center space-x-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-stone-200">
-                              {/* Read Online in Viewer */}
-                              <button
-                                type="button"
-                                onClick={() => setSelectedReaderPurchase(purchase, pdf)}
-                                className="flex-1 sm:flex-none px-3.5 py-2 rounded-xl bg-white hover:bg-stone-100 text-stone-800 border border-stone-300 font-bold text-xs flex items-center justify-center space-x-1.5 transition-colors cursor-pointer shadow-2xs"
-                                title="Read online inside the website"
-                              >
-                                <Eye className="w-3.5 h-3.5 text-stone-600" />
-                                <span>Read Online</span>
-                              </button>
+                {/* Primary Card Actions */}
+                <div className="p-4 sm:p-5 pt-0 border-t border-stone-100 space-y-2 mt-2">
+                  {primaryDriveLink ? (
+                    <a
+                      href={primaryDriveLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full py-2.5 px-3 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-extrabold text-xs flex items-center justify-center space-x-2 shadow-md shadow-blue-800/20 transition-all cursor-pointer"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                      <span>Open Note in Google Drive</span>
+                    </a>
+                  ) : null}
 
-                              {/* Individual Download Button */}
-                              <a
-                                href={downloadUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="flex-1 sm:flex-none px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-xs flex items-center justify-center space-x-1.5 shadow-xs transition-colors cursor-pointer"
-                                title="Download PDF to device"
-                              >
-                                <Download className="w-3.5 h-3.5" />
-                                <span>Download</span>
-                              </a>
+                  <div className="grid grid-cols-2 gap-2 pt-1">
+                    {/* In-App Reader */}
+                    <button
+                      onClick={() => setSelectedReaderPurchase(purchase, pdfList[0] || null)}
+                      className="w-full py-2.5 px-3 rounded-xl border border-stone-300 hover:border-stone-400 hover:bg-stone-50 font-bold text-xs text-stone-700 flex items-center justify-center space-x-1.5 transition-colors cursor-pointer"
+                    >
+                      <Eye className="w-3.5 h-3.5 text-stone-500" />
+                      <span>Read Online</span>
+                    </button>
 
-                              {/* Open Direct on Google Drive */}
-                              <a
-                                href={pdf.driveUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="p-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 flex items-center justify-center transition-colors cursor-pointer"
-                                title="Open this chapter directly in Google Drive"
-                              >
-                                <ExternalLink className="w-4 h-4" />
-                              </a>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
+                    {/* PDF Download Direct */}
+                    <a
+                      href={primaryDriveLink ? (getGoogleDriveDownloadUrl(primaryDriveLink) || primaryDriveLink) : `https://drive.google.com`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full py-2.5 px-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center justify-center space-x-1.5 shadow-md shadow-emerald-800/20 transition-all cursor-pointer text-center"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>Download Drive</span>
+                    </a>
+                  </div>
                 </div>
               </div>
             );
