@@ -25,7 +25,7 @@ import { ProductDetailsModal } from './components/student/ProductDetailsModal';
 import { CheckoutModal } from './components/student/CheckoutModal';
 import { AuthModal } from './components/student/AuthModal';
 import { StudentProfileModal } from './components/student/StudentProfileModal';
-import { PolicyModal } from './components/common/PolicyModal';
+import { PolicyModal, PolicyType } from './components/common/PolicyModal';
 import { AdminDashboard } from './components/admin/AdminDashboard';
 
 function AppContent() {
@@ -51,7 +51,7 @@ function AppContent() {
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authInitialMode, setAuthInitialMode] = useState<'login' | 'register'>('login');
   const [profileModalOpen, setProfileModalOpen] = useState(false);
-  const [policyType, setPolicyType] = useState<'privacy' | 'terms' | 'refund' | 'contact' | null>(null);
+  const [policyType, setPolicyType] = useState<PolicyType>(null);
 
   // In-App Free Notes Reader & Subject Selection
   const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
@@ -338,7 +338,7 @@ function AppContent() {
     }
   };
 
-  const handleOpenPolicy = (type: 'privacy' | 'terms' | 'refund' | 'contact') => {
+  const handleOpenPolicy = (type: PolicyType) => {
     window.history.pushState({ step: 'policy', type }, '');
     setPolicyType(type);
   };
@@ -521,6 +521,7 @@ function AppContent() {
           onClose={handleCloseCheckout}
           onSuccess={handlePurchaseSuccess}
           onRequireAuth={() => handleOpenAuth('login')}
+          onOpenPolicy={handleOpenPolicy}
         />
       )}
 
@@ -529,6 +530,7 @@ function AppContent() {
         isOpen={authModalOpen}
         onClose={handleCloseAuth}
         initialMode={authInitialMode}
+        onOpenPolicy={handleOpenPolicy}
       />
 
       {/* Student Profile Modal */}

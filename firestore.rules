@@ -2,7 +2,7 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Global default deny
+    // 1. Global default deny
     match /{document=**} {
       allow read, write: if false;
     }
@@ -11,45 +11,56 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
     function isAdmin() {
       return isSignedIn() && (
-        (request.auth.token.email != null && request.auth.token.email == 'muktar9085mkr@gmail.com') ||
+        (request.auth.token.email_verified == true && request.auth.token.email == 'muktar9085mkr@gmail.com') ||
         exists(/databases/$(database)/documents/admins/$(request.auth.uid))
       );
     }
 
-    // Admins collection
+    // Admins collection: Protected from unauthorized inspection
     match /admins/{uid} {
-      allow read: if isSignedIn();
-      allow write: if isAdmin();
+      allow read, write: if isAdmin();
     }
 
-    // Users profile
+    // Users profile: PII protection, owner or admin only, no privilege self-escalation
     match /users/{uid} {
       allow get: if isSignedIn() && (request.auth.uid == uid || isAdmin());
       allow list: if isAdmin();
-      allow create: if isSignedIn() && request.auth.uid == uid;
-      allow update: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+      allow create: if isSignedIn() && request.auth.uid == uid &&
+        (!('role' in request.resource.data) || request.resource.data.role == 'student') &&
+        (!('isAdmin' in request.resource.data) || request.resource.data.isAdmin == false);
+      allow update: if isSignedIn() && (
+        isAdmin() ||
+        (request.auth.uid == uid &&
+         !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'isAdmin', 'uid', 'status', 'isVerified', 'suspendedReason', 'blockedReason']))
+      );
       allow delete: if isAdmin();
     }
 
-    // Products catalog: Publicly readable for all educational materials
+    // Products catalog: Publicly readable for all educational materials; write restricted to Admin
     match /products/{productId} {
       allow read: if true;
       allow create, update, delete: if isAdmin();
     }
 
-    // Free Notes catalog: Publicly readable for all educational materials; Admins can manage
+    // Free Notes catalog: Publicly readable for all educational materials; write restricted to Admin
     match /freeNotes/{freeNoteId} {
       allow read: if true;
       allow create, update, delete: if isAdmin();
     }
 
-    // Orders collection: Students can read/list their own orders; Admins can read all
+    // Orders collection: Students can only read/list their own orders; Admins can read/manage all
     match /orders/{orderId} {
       allow get: if isSignedIn() && (resource.data.uid == request.auth.uid || isAdmin());
       allow list: if isSignedIn() && (resource.data.uid == request.auth.uid || isAdmin());
-      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+      allow create: if isSignedIn() &&
+        request.resource.data.uid == request.auth.uid &&
+        request.resource.data.status == 'pending';
       allow update: if isAdmin() || (
         isSignedIn() &&
         resource.data.uid == request.auth.uid &&
@@ -75,11 +86,20 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
-    // Purchases entitlements: Students can read/list their own purchases; Admins can read all
+    // Purchases entitlements:
+    // Students can read/list their own purchases.
+    // Purchase creation requires either Admin approval OR a verified 'paid' or 'manually_approved' order in database.
     match /purchases/{purchaseId} {
       allow get: if isSignedIn() && (resource.data.uid == request.auth.uid || isAdmin());
       allow list: if isSignedIn() && (resource.data.uid == request.auth.uid || isAdmin());
-      allow create: if isSignedIn() && (request.resource.data.uid == request.auth.uid || isAdmin());
+      allow create: if isAdmin() || (
+        isSignedIn() &&
+        request.resource.data.uid == request.auth.uid &&
+        request.resource.data.orderId is string &&
+        exists(/databases/$(database)/documents/orders/$(request.resource.data.orderId)) &&
+        get(/databases/$(database)/documents/orders/$(request.resource.data.orderId)).data.status in ['paid', 'manually_approved'] &&
+        get(/databases/$(database)/documents/orders/$(request.resource.data.orderId)).data.uid == request.auth.uid
+      );
       allow update, delete: if isAdmin();
     }
 
@@ -93,6 +113,22 @@ service cloud.firestore {
     match /homepage_banners/{bannerId} {
       allow read: if true;
       allow write: if isAdmin();
+    }
+
+    // Admin Activity Logs: Immutable, append-only forensic audit trail
+    // Admin can read and create; NO ONE (not even admin) can update or delete!
+    match /admin_activity_logs/{logId} {
+      allow read, create: if isAdmin();
+      allow update, delete: if false;
+    }
+
+    // User Sessions: Device and active session tracking
+    match /user_sessions/{sessionId} {
+      allow get: if isSignedIn() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+      allow update: if isAdmin() || (isSignedIn() && resource.data.uid == request.auth.uid);
+      allow delete: if isAdmin();
     }
   }
 }

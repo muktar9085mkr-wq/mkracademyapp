@@ -48,7 +48,9 @@ import {
   ArrowUp,
   ArrowDown,
   Plus,
-  ListOrdered
+  ListOrdered,
+  Smartphone,
+  Monitor
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { Product, Order, UserProfile, AppPublicSettings, AppLogoSettings, ReconcileAndCleanupResult, ProductPdfEntry } from '../../types';
@@ -84,6 +86,15 @@ import {
   getPublicSettings,
   updatePublicSettings
 } from '../../services/settingsService';
+import {
+  getRecentAdminActivityLogs,
+  AdminActivityLog
+} from '../../services/auditService';
+import { AnalyticsDashboard } from './AnalyticsDashboard';
+import { SessionManager } from './SessionManager';
+import { ReportsManager } from './ReportsManager';
+import { UserDirectoryManager } from './UserDirectoryManager';
+import { getAllSessionsAdmin, UserSession } from '../../services/sessionService';
 
 interface AdminDashboardProps {
   onBackToStore: () => void;
@@ -96,11 +107,14 @@ type AdminTab =
   | 'add-product'
   | 'free-notes'
   | 'students'
+  | 'sessions'
+  | 'reports'
   | 'orders'
   | 'banner'
   | 'logo'
   | 'social'
-  | 'payment-config';
+  | 'payment-config'
+  | 'audit-logs';
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, onProductsChanged }) => {
   const { user, isAdmin, logout } = useAuth();
@@ -110,8 +124,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
   const [freeNotes, setFreeNotes] = useState<Product[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [students, setStudents] = useState<UserProfile[]>([]);
+  const [sessions, setSessions] = useState<UserSession[]>([]);
   const [settings, setSettings] = useState<AppPublicSettings | null>(null);
   const [loading, setLoading] = useState(true);
+  const [auditLogs, setAuditLogs] = useState<AdminActivityLog[]>([]);
+  const [auditLogsLoading, setAuditLogsLoading] = useState(false);
+
+  // Load audit logs function
+  const loadAuditLogs = async () => {
+    setAuditLogsLoading(true);
+    try {
+      const logs = await getRecentAdminActivityLogs(50);
+      setAuditLogs(logs);
+    } catch (e) {
+      console.warn('Error loading audit logs:', e);
+    } finally {
+      setAuditLogsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (currentTab === 'audit-logs') {
+      loadAuditLogs();
+    }
+  }, [currentTab]);
 
   // Edit Product state
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
@@ -349,18 +385,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
       // Ensure all authentic baseline products exist in Firestore
       await syncBaselineProductsToFirestore().catch(() => ({ synced: 0, skipped: 0 }));
 
-      const [prods, ords, studs, setts, fNotes] = await Promise.all([
+      const [prods, ords, studs, setts, fNotes, sess] = await Promise.all([
         getAllProductsAdmin(),
         getAllOrdersAdmin(),
         getAllStudentsAdmin(),
         getPublicSettings(),
-        getFreeNotes()
+        getFreeNotes(),
+        getAllSessionsAdmin().catch(() => [])
       ]);
       setProducts(prods);
       setOrders(ords);
       setStudents(studs);
       setSettings(setts);
       setFreeNotes(fNotes);
+      setSessions(sess);
 
       if (setts) {
         setBannerEnabled(setts.banner.enabled);
@@ -1234,9 +1272,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
           >
             <div className="flex items-center space-x-2.5">
               <Users className="w-4 h-4" />
-              <span>Registered Students</span>
+              <span>User Directory</span>
             </div>
             <span className="text-[11px] opacity-80">{students.length}</span>
+          </button>
+
+          <button
+            onClick={() => setCurrentTab('sessions')}
+            className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center justify-between transition-colors ${
+              currentTab === 'sessions'
+                ? 'bg-red-700 text-white shadow-xs'
+                : 'bg-white text-stone-700 hover:bg-stone-50 border border-stone-200'
+            }`}
+          >
+            <div className="flex items-center space-x-2.5">
+              <Smartphone className="w-4 h-4" />
+              <span>Active Sessions</span>
+            </div>
+            <span className="text-[11px] opacity-80">{sessions.length}</span>
+          </button>
+
+          <button
+            onClick={() => setCurrentTab('reports')}
+            className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center space-x-2.5 transition-colors ${
+              currentTab === 'reports'
+                ? 'bg-red-700 text-white shadow-xs'
+                : 'bg-white text-stone-700 hover:bg-stone-50 border border-stone-200'
+            }`}
+          >
+            <FileText className="w-4 h-4" />
+            <span>Export Reports</span>
           </button>
 
           <button
@@ -1286,12 +1351,55 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
             <CreditCard className="w-4 h-4" />
             <span>Payment Settings</span>
           </button>
+
+          <button
+            onClick={() => setCurrentTab('audit-logs')}
+            className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center space-x-2.5 transition-colors ${
+              currentTab === 'audit-logs'
+                ? 'bg-red-700 text-white shadow-xs'
+                : 'bg-white text-stone-700 hover:bg-stone-50 border border-stone-200'
+            }`}
+          >
+            <ShieldCheck className="w-4 h-4 text-emerald-600" />
+            <span>Audit Activity Logs</span>
+          </button>
         </aside>
 
         {/* Tab Content Area */}
         <main className="flex-1 bg-white rounded-3xl border border-stone-200 shadow-xs p-6 sm:p-8 overflow-x-auto">
-          {/* TAB: DASHBOARD OVERVIEW */}
+          {/* TAB: REAL-TIME ANALYTICS DASHBOARD */}
           {currentTab === 'dashboard' && (
+            <AnalyticsDashboard
+              orders={orders}
+              products={products}
+              students={students}
+              sessions={sessions}
+              onNavigateToTab={(t) => setCurrentTab(t)}
+              onRefreshData={loadAllAdminData}
+              refreshing={loading}
+            />
+          )}
+
+          {/* TAB: ACTIVE SESSIONS & DEVICE MANAGEMENT */}
+          {currentTab === 'sessions' && (
+            <SessionManager
+              initialSessions={sessions}
+              onRefresh={loadAllAdminData}
+            />
+          )}
+
+          {/* TAB: EXPORTABLE REPORTS SYSTEM */}
+          {currentTab === 'reports' && (
+            <ReportsManager
+              orders={orders}
+              students={students}
+              products={products}
+              sessions={sessions}
+            />
+          )}
+
+          {/* TAB: LEGACY DASHBOARD OVERVIEW */}
+          {false && currentTab === 'dashboard' && (
             <div className="space-y-8 animate-in fade-in">
               <div>
                 <h2 className="text-xl font-extrabold text-stone-900 font-sans">
@@ -3874,8 +3982,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
             </div>
           )}
 
-          {/* TAB: REGISTERED STUDENTS */}
+          {/* TAB: ADVANCED USER DIRECTORY & MANAGEMENT */}
           {currentTab === 'students' && (
+            <UserDirectoryManager
+              sessions={sessions}
+              onRefreshAll={loadAllAdminData}
+            />
+          )}
+
+          {/* TAB: LEGACY REGISTERED STUDENTS ROSTER */}
+          {false && currentTab === 'students' && (
             <div className="space-y-6 animate-in fade-in">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
@@ -4629,6 +4745,99 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
                   Both your Netlify Functions (<code className="font-mono text-stone-800">netlify/functions/api.ts</code>) and Express server utilize these keys to create signed Razorpay orders and authenticate live customer payments.
                 </p>
               </div>
+            </div>
+          )}
+
+          {/* TAB: AUDIT ACTIVITY LOGS (Improvement 12) */}
+          {currentTab === 'audit-logs' && (
+            <div className="space-y-6 animate-in fade-in">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-xl font-extrabold text-stone-900 font-sans flex items-center space-x-2">
+                    <ShieldCheck className="w-5 h-5 text-emerald-600" />
+                    <span>Immutable Admin Activity Logs</span>
+                  </h2>
+                  <p className="text-xs text-stone-500">
+                    Forensic audit trail of all administrative actions. Protected against modification or tampering.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={loadAuditLogs}
+                  disabled={auditLogsLoading}
+                  className="px-3.5 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold flex items-center space-x-1.5 transition-colors cursor-pointer"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${auditLogsLoading ? 'animate-spin' : ''}`} />
+                  <span>Refresh Logs</span>
+                </button>
+              </div>
+
+              {auditLogsLoading ? (
+                <div className="p-12 text-center text-stone-500 flex flex-col items-center justify-center space-y-2">
+                  <Loader2 className="w-6 h-6 animate-spin text-red-600" />
+                  <p className="text-xs font-semibold">Loading verified audit records...</p>
+                </div>
+              ) : auditLogs.length === 0 ? (
+                <div className="p-12 text-center text-stone-400 border border-dashed border-stone-200 rounded-3xl space-y-2">
+                  <ShieldCheck className="w-10 h-10 text-stone-300 mx-auto" />
+                  <p className="text-sm font-bold text-stone-600">No Administrative Activity Logged Yet</p>
+                  <p className="text-xs text-stone-400 max-w-sm mx-auto">
+                    New operations such as product creation, notes upload, settings edits, and manual payment approvals will appear here chronologically.
+                  </p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-2xl border border-stone-200 shadow-xs">
+                  <table className="w-full text-left text-xs text-stone-700 border-collapse">
+                    <thead className="bg-stone-50 text-stone-500 font-bold uppercase text-[10px] tracking-wider border-b border-stone-200">
+                      <tr>
+                        <th className="p-3">Timestamp (IST)</th>
+                        <th className="p-3">Action</th>
+                        <th className="p-3">Target</th>
+                        <th className="p-3">Admin</th>
+                        <th className="p-3">Details</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-stone-100 font-mono text-[11px]">
+                      {auditLogs.map((log) => {
+                        const dateObj = new Date(log.timestamp || log.createdAt);
+                        const formattedTime = isNaN(dateObj.getTime())
+                          ? log.timestamp
+                          : dateObj.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
+
+                        return (
+                          <tr key={log.id} className="hover:bg-stone-50/80 transition-colors">
+                            <td className="p-3 text-stone-500 whitespace-nowrap">{formattedTime}</td>
+                            <td className="p-3">
+                              <span className="font-bold text-red-700 bg-red-50 border border-red-100 px-2 py-0.5 rounded-md">
+                                {log.action}
+                              </span>
+                            </td>
+                            <td className="p-3">
+                              <span className="text-stone-900 font-semibold">{log.targetType}</span>
+                              {log.targetId && log.targetId !== 'N/A' && (
+                                <span className="text-stone-400 text-[10px] block truncate max-w-[120px]">
+                                  {log.targetId}
+                                </span>
+                              )}
+                            </td>
+                            <td className="p-3 text-stone-600 truncate max-w-[150px]">{log.adminEmail}</td>
+                            <td className="p-3 text-stone-500 font-sans text-xs">
+                              {log.details && Object.keys(log.details).length > 0 ? (
+                                <span className="truncate block max-w-xs text-[11px] text-stone-600">
+                                  {JSON.stringify(log.details)}
+                                </span>
+                              ) : (
+                                <span className="text-stone-400 italic">None</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
         </main>

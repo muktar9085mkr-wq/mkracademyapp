@@ -14,10 +14,11 @@ import {
 } from 'lucide-react';
 import { SocialLinks, AppPublicSettings } from '../../types';
 import { BrandLogo } from './BrandLogo';
+import { PolicyType } from './PolicyModal';
 
 interface FooterProps {
   onNavigate: (view: string, filterParam?: any) => void;
-  onOpenPolicy: (type: 'privacy' | 'terms' | 'refund' | 'contact') => void;
+  onOpenPolicy: (type: PolicyType) => void;
   socialLinks?: SocialLinks;
   settings?: AppPublicSettings | null;
 }
@@ -250,6 +251,33 @@ export const Footer: React.FC<FooterProps> = ({
                 >
                   <ShieldCheck className="w-3.5 h-3.5 text-stone-500" />
                   <span>Refund Policy</span>
+                </button>
+              </li>
+              <li>
+                <button
+                  onClick={() => onOpenPolicy('copyright')}
+                  className="hover:text-stone-100 transition-colors flex items-center space-x-1.5"
+                >
+                  <FileText className="w-3.5 h-3.5 text-stone-500" />
+                  <span>Copyright & Anti-Piracy</span>
+                </button>
+              </li>
+              <li>
+                <button
+                  onClick={() => onOpenPolicy('grievance')}
+                  className="hover:text-stone-100 transition-colors flex items-center space-x-1.5"
+                >
+                  <ShieldCheck className="w-3.5 h-3.5 text-red-500" />
+                  <span className="text-red-400 hover:text-red-300 font-medium">Grievance Redressal</span>
+                </button>
+              </li>
+              <li>
+                <button
+                  onClick={() => onOpenPolicy('tax-certin')}
+                  className="hover:text-stone-100 transition-colors flex items-center space-x-1.5"
+                >
+                  <ShieldCheck className="w-3.5 h-3.5 text-stone-500" />
+                  <span>Tax & CERT-In Notice</span>
                 </button>
               </li>
               <li>

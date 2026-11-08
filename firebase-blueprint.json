@@ -160,6 +160,41 @@
         "updatedAt": { "type": "string" }
       },
       "required": ["imageUrl", "displayOrder", "isActive", "createdAt"]
+    },
+    "UserSession": {
+      "title": "UserSession",
+      "description": "Active student or admin device session record",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128 },
+        "userName": { "type": "string", "maxLength": 100 },
+        "userEmail": { "type": "string", "maxLength": 150 },
+        "deviceType": { "type": "string", "enum": ["Android", "iOS", "Desktop", "Tablet", "Unknown"] },
+        "browser": { "type": "string", "maxLength": 100 },
+        "os": { "type": "string", "maxLength": 100 },
+        "ipAddress": { "type": "string", "maxLength": 50 },
+        "loginAt": { "type": "string" },
+        "lastActiveAt": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "revoked", "expired"] },
+        "userAgent": { "type": "string", "maxLength": 250 }
+      },
+      "required": ["uid", "deviceType", "status", "loginAt"]
+    },
+    "AdminActivityLog": {
+      "title": "AdminActivityLog",
+      "description": "Immutable forensic audit trail of administrator actions",
+      "type": "object",
+      "properties": {
+        "adminUid": { "type": "string", "maxLength": 128 },
+        "adminEmail": { "type": "string", "maxLength": 150 },
+        "action": { "type": "string", "maxLength": 100 },
+        "targetId": { "type": "string", "maxLength": 128 },
+        "targetType": { "type": "string", "enum": ["product", "order", "settings", "banner", "user", "system"] },
+        "details": { "type": "object" },
+        "timestamp": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["adminUid", "adminEmail", "action", "targetType", "timestamp"]
     }
   },
   "firestore": {
@@ -198,6 +233,14 @@
     "/homepage_banners/{bannerId}": {
       "schema": "HomepageBanner",
       "description": "Promotional banners displayed dynamically in the homepage hero slider"
+    },
+    "/admin_activity_logs/{logId}": {
+      "schema": "AdminActivityLog",
+      "description": "Immutable forensic audit trail of administrative actions"
+    },
+    "/user_sessions/{sessionId}": {
+      "schema": "UserSession",
+      "description": "Device and active session records"
     }
   }
 }

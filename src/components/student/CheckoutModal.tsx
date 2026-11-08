@@ -18,6 +18,7 @@ import {
 import confetti from 'canvas-confetti';
 import { Product, Order, Purchase } from '../../types';
 import { useAuth } from '../../context/AuthContext';
+import { PolicyType } from '../common/PolicyModal';
 import {
   createBackendPaymentOrder,
   verifyBackendPayment,
@@ -72,6 +73,7 @@ interface CheckoutModalProps {
   onClose: () => void;
   onSuccess: (purchase: Purchase) => void;
   onRequireAuth: () => void;
+  onOpenPolicy?: (type: PolicyType) => void;
 }
 
 type CheckoutStep = 'review' | 'processing' | 'success' | 'failed';
@@ -80,7 +82,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   product,
   onClose,
   onSuccess,
-  onRequireAuth
+  onRequireAuth,
+  onOpenPolicy
 }) => {
   const { user, profile, updateProfileData } = useAuth();
 
@@ -91,6 +94,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [phoneError, setPhoneError] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [completedPurchase, setCompletedPurchase] = useState<Purchase | null>(null);
   const [orderSummaryId, setOrderSummaryId] = useState<string>('');
 
@@ -180,6 +184,10 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     if (!validatePhoneNumber(studentPhone)) return;
     if (!studentName.trim()) {
       setErrorMessage('Please provide your name for the order record');
+      return;
+    }
+    if (!agreedToTerms) {
+      setErrorMessage('Please accept the Terms & Conditions, Privacy Policy and Refund Policy (including parental/guardian consent if under 18) to proceed with payment.');
       return;
     }
 
@@ -506,11 +514,65 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               </span>
             </div>
 
+            {/* Statutory Consent Checkbox (DPDP Act 2023 & Consumer Protection E-Commerce Rules 2020) */}
+            <div className="bg-stone-50 border border-stone-200 p-2.5 rounded-xl">
+              <label className="flex items-start space-x-2.5 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  id="checkout-agree-terms"
+                  checked={agreedToTerms}
+                  onChange={(e) => {
+                    setAgreedToTerms(e.target.checked);
+                    if (e.target.checked && errorMessage?.includes('Terms & Conditions')) {
+                      setErrorMessage(null);
+                    }
+                  }}
+                  className="mt-0.5 w-4 h-4 text-red-600 rounded border-stone-300 focus:ring-red-500 cursor-pointer shrink-0"
+                />
+                <span className="text-[11px] text-stone-700 leading-snug">
+                  I agree to the{' '}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      onOpenPolicy?.('terms');
+                    }}
+                    className="text-red-700 hover:underline font-semibold"
+                  >
+                    Terms & Conditions
+                  </button>
+                  ,{' '}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      onOpenPolicy?.('privacy');
+                    }}
+                    className="text-red-700 hover:underline font-semibold"
+                  >
+                    Privacy Policy
+                  </button>{' '}
+                  and{' '}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      onOpenPolicy?.('refund');
+                    }}
+                    className="text-red-700 hover:underline font-semibold"
+                  >
+                    Refund Policy
+                  </button>
+                  . (If under 18 years, I confirm parental/guardian consent).
+                </span>
+              </label>
+            </div>
+
             {/* Compact Pay Now Button */}
             <button
               onClick={handlePayNow}
-              disabled={isSubmitting}
-              className="w-full py-2.5 sm:py-3 px-4 rounded-xl bg-red-700 hover:bg-red-800 disabled:bg-stone-300 text-white font-bold text-xs sm:text-sm shadow-md flex items-center justify-center space-x-2 transition-all cursor-pointer active:scale-98"
+              disabled={isSubmitting || !agreedToTerms}
+              className="w-full py-2.5 sm:py-3 px-4 rounded-xl bg-red-700 hover:bg-red-800 disabled:bg-stone-300 disabled:cursor-not-allowed text-white font-bold text-xs sm:text-sm shadow-md flex items-center justify-center space-x-2 transition-all cursor-pointer active:scale-98"
             >
               <Lock className="w-3.5 h-3.5" />
               <span>Proceed to Pay ₹{sellingPrice}</span>

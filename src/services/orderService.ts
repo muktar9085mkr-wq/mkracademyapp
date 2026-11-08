@@ -11,13 +11,31 @@ import {
   orderBy,
   onSnapshot
 } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from '../firebase/config';
+import { db, auth, handleFirestoreError, OperationType } from '../firebase/config';
 import { Order, Purchase, UserProfile, OrderStatus, ReconcileAndCleanupResult, ProductPdfEntry } from '../types';
 
 export const ORDERS_COLLECTION = 'orders';
 export const ARCHIVED_ORDERS_COLLECTION = 'archived_orders';
 export const PURCHASES_COLLECTION = 'purchases';
 export const USERS_COLLECTION = 'users';
+
+/**
+ * Retrieve authorization headers with the current user's Firebase ID token
+ */
+async function getAuthHeaders(): Promise<Record<string, string>> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  try {
+    if (auth.currentUser) {
+      const token = await auth.currentUser.getIdToken();
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+    }
+  } catch (err) {
+    console.warn('Could not retrieve Firebase auth token for API call:', err);
+  }
+  return headers;
+}
 
 /**
  * Step 6: Call backend to create Razorpay Order
@@ -32,9 +50,10 @@ export async function createBackendPaymentOrder(params: {
     phoneNumber: string;
   };
 }) {
+  const headers = await getAuthHeaders();
   const response = await fetch('/api/payment/create-order', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify(params)
   });
 
@@ -57,9 +76,10 @@ export async function verifyBackendPayment(params: {
   productId: string;
   studentId: string;
 }) {
+  const headers = await getAuthHeaders();
   const response = await fetch('/api/payment/verify', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify(params)
   });
 
@@ -433,17 +453,19 @@ export async function manualApproveOrderAdmin(params: {
 
   // 5. Fire background backend call for server-side audit logging
   try {
-    fetch('/api/admin/approve-payment', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        orderId,
-        adminEmail,
-        adminUid,
-        razorpayPaymentId: paymentIdentifier,
-        remark: remark?.trim() || ''
-      })
-    }).catch((apiErr) => console.warn('Backend approval logging notice:', apiErr));
+    getAuthHeaders().then((headers) => {
+      fetch('/api/admin/approve-payment', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          orderId,
+          adminEmail,
+          adminUid,
+          razorpayPaymentId: paymentIdentifier,
+          remark: remark?.trim() || ''
+        })
+      }).catch((apiErr) => console.warn('Backend approval logging notice:', apiErr));
+    });
   } catch (err) {
     // Non-blocking
   }

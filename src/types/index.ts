@@ -91,6 +91,20 @@ export interface UserProfile {
   role?: 'student' | 'admin';
   createdAt?: string;
   updatedAt?: string;
+  status?: 'active' | 'suspended' | 'blocked';
+  isVerified?: boolean;
+  emailVerified?: boolean;
+  verifiedAt?: string | null;
+  verifiedBy?: string | null;
+  suspendedAt?: string | null;
+  suspendedBy?: string | null;
+  suspendedReason?: string | null;
+  blockedAt?: string | null;
+  blockedBy?: string | null;
+  blockedReason?: string | null;
+  restoredAt?: string | null;
+  restoredBy?: string | null;
+  lastLoginAt?: string;
 }
 
 export type OrderStatus = 'pending' | 'paid' | 'failed' | 'refunded' | 'manually_approved';

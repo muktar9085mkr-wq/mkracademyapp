@@ -1,24 +1,41 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
+
+    // Global default deny
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+
     function isSignedIn() {
       return request.auth != null;
     }
+
     function isAdmin() {
       return isSignedIn() && (
-        request.auth.token.email == 'muktar9085mkr@gmail.com'
+        (request.auth.token.email_verified == true && request.auth.token.email == 'muktar9085mkr@gmail.com') ||
+        (request.auth.token.admin == true)
       );
     }
 
-    // Public covers and banners
+    // Public covers and promotional banners:
+    // Publicly readable for all users; writable only by Admin with strict size & image MIME validation
     match /public/{allPaths=**} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if isAdmin() &&
+        request.resource.size < 5 * 1024 * 1024 &&
+        request.resource.contentType.matches('image/.*');
     }
 
-    // Notes PDF files - strictly protected
+    // Notes PDF files - strictly private:
+    // Only verified administrators can directly access or write to storage;
+    // Uploads strictly enforce PDF format and size <= 60MB.
+    // Students access authorized PDFs via the authenticated backend endpoint.
     match /notes/{allPaths=**} {
-      allow read, write: if isAdmin();
+      allow read: if isAdmin();
+      allow write: if isAdmin() &&
+        request.resource.size < 60 * 1024 * 1024 &&
+        request.resource.contentType == 'application/pdf';
     }
   }
 }

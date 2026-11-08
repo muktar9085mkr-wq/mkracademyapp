@@ -13,6 +13,7 @@ import {
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase/config';
 import { Product, FreeNote, ProductPdfEntry } from '../types';
+import { logAdminActivity } from './auditService';
 
 export const PRODUCTS_COLLECTION = 'products';
 export const FREE_NOTES_COLLECTION = 'freeNotes';
@@ -682,6 +683,12 @@ export async function addProduct(productData: Omit<Product, 'id' | 'createdAt' |
       updatedAt: new Date().toISOString()
     };
     await setDoc(docRef, newProduct);
+    logAdminActivity({
+      action: 'PRODUCT_CREATE',
+      targetId: id,
+      targetType: 'product',
+      details: { title: productData.title, subject: productData.subject, sellingPricePaise: productData.sellingPricePaise }
+    }).catch(() => {});
     return id;
   } catch (error) {
     handleFirestoreError(error, OperationType.CREATE, PRODUCTS_COLLECTION);
@@ -702,6 +709,12 @@ export async function updateProduct(id: string, updates: Partial<Product>): Prom
       },
       { merge: true }
     );
+    logAdminActivity({
+      action: 'PRODUCT_UPDATE',
+      targetId: id,
+      targetType: 'product',
+      details: { updatedFields: Object.keys(updates) }
+    }).catch(() => {});
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, `${PRODUCTS_COLLECTION}/${id}`);
   }
@@ -715,6 +728,11 @@ export async function deleteProduct(id: string): Promise<void> {
     const docRef = doc(db, PRODUCTS_COLLECTION, id);
     await setDoc(docRef, { _deleted: true, published: false, updatedAt: new Date().toISOString() }, { merge: true });
     await deleteDoc(docRef).catch(() => {});
+    logAdminActivity({
+      action: 'PRODUCT_DELETE',
+      targetId: id,
+      targetType: 'product'
+    }).catch(() => {});
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, `${PRODUCTS_COLLECTION}/${id}`);
   }

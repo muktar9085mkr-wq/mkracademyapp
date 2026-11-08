@@ -15,6 +15,7 @@ import {
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { auth, db, ADMIN_EMAIL, testConnection } from '../firebase/config';
 import { UserProfile } from '../types';
+import { recordUserSession } from '../services/sessionService';
 
 interface AuthContextType {
   user: User | null;
@@ -146,6 +147,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (currentUser) {
         try {
           await syncProfile(currentUser);
+          recordUserSession(currentUser).catch(() => {});
         } catch (err) {
           console.warn('Could not sync user profile in onAuthStateChanged:', err);
         }

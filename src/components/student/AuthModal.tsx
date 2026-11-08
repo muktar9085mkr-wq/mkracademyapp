@@ -11,17 +11,20 @@ import {
   GraduationCap
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { PolicyType } from '../common/PolicyModal';
 
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialMode?: 'login' | 'register';
+  onOpenPolicy?: (type: PolicyType) => void;
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({
   isOpen,
   onClose,
-  initialMode = 'login'
+  initialMode = 'login',
+  onOpenPolicy
 }) => {
   const {
     loginWithEmail,
@@ -331,6 +334,28 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <span>Send Reset Email</span>
             )}
           </button>
+
+          {mode === 'register' && (
+            <p className="text-[10px] text-stone-500 text-center leading-relaxed mt-2.5">
+              By creating an account, you agree to MKR Academy's{' '}
+              <button
+                type="button"
+                onClick={() => onOpenPolicy?.('terms')}
+                className="text-red-700 underline font-medium hover:text-red-800"
+              >
+                Terms & Conditions
+              </button>{' '}
+              and{' '}
+              <button
+                type="button"
+                onClick={() => onOpenPolicy?.('privacy')}
+                className="text-red-700 underline font-medium hover:text-red-800"
+              >
+                Privacy Policy
+              </button>
+              . If under 18 years, you confirm that your parent/guardian has permitted registration.
+            </p>
+          )}
         </form>
 
 

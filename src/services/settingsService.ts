@@ -1,6 +1,7 @@
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase/config';
 import { AppPublicSettings } from '../types';
+import { logAdminActivity } from './auditService';
 
 const SETTINGS_COLLECTION = 'appSettings';
 const PUBLIC_DOC = 'public';
@@ -91,6 +92,12 @@ export async function updatePublicSettings(newSettings: Partial<AppPublicSetting
       ...newSettings,
       updatedAt: new Date().toISOString()
     }, { merge: true });
+    logAdminActivity({
+      action: 'SETTINGS_UPDATE',
+      targetId: 'public',
+      targetType: 'settings',
+      details: { updatedKeys: Object.keys(newSettings) }
+    }).catch(() => {});
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, `${SETTINGS_COLLECTION}/${PUBLIC_DOC}`);
   }
