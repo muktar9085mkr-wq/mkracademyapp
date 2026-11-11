@@ -39,6 +39,7 @@ class MainActivity : AppCompatActivity() {
         setupWebSettings()
         setupWebViewClient()
         setupChromeClient()
+        setupDownloadListener()
         setupBackNavigation()
 
         if (savedInstanceState == null) {
@@ -213,6 +214,35 @@ class MainActivity : AppCompatActivity() {
         webView.webChromeClient = object : WebChromeClient() {
             override fun onProgressChanged(view: WebView?, newProgress: Int) {
                 super.onProgressChanged(view, newProgress)
+            }
+        }
+    }
+
+    private fun setupDownloadListener() {
+        webView.setDownloadListener { url, userAgent, contentDisposition, mimetype, _ ->
+            try {
+                val intent = Intent(Intent.ACTION_VIEW)
+                intent.data = Uri.parse(url)
+                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                startActivity(intent)
+            } catch (e: Exception) {
+                try {
+                    val request = android.app.DownloadManager.Request(Uri.parse(url))
+                    request.setMimeType(mimetype)
+                    request.addRequestHeader("User-Agent", userAgent)
+                    request.setDescription("Downloading MKR Academy Educational Notes")
+                    request.setTitle(URLUtil.guessFileName(url, contentDisposition, mimetype))
+                    request.setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                    request.setDestinationInExternalPublicDir(
+                        android.os.Environment.DIRECTORY_DOWNLOADS,
+                        URLUtil.guessFileName(url, contentDisposition, mimetype)
+                    )
+                    val dm = getSystemService(Context.DOWNLOAD_SERVICE) as? android.app.DownloadManager
+                    dm?.enqueue(request)
+                    Toast.makeText(applicationContext, "Downloading Note...", Toast.LENGTH_SHORT).show()
+                } catch (ex: Exception) {
+                    Toast.makeText(applicationContext, "Failed to start download.", Toast.LENGTH_SHORT).show()
+                }
             }
         }
     }

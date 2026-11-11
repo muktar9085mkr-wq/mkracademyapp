@@ -30,6 +30,8 @@ export interface ProductPdfEntry {
   driveUrl: string;
 }
 
+export type PYQExamType = 'HSLC' | 'Half Yearly' | 'Pre-Final';
+
 export interface Product {
   id: string;
   title: string;
@@ -53,6 +55,8 @@ export interface Product {
   originalPricePaise: number; // Stored in paise (e.g. 19900 = ₹199)
   sellingPricePaise: number;  // Stored in paise (e.g. 9900 = ₹99, 0 for Free)
   isFree?: boolean;           // True if product is a Free PDF note
+  pyqType?: 'HSLC' | 'Half Yearly' | 'Pre-Final' | string; // Type of Previous Year Paper
+  pyqYear?: number | string;                               // Year of Question Paper (e.g. 2026, 2025, 2024)
   featured: boolean;
   published: boolean;
   createdAt: string;

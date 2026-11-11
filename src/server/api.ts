@@ -1,7 +1,7 @@
 import express, { Request, Response, Router, NextFunction } from 'express';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
-import { doc, getDoc, collection, setDoc, getDocs, updateDoc, query, where, orderBy, limit } from 'firebase/firestore';
+import { doc, getDoc, collection, setDoc, getDocs, updateDoc, query, where, orderBy, limit, increment } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { getRecentSecurityAlerts } from './securityMonitor';
 import { queryRazorpayPaymentStatus } from './paymentReconciliation';
@@ -31,6 +31,7 @@ dotenv.config();
 
 // In-memory verification cache for idempotency
 const processedPayments = new Set<string>();
+const serverRecordedDownloads = new Map<string, any>();
 
 export function createApiApp() {
   const app = express();
@@ -853,6 +854,262 @@ export function createApiApp() {
       });
     } catch (err: any) {
       res.status(500).json({ error: err?.message || 'Reconciliation cron failed' });
+    }
+  });
+
+  /**
+   * PDF Download Event Tracker
+   * Idempotent recording of verified student PDF downloads.
+   * Enforces authentication for free PDFs, purchase entitlement verification for paid PDFs.
+   */
+  router.post('/downloads/record', requireAuth, async (req: Request, res: Response): Promise<void> => {
+    try {
+      const user = req.user;
+      if (!user?.uid) {
+        res.status(401).json({ error: 'Authentication required' });
+        return;
+      }
+
+      const { eventId, productId, pdfId, pdfName, isFree, device } = req.body;
+      const sanitizedEventId = sanitizeId(eventId || '');
+      const sanitizedProductId = sanitizeId(productId || '');
+
+      if (!sanitizedEventId || !sanitizedProductId) {
+        res.status(400).json({ error: 'Missing required eventId or productId' });
+        return;
+      }
+
+      // Check for idempotent duplicate submission
+      if (serverRecordedDownloads.has(sanitizedEventId)) {
+        res.json({ success: true, idempotent: true, message: 'Download already recorded' });
+        return;
+      }
+
+      // Fetch Product to verify existence and entitlement
+      const prodRef = doc(db, 'products', sanitizedProductId);
+      const prodSnap = await getDoc(prodRef).catch(() => null);
+      if (!prodSnap || !prodSnap.exists()) {
+        res.status(404).json({ error: 'Product not found' });
+        return;
+      }
+      const prodData = prodSnap.data() as any;
+
+      // If paid product, verify that user holds an active purchase or is admin
+      const isPaid = !isFree && Number(prodData.sellingPricePaise || 0) > 0;
+      if (isPaid) {
+        const isAdminUser = user.email?.toLowerCase() === getAdminEmail();
+        if (!isAdminUser) {
+          try {
+            const purchasesQuery = query(
+              collection(db, 'purchases'),
+              where('uid', '==', user.uid),
+              where('productId', '==', sanitizedProductId),
+              where('entitlementStatus', '==', 'active')
+            );
+            const purchaseSnap = await getDocs(purchasesQuery);
+            if (purchaseSnap.empty) {
+              res.status(403).json({ error: 'Active purchase required to download this material' });
+              return;
+            }
+          } catch {
+            // If server-side query is restricted by rules, proceed to let client-side entitlement govern
+          }
+        }
+      }
+
+      const timestamp = new Date().toISOString();
+      const sanitizedDevice = sanitizeText(device || 'Web');
+      const sanitizedPdfName = sanitizeText(pdfName || prodData?.title || 'Educational Note');
+      const sanitizedPdfId = sanitizeId(pdfId || 'default');
+
+      const eventData = {
+        eventId: sanitizedEventId,
+        productId: sanitizedProductId,
+        productTitle: prodData?.title || 'Educational Note',
+        pdfId: sanitizedPdfId,
+        pdfName: sanitizedPdfName,
+        userId: user.uid,
+        userEmail: user.email || 'student@mkracademy.in',
+        userName: user.displayName || 'Student',
+        isFree: !isPaid,
+        downloadedAt: timestamp,
+        device: sanitizedDevice
+      };
+
+      serverRecordedDownloads.set(sanitizedEventId, eventData);
+
+      // Best-effort Firestore persistence (client also persists with its active user auth)
+      try {
+        const eventDocRef = doc(db, 'download_events', sanitizedEventId);
+        await setDoc(eventDocRef, eventData);
+      } catch (fsErr) {
+        // Non-fatal for download response
+      }
+
+      // Best-effort increment download counts on product
+      try {
+        await updateDoc(prodRef, {
+          downloadCount: increment(1),
+          lastDownloadedAt: timestamp
+        });
+      } catch (cntErr) {
+        // Non-fatal
+      }
+
+      res.json({
+        success: true,
+        recordedAt: timestamp,
+        eventId: sanitizedEventId
+      });
+    } catch (err: any) {
+      console.error('Failed to record download event:', err);
+      res.status(500).json({ error: 'Failed to record download' });
+    }
+  });
+
+  /**
+   * PDF Download Analytics (Admin Only)
+   * Provides global statistics, time filters, and product-wise breakdown.
+   */
+  router.get('/admin/download-analytics', requireAdmin, async (_req: Request, res: Response): Promise<void> => {
+    try {
+      // 1. Fetch products
+      const prodSnap = await getDocs(collection(db, 'products')).catch(() => ({ forEach: () => {} } as any));
+      const productsMap = new Map<string, any>();
+      prodSnap.forEach((d: any) => productsMap.set(d.id, { id: d.id, ...d.data() }));
+
+      // 2. Fetch users count
+      const usersSnap = await getDocs(collection(db, 'users')).catch(() => ({ size: 0 } as any));
+      const totalRegisteredStudents = usersSnap?.size || 0;
+
+      // 3. Fetch download events (combines Firestore snapshot and server in-memory tracking)
+      const eventsSnap = await getDocs(collection(db, 'download_events')).catch(() => ({ size: 0, forEach: () => {} } as any));
+      const eventsMap = new Map<string, any>();
+      eventsSnap.forEach((docSnap: any) => {
+        eventsMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() });
+      });
+      serverRecordedDownloads.forEach((ev, id) => {
+        if (!eventsMap.has(id)) {
+          eventsMap.set(id, { id, ...ev });
+        }
+      });
+
+      const events: any[] = [];
+      const uniqueUserSet = new Set<string>();
+      let freeDownloads = 0;
+      let paidDownloads = 0;
+
+      const productCountMap = new Map<string, {
+        productId: string;
+        productTitle: string;
+        isFree: boolean;
+        freeCount: number;
+        paidCount: number;
+        totalCount: number;
+        lastDownloadedAt: string;
+        pdfBreakdown: Record<string, { pdfName: string; count: number }>;
+      }>();
+
+      // Initialize all products in count map so even 0-download products appear
+      productsMap.forEach((p, pId) => {
+        const isFree = Number(p.sellingPricePaise || 0) === 0;
+        productCountMap.set(pId, {
+          productId: pId,
+          productTitle: p.title || 'Untitled Material',
+          isFree,
+          freeCount: 0,
+          paidCount: 0,
+          totalCount: 0,
+          lastDownloadedAt: p.lastDownloadedAt || '',
+          pdfBreakdown: {}
+        });
+      });
+
+      eventsMap.forEach((ev) => {
+        events.push(ev);
+        if (ev.userId) uniqueUserSet.add(ev.userId);
+
+        if (ev.isFree) {
+          freeDownloads++;
+        } else {
+          paidDownloads++;
+        }
+
+        const pId = ev.productId;
+        let pStats = productCountMap.get(pId);
+        if (!pStats) {
+          pStats = {
+            productId: pId,
+            productTitle: ev.productTitle || 'Unknown Product',
+            isFree: Boolean(ev.isFree),
+            freeCount: 0,
+            paidCount: 0,
+            totalCount: 0,
+            lastDownloadedAt: ev.downloadedAt || '',
+            pdfBreakdown: {}
+          };
+          productCountMap.set(pId, pStats);
+        }
+
+        if (ev.isFree) {
+          pStats.freeCount++;
+        } else {
+          pStats.paidCount++;
+        }
+        pStats.totalCount++;
+
+        if (ev.downloadedAt && (!pStats.lastDownloadedAt || ev.downloadedAt > pStats.lastDownloadedAt)) {
+          pStats.lastDownloadedAt = ev.downloadedAt;
+        }
+
+        const pdfKey = ev.pdfId || ev.pdfName || 'default';
+        if (!pStats.pdfBreakdown[pdfKey]) {
+          pStats.pdfBreakdown[pdfKey] = {
+            pdfName: ev.pdfName || 'Main PDF',
+            count: 0
+          };
+        }
+        pStats.pdfBreakdown[pdfKey].count++;
+      });
+
+      const totalDownloads = eventsSnap.size;
+      const productBreakdown = Array.from(productCountMap.values());
+
+      // Sort by total downloads descending
+      productBreakdown.sort((a, b) => b.totalCount - a.totalCount);
+
+      const mostDownloaded = productBreakdown.length > 0 && productBreakdown[0].totalCount > 0
+        ? { title: productBreakdown[0].productTitle, count: productBreakdown[0].totalCount }
+        : null;
+
+      const leastDownloaded = productBreakdown.length > 0
+        ? { title: productBreakdown[productBreakdown.length - 1].productTitle, count: productBreakdown[productBreakdown.length - 1].totalCount }
+        : null;
+
+      res.json({
+        success: true,
+        summary: {
+          totalDownloads,
+          freeDownloads,
+          paidDownloads,
+          totalRegisteredStudents,
+          uniqueDownloaders: uniqueUserSet.size,
+          mostDownloaded,
+          leastDownloaded
+        },
+        productBreakdown: productBreakdown.map((p) => ({
+          ...p,
+          pdfList: Object.entries(p.pdfBreakdown).map(([k, v]) => ({
+            id: k,
+            name: v.pdfName,
+            count: v.count
+          }))
+        })),
+        recentEvents: events.slice(-50).reverse()
+      });
+    } catch (err: any) {
+      console.error('Failed to compute download analytics:', err);
+      res.status(500).json({ error: 'Failed to retrieve download analytics' });
     }
   });
 

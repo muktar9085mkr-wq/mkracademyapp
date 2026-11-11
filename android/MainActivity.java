@@ -38,6 +38,7 @@ public class MainActivity extends AppCompatActivity {
 
         setupWebSettings();
         setupWebViewClient();
+        setupDownloadListener();
         setupBackNavigation();
 
         if (savedInstanceState == null) {
@@ -191,6 +192,37 @@ public class MainActivity extends AppCompatActivity {
             e.printStackTrace();
         }
         return true;
+    }
+
+    private void setupDownloadListener() {
+        webView.setDownloadListener((url, userAgent, contentDisposition, mimetype, contentLength) -> {
+            try {
+                Intent intent = new Intent(Intent.ACTION_VIEW);
+                intent.setData(Uri.parse(url));
+                intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(intent);
+            } catch (Exception e) {
+                try {
+                    android.app.DownloadManager.Request request = new android.app.DownloadManager.Request(Uri.parse(url));
+                    request.setMimeType(mimetype);
+                    request.addRequestHeader("User-Agent", userAgent);
+                    request.setDescription("Downloading MKR Academy Educational Notes");
+                    request.setTitle(android.webkit.URLUtil.guessFileName(url, contentDisposition, mimetype));
+                    request.setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+                    request.setDestinationInExternalPublicDir(
+                        android.os.Environment.DIRECTORY_DOWNLOADS,
+                        android.webkit.URLUtil.guessFileName(url, contentDisposition, mimetype)
+                    );
+                    android.app.DownloadManager dm = (android.app.DownloadManager) getSystemService(DOWNLOAD_SERVICE);
+                    if (dm != null) {
+                        dm.enqueue(request);
+                        Toast.makeText(getApplicationContext(), "Downloading Note...", Toast.LENGTH_SHORT).show();
+                    }
+                } catch (Exception ex) {
+                    Toast.makeText(getApplicationContext(), "Failed to start download.", Toast.LENGTH_SHORT).show();
+                }
+            }
+        });
     }
 
     private void setupBackNavigation() {

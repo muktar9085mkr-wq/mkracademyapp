@@ -13,7 +13,8 @@ import {
   AlertCircle,
   Lock,
   ListOrdered,
-  X
+  X,
+  ArrowLeft
 } from 'lucide-react';
 import { Purchase, Product, ProductPdfEntry } from '../../types';
 import { getUserPurchases, subscribeToUserPurchases } from '../../services/orderService';
@@ -128,9 +129,156 @@ export const MyPurchasesView: React.FC<MyPurchasesViewProps> = ({
     );
   }
 
+  if (selectedReaderPurchase) {
+    const liveProduct = productsMap.get(selectedReaderPurchase.productId);
+    const allPdfs = getProductPdfList(liveProduct || selectedReaderPurchase);
+    const currentActive = activeReaderPdf || allPdfs[0];
+    const targetDriveUrl = currentActive?.driveUrl || selectedReaderPurchase.driveFileLink;
+    const currentDownloadUrl = targetDriveUrl ? (getGoogleDriveDownloadUrl(targetDriveUrl) || targetDriveUrl) : `/api/notes/download/${selectedReaderPurchase.id}`;
+    const embedUrl = getGoogleDriveEmbedUrl(targetDriveUrl);
+
+    return (
+      <div className="w-full min-h-[calc(100vh-140px)] bg-stone-950 text-white flex flex-col animate-in fade-in duration-200">
+        {/* Full-Page Reader Header */}
+        <div className="bg-stone-900 px-4 sm:px-8 py-3.5 border-b border-stone-800 flex items-center justify-between gap-4">
+          <div className="flex items-center space-x-3 min-w-0">
+            <button
+              type="button"
+              onClick={() => setSelectedReaderPurchase(null)}
+              className="inline-flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-bold transition-colors cursor-pointer"
+            >
+              <ArrowLeft className="w-4 h-4 text-stone-400" />
+              <span>Back to Purchases</span>
+            </button>
+            <div className="min-w-0">
+              <h1 className="text-sm sm:text-base font-extrabold text-white truncate">
+                {currentActive?.name || selectedReaderPurchase.productTitle}
+              </h1>
+              <p className="text-[11px] text-stone-400 font-mono">
+                Order #{selectedReaderPurchase.orderId} • Licensed to {user?.email}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center space-x-2 shrink-0">
+            {targetDriveUrl && (
+              <a
+                href={targetDriveUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hidden sm:inline-flex px-3.5 py-1.5 bg-blue-700 hover:bg-blue-600 text-white rounded-xl text-xs font-semibold items-center space-x-1.5 transition-colors"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span>Google Drive</span>
+              </a>
+            )}
+            <a
+              href={currentDownloadUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-4 py-2 bg-red-700 hover:bg-red-800 text-white rounded-xl text-xs font-bold flex items-center space-x-1.5 shadow-xs transition-colors"
+            >
+              <Download className="w-4 h-4" />
+              <span>Download PDF</span>
+            </a>
+          </div>
+        </div>
+
+        {/* Chapter Selector Tab Strip (if multiple PDFs available) */}
+        {allPdfs.length > 1 && (
+          <div className="bg-stone-900/90 px-4 sm:px-8 py-2.5 border-b border-stone-800 overflow-x-auto flex items-center space-x-2 shrink-0 no-scrollbar">
+            <span className="text-[10px] uppercase font-bold text-stone-400 tracking-wider shrink-0 mr-1">
+              Included Chapters ({allPdfs.length}):
+            </span>
+            {allPdfs.map((pdf, idx) => {
+              const isSelected = (currentActive?.id && currentActive.id === pdf.id) || currentActive?.driveUrl === pdf.driveUrl;
+              const numStr = String(idx + 1).padStart(2, '0');
+              return (
+                <button
+                  key={pdf.id || idx}
+                  type="button"
+                  onClick={() => setActiveReaderPdf(pdf)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center space-x-1.5 ${
+                    isSelected
+                      ? 'bg-red-700 text-white shadow-xs'
+                      : 'bg-stone-800 text-stone-300 hover:bg-stone-700'
+                  }`}
+                >
+                  <span className="font-mono text-[10px]">{numStr}.</span>
+                  <span className="truncate max-w-[140px] sm:max-w-xs">{pdf.name}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Full-Page Reader Document View */}
+        <div className="flex-1 bg-stone-950 p-3 sm:p-6 flex justify-center">
+          {embedUrl ? (
+            <div className="w-full max-w-6xl h-full min-h-[600px] flex flex-col rounded-3xl overflow-hidden border border-stone-800 bg-stone-900 shadow-2xl">
+              <iframe
+                src={embedUrl}
+                title={currentActive?.name || selectedReaderPurchase.productTitle}
+                className="w-full h-full flex-1 min-h-[600px] border-0"
+                allow="autoplay"
+              />
+            </div>
+          ) : (
+            <div className="bg-white text-stone-900 rounded-3xl max-w-2xl w-full min-h-[500px] p-6 sm:p-10 shadow-2xl space-y-6 my-auto border border-stone-200">
+              <div className="border-b-2 border-red-700 pb-4 text-center space-y-1.5">
+                <div className="inline-block bg-red-700 text-white text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full">
+                  Official Student Study Material
+                </div>
+                <h2 className="text-xl sm:text-2xl font-extrabold text-stone-950 font-sans">
+                  {currentActive?.name || selectedReaderPurchase.productTitle}
+                </h2>
+                <p className="text-xs text-stone-500">
+                  MKR Academy • Quality Notes • Exam Preparation • Better Results
+                </p>
+              </div>
+
+              <div className="bg-stone-50 border border-stone-200 p-3.5 rounded-2xl text-xs text-stone-600 flex justify-between items-center">
+                <span>Licensed to: <strong>{user?.displayName || user?.email}</strong></span>
+                <span className="font-mono text-[11px] text-stone-400">Order #{selectedReaderPurchase.orderId}</span>
+              </div>
+
+              <div className="space-y-4 text-sm leading-relaxed text-stone-800">
+                <p>
+                  This educational note is unlocked and ready. You can read and download this file directly via the buttons below:
+                </p>
+
+                <div className="pt-2 flex flex-col sm:flex-row gap-3 justify-center">
+                  {targetDriveUrl && (
+                    <a
+                      href={targetDriveUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center justify-center space-x-2 px-6 py-3 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs shadow-md transition-all"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                      <span>Open in Google Drive</span>
+                    </a>
+                  )}
+                  <a
+                    href={currentDownloadUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center justify-center space-x-2 px-6 py-3 rounded-xl bg-red-700 hover:bg-red-800 text-white font-bold text-xs shadow-md transition-all"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>Download PDF File</span>
+                  </a>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   const filteredPurchases = purchases.filter((p) =>
-    p.productTitle.toLowerCase().includes(searchFilter.toLowerCase()) ||
-    p.orderId.toLowerCase().includes(searchFilter.toLowerCase())
+    p.productTitle.toLowerCase().includes(searchFilter.toLowerCase())
   );
 
   return (
@@ -356,164 +504,6 @@ export const MyPurchasesView: React.FC<MyPurchasesViewProps> = ({
               </div>
             );
           })}
-        </div>
-      )}
-
-      {/* In-App PDF Reader Modal */}
-      {selectedReaderPurchase && (
-        <div className="fixed inset-0 z-50 bg-stone-950/85 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 animate-in fade-in">
-          <div className="bg-stone-900 text-white rounded-3xl w-full max-w-5xl h-[92vh] flex flex-col shadow-2xl border border-stone-800 overflow-hidden">
-            
-            {/* Reader Toolbar */}
-            <div className="bg-stone-900 px-4 sm:px-6 py-3 border-b border-stone-800 flex items-center justify-between gap-3">
-              <div className="flex items-center space-x-2.5 truncate">
-                <BookOpen className="w-4 h-4 text-red-500 shrink-0" />
-                <span className="text-sm font-bold truncate">
-                  {activeReaderPdf?.name || selectedReaderPurchase.productTitle}
-                </span>
-              </div>
-
-              <div className="flex items-center space-x-2 shrink-0">
-                {(() => {
-                  const currentDriveUrl = activeReaderPdf?.driveUrl || selectedReaderPurchase.driveFileLink;
-                  const currentDownloadUrl = currentDriveUrl ? (getGoogleDriveDownloadUrl(currentDriveUrl) || currentDriveUrl) : `/api/notes/download/${selectedReaderPurchase.id}`;
-
-                  return (
-                    <>
-                      {currentDriveUrl && (
-                        <a
-                          href={currentDriveUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="px-3 py-1.5 bg-blue-700 hover:bg-blue-600 text-white rounded-xl text-xs font-semibold flex items-center space-x-1"
-                        >
-                          <ExternalLink className="w-3.5 h-3.5" />
-                          <span className="hidden sm:inline">Google Drive</span>
-                        </a>
-                      )}
-                      <a
-                        href={currentDownloadUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold flex items-center space-x-1"
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                        <span className="hidden sm:inline">Download PDF</span>
-                      </a>
-                    </>
-                  );
-                })()}
-
-                <button
-                  type="button"
-                  onClick={() => setSelectedReaderPurchase(null)}
-                  className="w-8 h-8 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-300 flex items-center justify-center cursor-pointer"
-                  title="Close viewer"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-
-            {/* Chapter Selector Tab Strip (if multiple PDFs are available) */}
-            {(() => {
-              const liveProduct = productsMap.get(selectedReaderPurchase.productId);
-              const allPdfs = getProductPdfList(liveProduct || selectedReaderPurchase);
-
-              if (allPdfs.length <= 1) return null;
-
-              const currentActive = activeReaderPdf || allPdfs[0];
-
-              return (
-                <div className="bg-stone-950 px-4 py-2 border-b border-stone-800 overflow-x-auto flex items-center space-x-2 shrink-0">
-                  <span className="text-[10px] uppercase font-bold text-stone-500 tracking-wider shrink-0 mr-1">
-                    Chapters:
-                  </span>
-                  {allPdfs.map((pdf, idx) => {
-                    const isSelected = (currentActive.id && currentActive.id === pdf.id) || currentActive.driveUrl === pdf.driveUrl;
-                    const numStr = String(idx + 1).padStart(2, '0');
-                    return (
-                      <button
-                        key={pdf.id || idx}
-                        type="button"
-                        onClick={() => setActiveReaderPdf(pdf)}
-                        className={`px-3 py-1 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center space-x-1.5 ${
-                          isSelected
-                            ? 'bg-red-700 text-white shadow-xs'
-                            : 'bg-stone-800 text-stone-300 hover:bg-stone-700'
-                        }`}
-                      >
-                        <span className="font-mono text-[10px]">{numStr}.</span>
-                        <span className="truncate max-w-[140px] sm:max-w-xs">{pdf.name}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              );
-            })()}
-
-            {/* Reader Canvas / Document View */}
-            <div className="flex-1 bg-stone-950 p-2 sm:p-4 overflow-y-auto flex justify-center">
-              {(() => {
-                const targetDriveUrl = activeReaderPdf?.driveUrl || selectedReaderPurchase.driveFileLink;
-                const embedUrl = getGoogleDriveEmbedUrl(targetDriveUrl);
-
-                if (embedUrl) {
-                  return (
-                    <div className="w-full h-full min-h-[500px] flex flex-col rounded-2xl overflow-hidden border border-stone-800 bg-stone-900">
-                      <iframe
-                        src={embedUrl}
-                        title={activeReaderPdf?.name || selectedReaderPurchase.productTitle}
-                        className="w-full h-full flex-1 border-0 rounded-2xl"
-                        allow="autoplay"
-                      />
-                    </div>
-                  );
-                }
-
-                return (
-                  <div className="bg-white text-stone-900 rounded-2xl max-w-2xl w-full min-h-[500px] p-6 sm:p-10 shadow-2xl space-y-5 my-auto">
-                    <div className="border-b-2 border-red-700 pb-3 text-center space-y-1">
-                      <div className="inline-block bg-red-700 text-white text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded">
-                        Official Student Study Material
-                      </div>
-                      <h2 className="text-xl font-extrabold text-stone-950 font-sans">
-                        {activeReaderPdf?.name || selectedReaderPurchase.productTitle}
-                      </h2>
-                      <p className="text-xs text-stone-500">
-                        MKR Academy • Quality Notes • Better Preparation • Better Results
-                      </p>
-                    </div>
-
-                    <div className="bg-stone-50 border border-stone-200 p-3 rounded-xl text-xs text-stone-600 flex justify-between items-center">
-                      <span>Licensed to: <strong>{user?.displayName || user?.email}</strong></span>
-                      <span className="font-mono text-[11px] text-stone-400">Order #{selectedReaderPurchase.orderId}</span>
-                    </div>
-
-                    <div className="space-y-4 text-sm leading-relaxed text-stone-800">
-                      <p>
-                        This educational material is ready to access. Click the button below to view and download this file directly from Google Drive:
-                      </p>
-
-                      {targetDriveUrl && (
-                        <div className="pt-2 text-center">
-                          <a
-                            href={targetDriveUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center space-x-2 px-6 py-3 rounded-xl bg-red-700 hover:bg-red-800 text-white font-bold text-xs shadow-md transition-all"
-                          >
-                            <ExternalLink className="w-4 h-4" />
-                            <span>Open in Google Drive</span>
-                          </a>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
-          </div>
         </div>
       )}
     </div>

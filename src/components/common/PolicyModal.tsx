@@ -16,11 +16,12 @@ import {
   Calendar,
   Scale,
   Receipt,
-  Server
+  Server,
+  GraduationCap
 } from 'lucide-react';
 import { SocialLinks } from '../../types';
 
-export type PolicyType = 'privacy' | 'terms' | 'refund' | 'copyright' | 'grievance' | 'contact' | 'tax-certin' | null;
+export type PolicyType = 'privacy' | 'terms' | 'refund' | 'copyright' | 'grievance' | 'contact' | 'tax-certin' | 'about' | null;
 
 interface PolicyModalProps {
   type: PolicyType;
@@ -85,6 +86,7 @@ export const PolicyModal: React.FC<PolicyModalProps> = ({
               {effectiveTab === 'grievance' && <Scale className="w-5 h-5" />}
               {effectiveTab === 'contact' && <Phone className="w-5 h-5" />}
               {effectiveTab === 'tax-certin' && <Receipt className="w-5 h-5" />}
+              {effectiveTab === 'about' && <GraduationCap className="w-5 h-5" />}
             </div>
             <div>
               <h2 className="text-lg sm:text-xl font-extrabold text-stone-900 font-sans">
@@ -95,6 +97,7 @@ export const PolicyModal: React.FC<PolicyModalProps> = ({
                 {effectiveTab === 'grievance' && 'Grievance Redressal & Business Details'}
                 {effectiveTab === 'contact' && 'Contact Us & Student Support'}
                 {effectiveTab === 'tax-certin' && 'GST, Tax & Cybersecurity Disclosures'}
+                {effectiveTab === 'about' && 'About MKR Academy — Quality Notes & HSLC Preparation'}
               </h2>
               <p className="text-[11px] text-stone-500">
                 MKR Academy • Legal & Compliance Documentation (Applicable Indian Laws)
@@ -181,6 +184,16 @@ export const PolicyModal: React.FC<PolicyModalProps> = ({
             }`}
           >
             Contact & Support
+          </button>
+          <button
+            onClick={() => setActiveTab('about')}
+            className={`px-3 py-1.5 rounded-xl transition-all whitespace-nowrap cursor-pointer ${
+              effectiveTab === 'about'
+                ? 'bg-red-700 text-white shadow-xs'
+                : 'hover:bg-stone-200/70 text-stone-700'
+            }`}
+          >
+            About MKR Academy
           </button>
         </div>
 
@@ -812,6 +825,77 @@ export const PolicyModal: React.FC<PolicyModalProps> = ({
                 <p className="font-bold text-stone-800">MKR Academy Office & Support Hours:</p>
                 <p>[Official Business Operating Address: Nagaon / Guwahati, Assam, India • PIN: 781001]</p>
                 <p>Support Hours: 8:00 AM – 9:00 PM (Monday to Sunday, All Days)</p>
+              </div>
+            </div>
+          )}
+
+          {/* ============================================================
+              8. ABOUT MKR ACADEMY
+              ============================================================ */}
+          {effectiveTab === 'about' && (
+            <div className="space-y-5">
+              <div className="bg-red-50/70 border border-red-200 p-4 rounded-2xl">
+                <h3 className="font-bold text-red-900 text-sm flex items-center space-x-2">
+                  <GraduationCap className="w-4 h-4 text-red-700 shrink-0" />
+                  <span>MKR Academy • Educational Mission</span>
+                </h3>
+                <p className="text-stone-700 text-xs mt-1.5 leading-relaxed">
+                  MKR Academy is a premier digital educational portal founded with a single mission: to empower students with precise, comprehensive, and exam-oriented study materials, notes, and question banks. We specialize in Assamese and English medium education for Class 10 & 9 students preparing for SEBA board exams and the HSLC 2027 milestone.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                <div className="p-3.5 rounded-xl bg-stone-50 border border-stone-200 space-y-1">
+                  <p className="font-bold text-stone-900 flex items-center space-x-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    <span>Curriculum Alignment</span>
+                  </p>
+                  <p className="text-stone-600">
+                    Meticulously aligned with SEBA curriculum textbooks, updated blueprint guidelines, and chapter-wise question formats.
+                  </p>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-stone-50 border border-stone-200 space-y-1">
+                  <p className="font-bold text-stone-900 flex items-center space-x-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    <span>Dual Medium Support</span>
+                  </p>
+                  <p className="text-stone-600">
+                    Notes crafted with linguistic precision in both Assamese Medium (অসমীয়া মাধ্যম) and English Medium.
+                  </p>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-stone-50 border border-stone-200 space-y-1">
+                  <p className="font-bold text-stone-900 flex items-center space-x-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    <span>Instant PDF Access</span>
+                  </p>
+                  <p className="text-stone-600">
+                    High-speed direct digital delivery via secure Razorpay checkout with permanent access in the student's My Purchases library.
+                  </p>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-stone-50 border border-stone-200 space-y-1">
+                  <p className="font-bold text-stone-900 flex items-center space-x-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    <span>Free Notes Portal</span>
+                  </p>
+                  <p className="text-stone-600">
+                    A dedicated section of 100% free notes and important question sheets so every student can prepare without barriers.
+                  </p>
+                </div>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-stone-900 text-stone-200 space-y-2 text-xs">
+                <p className="font-bold text-white text-sm">Founder & Academic Leadership</p>
+                <p className="text-stone-300">
+                  Headquartered in Assam, MKR Academy is spearheaded by dedicated educators committed to quality digital education.
+                </p>
+                <div className="pt-1 text-[11px] text-stone-400 space-y-0.5">
+                  <p>• Official Email: {email}</p>
+                  <p>• Student Helpline: +91 {whatsapp}</p>
+                  <p>• Official Website: mkracademy.in</p>
+                </div>
               </div>
             </div>
           )}

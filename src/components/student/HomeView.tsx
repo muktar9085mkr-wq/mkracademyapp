@@ -19,13 +19,16 @@ import {
   PlusCircle,
   FileText
 } from 'lucide-react';
-import { Product, AppPublicSettings } from '../../types';
+import { Product, AppPublicSettings, Purchase } from '../../types';
 import { PromotionalBanner } from '../common/PromotionalBanner';
 import { ProductCard } from './ProductCard';
 import { useAuth } from '../../context/AuthContext';
+import { MobileHomeView } from './MobileHomeView';
 
 interface HomeViewProps {
   products: Product[];
+  freeNotes?: Product[];
+  purchases?: Purchase[];
   settings: AppPublicSettings | null;
   purchasedProductIds: Set<string>;
   onNavigate: (view: string, filterParam?: any) => void;
@@ -39,6 +42,8 @@ interface HomeViewProps {
 
 export const HomeView: React.FC<HomeViewProps> = ({
   products,
+  freeNotes = [],
+  purchases = [],
   settings,
   purchasedProductIds,
   onNavigate,
@@ -55,7 +60,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
   // Curated lists based on real database attributes (Paid notes strictly separated from free notes)
   const isPaid = (p: Product) => !p.isFree && p.sellingPricePaise > 0;
   const paidProducts = publishedProducts.filter(isPaid);
-  const freeNotes = publishedProducts.filter(
+  const internalFreeNotes = publishedProducts.filter(
     (p) => p.isFree === true || (p as any).freeNote === true || (p.category as any) === 'Free'
   );
   const hslc2027Notes = paidProducts.filter((p) => p.classLevel === 'HSLC 2027');
@@ -87,11 +92,41 @@ export const HomeView: React.FC<HomeViewProps> = ({
     onExecuteSearch();
   };
 
+  const effectiveFreeNotes = freeNotes && freeNotes.length > 0 ? freeNotes : internalFreeNotes;
+
   return (
-    <div className="w-full max-w-full space-y-12 sm:space-y-16 pb-20 overflow-x-hidden">
-      
-      {/* Hero Section */}
-      <section className="w-full relative overflow-hidden bg-gradient-to-b from-stone-900 via-stone-950 to-stone-900 text-white pt-10 pb-16 sm:pt-20 sm:pb-28">
+    <>
+      {/* ==============================================================
+          1. NEW REDESIGNED MOBILE HOME SCREEN (Mobile Only: md:hidden)
+          Professional educational platform with TARGET HSLC 2027,
+          real stats, quick access, continue reading, explore subjects,
+          and dynamic Firebase latest PDF updates.
+          ============================================================== */}
+      <div className="block md:hidden w-full">
+        <MobileHomeView
+          products={products}
+          freeNotes={effectiveFreeNotes}
+          settings={settings}
+          purchasedProductIds={purchasedProductIds}
+          purchases={purchases}
+          onNavigate={onNavigate}
+          onViewDetails={onViewDetails}
+          onBuyNow={onBuyNow}
+          onDownloadNotes={onDownloadNotes}
+          searchQuery={searchQuery}
+          onSearchChange={onSearchChange}
+          onExecuteSearch={onExecuteSearch}
+        />
+      </div>
+
+      {/* ==============================================================
+          2. DESKTOP HOME SCREEN (Unchanged Desktop View: hidden md:block)
+          Preserved 100% intact for tablet and desktop viewports.
+          ============================================================== */}
+      <div className="hidden md:block w-full max-w-full space-y-12 sm:space-y-16 pb-20 overflow-x-hidden">
+        
+        {/* Hero Section */}
+        <section className="w-full relative overflow-hidden bg-gradient-to-b from-stone-900 via-stone-950 to-stone-900 text-white pt-10 pb-16 sm:pt-20 sm:pb-28">
         {/* Background glow effects - constrained to prevent mobile overflow */}
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-[550px] h-[280px] bg-red-700/15 rounded-full blur-3xl pointer-events-none"></div>
 
@@ -549,5 +584,6 @@ export const HomeView: React.FC<HomeViewProps> = ({
         </section>
       </div>
     </div>
-  );
+  </>
+);
 };

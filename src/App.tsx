@@ -14,6 +14,13 @@ import {
 } from './services/productService';
 import { getUserPurchases, subscribeToUserPurchases } from './services/orderService';
 import { getPublicSettings } from './services/settingsService';
+import {
+  getPendingDownload,
+  clearPendingDownload,
+  storePendingDownload,
+  triggerFileDownload,
+  recordDownloadEvent
+} from './services/downloadService';
 
 import { Navbar } from './components/common/Navbar';
 import { Footer } from './components/common/Footer';
@@ -21,18 +28,140 @@ import { HomeView } from './components/student/HomeView';
 import { BrowseNotesView } from './components/student/BrowseNotesView';
 import { FreePdfsView } from './components/student/FreePdfsView';
 import { MyPurchasesView } from './components/student/MyPurchasesView';
-import { ProductDetailsModal } from './components/student/ProductDetailsModal';
-import { CheckoutModal } from './components/student/CheckoutModal';
-import { AuthModal } from './components/student/AuthModal';
-import { StudentProfileModal } from './components/student/StudentProfileModal';
-import { PolicyModal, PolicyType } from './components/common/PolicyModal';
+import { ProductDetailsView } from './components/student/ProductDetailsView';
+import { CheckoutView } from './components/student/CheckoutView';
+import { AuthView } from './components/student/AuthView';
+import { StudentProfileView } from './components/student/StudentProfileView';
+import { PolicyView } from './components/common/PolicyView';
+import { PolicyType } from './components/common/PolicyModal';
 import { AdminDashboard } from './components/admin/AdminDashboard';
+import { PreviousPapersView } from './components/student/PreviousPapersView';
+
+export type AppView =
+  | 'home'
+  | 'browse'
+  | 'free-pdfs'
+  | 'purchases'
+  | 'previous-papers'
+  | 'admin'
+  | 'product-details'
+  | 'checkout'
+  | 'auth'
+  | 'profile'
+  | 'policy';
+
+export function getPolicyTypeFromUrl(): PolicyType {
+  if (typeof window === 'undefined') return 'privacy';
+  const pathname = window.location.pathname.toLowerCase();
+  const searchParams = new URLSearchParams(window.location.search);
+  const typeParam = searchParams.get('policy')?.toLowerCase() || searchParams.get('type')?.toLowerCase();
+
+  if (typeParam === 'terms' || pathname.includes('terms')) return 'terms';
+  if (typeParam === 'refund' || pathname.includes('refund')) return 'refund';
+  if (typeParam === 'copyright' || pathname.includes('copyright')) return 'copyright';
+  if (typeParam === 'grievance' || pathname.includes('grievance')) return 'grievance';
+  if (typeParam === 'tax' || typeParam === 'tax-certin' || pathname.includes('tax') || pathname.includes('cert-in')) return 'tax-certin';
+  if (typeParam === 'contact' || pathname.includes('contact') || pathname.includes('support')) return 'contact';
+  if (typeParam === 'about' || pathname.includes('about')) return 'about';
+  return 'privacy';
+}
+
+export function getAuthModeFromUrl(): 'login' | 'register' {
+  if (typeof window === 'undefined') return 'login';
+  const pathname = window.location.pathname.toLowerCase();
+  const searchParams = new URLSearchParams(window.location.search);
+  if (pathname.startsWith('/register') || searchParams.get('mode') === 'register') {
+    return 'register';
+  }
+  return 'login';
+}
+
+export function getViewFromUrl(): AppView {
+  if (typeof window === 'undefined') return 'browse';
+
+  const pathname = window.location.pathname.toLowerCase();
+  const searchParams = new URLSearchParams(window.location.search);
+  const viewParam = searchParams.get('view')?.toLowerCase();
+
+  // 1. Explicit view parameter in search query
+  if (viewParam === 'home') return 'home';
+  if (viewParam === 'notes' || viewParam === 'browse') return 'browse';
+  if (viewParam === 'free-pdfs' || viewParam === 'free-notes') return 'free-pdfs';
+  if (viewParam === 'purchases' || viewParam === 'my-purchases') return 'purchases';
+  if (viewParam === 'previous-papers' || viewParam === 'pyq' || viewParam === 'question-papers') return 'previous-papers';
+  if (viewParam === 'admin') return 'admin';
+  if (viewParam === 'profile' || viewParam === 'account') return 'profile';
+  if (viewParam === 'auth' || viewParam === 'login' || viewParam === 'register') return 'auth';
+  if (viewParam === 'product' || viewParam === 'details') return 'product-details';
+  if (viewParam === 'checkout' || viewParam === 'buy') return 'checkout';
+  if (viewParam === 'policy' || viewParam === 'legal' || viewParam === 'contact' || viewParam === 'about') return 'policy';
+
+  // 2. Explicit pathname routing
+  if (pathname.startsWith('/home')) return 'home';
+  if (pathname.startsWith('/notes') || pathname.startsWith('/browse')) return 'browse';
+  if (pathname.startsWith('/free-pdfs') || pathname.startsWith('/free-notes')) return 'free-pdfs';
+  if (pathname.startsWith('/purchases') || pathname.startsWith('/my-purchases')) return 'purchases';
+  if (pathname.startsWith('/previous-papers') || pathname.startsWith('/pyq') || pathname.startsWith('/question-papers')) return 'previous-papers';
+  if (pathname.startsWith('/admin')) return 'admin';
+  if (pathname.startsWith('/profile') || pathname.startsWith('/account')) return 'profile';
+  if (pathname.startsWith('/login') || pathname.startsWith('/register') || pathname.startsWith('/auth')) return 'auth';
+  if (pathname.startsWith('/checkout') || searchParams.has('checkout')) return 'checkout';
+  if (pathname.startsWith('/product/') || searchParams.has('product')) return 'product-details';
+  if (
+    pathname.startsWith('/policy') ||
+    pathname.startsWith('/privacy-policy') ||
+    pathname.startsWith('/terms-and-conditions') ||
+    pathname.startsWith('/refund-policy') ||
+    pathname.startsWith('/copyright') ||
+    pathname.startsWith('/grievance') ||
+    pathname.startsWith('/tax-notice') ||
+    pathname.startsWith('/contact') ||
+    pathname.startsWith('/about')
+  ) {
+    return 'policy';
+  }
+
+  // 3. Default for root URL ('/' or any other unmatched path) is Notes ('browse')
+  return 'browse';
+}
+
+export function getPathForView(
+  view: AppView,
+  extra?: { productId?: string; authMode?: 'login' | 'register'; policyType?: PolicyType }
+): string {
+  switch (view) {
+    case 'home':
+      return '/home';
+    case 'browse':
+      return '/notes';
+    case 'free-pdfs':
+      return '/free-pdfs';
+    case 'purchases':
+      return '/purchases';
+    case 'previous-papers':
+      return '/previous-papers';
+    case 'admin':
+      return '/admin';
+    case 'profile':
+      return '/profile';
+    case 'auth':
+      return extra?.authMode === 'register' ? '/register' : '/login';
+    case 'product-details':
+      return extra?.productId ? `/product/${extra.productId}` : '/notes';
+    case 'checkout':
+      return extra?.productId ? `/checkout/${extra.productId}` : '/notes';
+    case 'policy':
+      return extra?.policyType ? `/policy/${extra.policyType}` : '/policy/privacy';
+    default:
+      return '/notes';
+  }
+}
 
 function AppContent() {
-  const { user, isAdmin, authInitialized } = useAuth();
+  const { user, isAdmin } = useAuth();
 
-  // Navigation State
-  const [currentView, setCurrentView] = useState<'home' | 'browse' | 'free-pdfs' | 'purchases' | 'admin'>('home');
+  // Navigation State - Defaults to Notes ('browse') on main root URL
+  const [currentView, setCurrentView] = useState<AppView>(() => getViewFromUrl());
   const [browseFilters, setBrowseFilters] = useState<any>({});
 
   // Global Data
@@ -45,30 +174,28 @@ function AppContent() {
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Modals & In-App Readers (Controlled for 1-step back navigation)
+  // Full-page active items & modes
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [checkoutProduct, setCheckoutProduct] = useState<Product | null>(null);
-  const [authModalOpen, setAuthModalOpen] = useState(false);
-  const [authInitialMode, setAuthInitialMode] = useState<'login' | 'register'>('login');
-  const [profileModalOpen, setProfileModalOpen] = useState(false);
-  const [policyType, setPolicyType] = useState<PolicyType>(null);
+  const [authInitialMode, setAuthInitialMode] = useState<'login' | 'register'>(() => getAuthModeFromUrl());
+  const [policyType, setPolicyType] = useState<PolicyType>(() => getPolicyTypeFromUrl());
 
-  // In-App Free Notes Reader & Subject Selection
+  // In-App Free Notes Reader & Subject Selection (renders within FreePdfsView)
   const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
   const [previewPdf, setPreviewPdf] = useState<Product | null>(null);
 
-  // In-App Purchased Notes Reader
+  // In-App Purchased Notes Reader (renders within MyPurchasesView)
   const [selectedReaderPurchase, setSelectedReaderPurchase] = useState<Purchase | null>(null);
 
-  // Native Android Double-Back to Exit Toast
+  // Native Android Double-Back to Exit Toast & Notifications
   const [showExitToast, setShowExitToast] = useState(false);
+  const [pendingDownloadToast, setPendingDownloadToast] = useState<string | null>(null);
+  const [unavailableProductNotice, setUnavailableProductNotice] = useState<string | null>(null);
 
-  // Refs to allow popstate event handler to inspect current state synchronously
+  // Synchronous refs for browser / Android back navigation
   const currentViewRef = useRef(currentView);
   const selectedProductRef = useRef(selectedProduct);
   const checkoutProductRef = useRef(checkoutProduct);
-  const authModalOpenRef = useRef(authModalOpen);
-  const profileModalOpenRef = useRef(profileModalOpen);
   const policyTypeRef = useRef(policyType);
   const selectedSubjectIdRef = useRef(selectedSubjectId);
   const previewPdfRef = useRef(previewPdf);
@@ -79,81 +206,73 @@ function AppContent() {
   useEffect(() => { currentViewRef.current = currentView; }, [currentView]);
   useEffect(() => { selectedProductRef.current = selectedProduct; }, [selectedProduct]);
   useEffect(() => { checkoutProductRef.current = checkoutProduct; }, [checkoutProduct]);
-  useEffect(() => { authModalOpenRef.current = authModalOpen; }, [authModalOpen]);
-  useEffect(() => { profileModalOpenRef.current = profileModalOpen; }, [profileModalOpen]);
   useEffect(() => { policyTypeRef.current = policyType; }, [policyType]);
   useEffect(() => { selectedSubjectIdRef.current = selectedSubjectId; }, [selectedSubjectId]);
   useEffect(() => { previewPdfRef.current = previewPdf; }, [previewPdf]);
   useEffect(() => { selectedReaderPurchaseRef.current = selectedReaderPurchase; }, [selectedReaderPurchase]);
 
-  // Global Android / Browser 1-Step Back Navigation Controller
+  // Global Android / Browser Back Navigation Controller
   useEffect(() => {
     // Initialize root history entry so device back button has a stack frame
+    const initialView = getViewFromUrl();
     if (!window.history.state) {
-      window.history.replaceState({ step: 'root', view: 'home' }, '');
+      const currentPath = window.location.pathname === '/' ? '/' : window.location.pathname;
+      window.history.replaceState({ step: initialView, view: initialView }, '', currentPath + window.location.search);
     }
 
-    const handlePopState = () => {
-      // 1. If any in-app PDF reader / preview is open, close it (1 step back)
+    const handlePopState = (event: PopStateEvent) => {
+      // 1. If any in-app free PDF reader preview is open, close it (1 step back)
       if (previewPdfRef.current) {
         setPreviewPdf(null);
         return;
       }
+      // 2. If purchased notes reader is open, close it (1 step back)
       if (selectedReaderPurchaseRef.current) {
         setSelectedReaderPurchase(null);
         return;
       }
-      // 2. If checkout modal is open, close it (1 step back)
-      if (checkoutProductRef.current) {
-        setCheckoutProduct(null);
-        return;
-      }
-      // 3. If product details modal is open, close it (1 step back)
-      if (selectedProductRef.current) {
-        setSelectedProduct(null);
-        return;
-      }
-      // 4. If auth modal is open, close it (1 step back)
-      if (authModalOpenRef.current) {
-        setAuthModalOpen(false);
-        return;
-      }
-      // 5. If profile modal is open, close it (1 step back)
-      if (profileModalOpenRef.current) {
-        setProfileModalOpen(false);
-        return;
-      }
-      // 6. If policy modal is open, close it (1 step back)
-      if (policyTypeRef.current) {
-        setPolicyType(null);
-        return;
-      }
-      // 7. If inside Free Notes and a specific subject is open, go back to all subjects (1 step back)
+      // 3. If inside Free Notes and a specific subject is open, go back to all subjects (1 step back)
       if (selectedSubjectIdRef.current) {
         setSelectedSubjectId(null);
         return;
       }
-      // 8. If in any secondary view (browse, free-pdfs, purchases, admin), go back to home (1 step back)
-      if (currentViewRef.current !== 'home') {
-        setCurrentView('home');
+
+      // 4. If history state has a recorded view or URL changed, navigate to that view
+      const targetView = (event.state?.view as AppView) || getViewFromUrl();
+      if (targetView && targetView !== currentViewRef.current) {
+        setCurrentView(targetView);
+        if (event.state?.type) {
+          setPolicyType(event.state.type);
+        }
+        if (event.state?.mode) {
+          setAuthInitialMode(event.state.mode);
+        }
         window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
       }
 
-      // 9. If already on Home Screen with no modals open:
+      // 5. If already on landing page (browse or home) with no child reader open:
       // Standard Android UX: Double-tap back within 2 seconds to exit, otherwise show toast
-      const now = Date.now();
-      if (now - lastBackPressTimeRef.current < 2000) {
-        // Allow app exit
-        window.history.back();
+      const isLandingPage = currentViewRef.current === 'browse' || currentViewRef.current === 'home';
+      if (isLandingPage) {
+        const now = Date.now();
+        if (now - lastBackPressTimeRef.current < 2000) {
+          // Allow app exit
+          window.history.back();
+        } else {
+          lastBackPressTimeRef.current = now;
+          const currentPath = window.location.pathname === '/' ? '/' : window.location.pathname;
+          window.history.pushState({ step: 'root', view: currentViewRef.current }, '', currentPath + window.location.search);
+          setShowExitToast(true);
+          setTimeout(() => {
+            setShowExitToast(false);
+          }, 2000);
+        }
       } else {
-        lastBackPressTimeRef.current = now;
-        // Re-push root state to trap single back press and protect from accidental app close
-        window.history.pushState({ step: 'root', view: 'home' }, '');
-        setShowExitToast(true);
-        setTimeout(() => {
-          setShowExitToast(false);
-        }, 2000);
+        // Fall back to browse catalog if popping out of a standalone page with no history
+        setCurrentView('browse');
+        window.history.replaceState({ step: 'browse', view: 'browse' }, '', '/notes');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
       }
     };
 
@@ -188,7 +307,7 @@ function AppContent() {
       }
     });
 
-    // Real-time synchronization for published products (works for both visitors & users)
+    // Real-time synchronization for published products
     const unsubscribeProducts = subscribeToPublishedProducts(
       (loadedProducts) => {
         if (isMounted) {
@@ -231,7 +350,6 @@ function AppContent() {
       return;
     }
 
-    // Immediately load student purchases and keep them updated in real-time
     unsubscribePurchases = subscribeToUserPurchases(
       user.uid,
       (userPurchases) => {
@@ -247,7 +365,6 @@ function AppContent() {
       }
     );
 
-    // Refresh products catalog when user logs in so that any auth-dependent changes sync immediately
     getPublishedProducts().then((latest) => {
       if (isMounted && latest.length > 0) {
         setProducts(latest);
@@ -264,140 +381,226 @@ function AppContent() {
 
   const purchasedProductIds = new Set(purchases.map((p) => p.productId));
 
-  // Controlled Navigation with history stack tracking
-  const handleNavigate = (view: string, filterParam?: any) => {
-    if (view === currentView) return;
+  // 3. Automatic resumption of free PDF downloads after sign-up / login
+  useEffect(() => {
+    if (user) {
+      const pending = getPendingDownload();
+      if (pending && pending.product) {
+        clearPendingDownload();
+        triggerFileDownload(pending.product, pending.pdf);
+        recordDownloadEvent(pending.product, pending.pdf, true);
+        setPendingDownloadToast(`Welcome! Your free PDF download for "${pending.product.title}" has started automatically.`);
+        setTimeout(() => setPendingDownloadToast(null), 6000);
+      }
+    }
+  }, [user]);
 
-    window.history.pushState({ step: 'view', view }, '');
-    if (view === 'admin') {
-      setCurrentView('admin');
-    } else if (view === 'free-pdfs') {
-      setCurrentView('free-pdfs');
-    } else if (view === 'browse') {
-      setBrowseFilters(filterParam || {});
-      setCurrentView('browse');
-    } else if (view === 'purchases') {
-      setCurrentView('purchases');
+  // 4. Direct Product Deep-linking (/product/:id or /checkout/:id)
+  useEffect(() => {
+    if (products.length === 0) return;
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const queryProductId = urlParams.get('product') || urlParams.get('id');
+    const queryCheckoutId = urlParams.get('checkout');
+    const productMatch = window.location.pathname.match(/\/product\/([a-zA-Z0-9_-]+)/);
+    const checkoutMatch = window.location.pathname.match(/\/checkout\/([a-zA-Z0-9_-]+)/);
+
+    const targetCheckoutId = queryCheckoutId || (checkoutMatch ? checkoutMatch[1] : null);
+    const targetProductId = queryProductId || (productMatch ? productMatch[1] : null);
+
+    if (targetCheckoutId) {
+      const found = products.find((p) => p.id === targetCheckoutId);
+      if (found) {
+        setCheckoutProduct(found);
+        setCurrentView('checkout');
+      } else {
+        setUnavailableProductNotice('The requested study material for checkout is currently unavailable.');
+      }
+    } else if (targetProductId) {
+      const found = products.find((p) => p.id === targetProductId);
+      if (found) {
+        setSelectedProduct(found);
+        setCurrentView('product-details');
+      } else {
+        setUnavailableProductNotice('The requested study material is currently unavailable or has been archived.');
+      }
+    }
+  }, [products]);
+
+  // 5. Dynamic Page Title
+  useEffect(() => {
+    if (currentView === 'product-details' && selectedProduct) {
+      document.title = `${selectedProduct.title} - MKR Academy`;
+    } else if (currentView === 'checkout' && checkoutProduct) {
+      document.title = `Checkout: ${checkoutProduct.title} - MKR Academy`;
+    } else if (currentView === 'profile') {
+      document.title = 'My Profile & Account - MKR Academy';
+    } else if (currentView === 'purchases') {
+      document.title = 'My Purchased Notes - MKR Academy';
+    } else if (currentView === 'free-pdfs') {
+      document.title = 'Free Notes & Question Papers - MKR Academy';
+    } else if (currentView === 'policy') {
+      document.title = `${policyType ? policyType.toUpperCase() : 'Policy'} - MKR Academy`;
+    } else if (currentView === 'auth') {
+      document.title = `${authInitialMode === 'register' ? 'Register' : 'Login'} - MKR Academy`;
     } else {
-      setCurrentView('home');
+      document.title = 'MKR Academy - Quality Educational Notes & Materials';
+    }
+  }, [currentView, selectedProduct, checkoutProduct, policyType, authInitialMode]);
+
+  // Controlled Full-Page Navigation with browser URL updates
+  const handleNavigate = (view: string, filterParam?: any) => {
+    const targetView = view as AppView;
+
+    let targetPath = '/notes';
+    if (targetView === 'home') targetPath = '/home';
+    else if (targetView === 'browse') targetPath = '/notes';
+    else if (targetView === 'free-pdfs') targetPath = '/free-pdfs';
+    else if (targetView === 'purchases') targetPath = '/purchases';
+    else if (targetView === 'previous-papers') targetPath = '/previous-papers';
+    else if (targetView === 'admin') targetPath = '/admin';
+    else if (targetView === 'profile') targetPath = '/profile';
+    else if (targetView === 'auth') targetPath = authInitialMode === 'register' ? '/register' : '/login';
+
+    try {
+      window.history.pushState({ step: targetView, view: targetView }, '', targetPath);
+    } catch {
+      // Fallback
+    }
+
+    if (targetView === 'browse') {
+      setBrowseFilters(filterParam || {});
+    }
+
+    setCurrentView(targetView);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // Full-Page Actions
+  const handleOpenProductDetails = (product: Product) => {
+    setSelectedProduct(product);
+    setCurrentView('product-details');
+    try {
+      window.history.pushState(
+        { step: 'product-details', view: 'product-details', id: product.id },
+        '',
+        `/product/${product.id}`
+      );
+    } catch {
+      // Fallback
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // 1-Step Back Controlled Open & Close Handlers
-  const handleOpenProductDetails = (product: Product) => {
-    window.history.pushState({ step: 'product-details', id: product.id }, '');
-    setSelectedProduct(product);
-  };
-
-  const handleCloseProductDetails = () => {
-    if (window.history.state?.step === 'product-details') {
-      window.history.back();
-    } else {
-      setSelectedProduct(null);
-    }
-  };
-
   const handleBuyNow = (product: Product) => {
-    window.history.pushState({ step: 'checkout', id: product.id }, '');
     setCheckoutProduct(product);
-  };
-
-  const handleCloseCheckout = () => {
-    if (window.history.state?.step === 'checkout') {
-      window.history.back();
-    } else {
-      setCheckoutProduct(null);
+    setCurrentView('checkout');
+    try {
+      window.history.pushState(
+        { step: 'checkout', view: 'checkout', id: product.id },
+        '',
+        `/checkout/${product.id}`
+      );
+    } catch {
+      // Fallback
     }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleOpenAuth = (mode: 'login' | 'register' = 'login') => {
-    window.history.pushState({ step: 'auth', mode }, '');
     setAuthInitialMode(mode);
-    setAuthModalOpen(true);
-  };
-
-  const handleCloseAuth = () => {
-    if (window.history.state?.step === 'auth') {
-      window.history.back();
-    } else {
-      setAuthModalOpen(false);
+    setCurrentView('auth');
+    try {
+      window.history.pushState(
+        { step: 'auth', view: 'auth', mode },
+        '',
+        mode === 'register' ? '/register' : '/login'
+      );
+    } catch {
+      // Fallback
     }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleOpenProfile = () => {
-    window.history.pushState({ step: 'profile' }, '');
-    setProfileModalOpen(true);
-  };
-
-  const handleCloseProfile = () => {
-    if (window.history.state?.step === 'profile') {
-      window.history.back();
-    } else {
-      setProfileModalOpen(false);
+    setCurrentView('profile');
+    try {
+      window.history.pushState({ step: 'profile', view: 'profile' }, '', '/profile');
+    } catch {
+      // Fallback
     }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleOpenPolicy = (type: PolicyType) => {
-    window.history.pushState({ step: 'policy', type }, '');
-    setPolicyType(type);
-  };
-
-  const handleClosePolicy = () => {
-    if (window.history.state?.step === 'policy') {
-      window.history.back();
-    } else {
-      setPolicyType(null);
+    const targetType = type || 'privacy';
+    setPolicyType(targetType);
+    setCurrentView('policy');
+    try {
+      window.history.pushState(
+        { step: 'policy', view: 'policy', type: targetType },
+        '',
+        `/policy/${targetType}`
+      );
+    } catch {
+      // Fallback
     }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleSelectFreeSubject = (subjectId: string | null) => {
     if (subjectId) {
-      window.history.pushState({ step: 'free-subject', subjectId }, '');
+      try {
+        window.history.pushState({ step: 'free-subject', subjectId }, '');
+      } catch {
+        // Fallback
+      }
       setSelectedSubjectId(subjectId);
     } else {
-      if (window.history.state?.step === 'free-subject') {
-        window.history.back();
-      } else {
-        setSelectedSubjectId(null);
-      }
+      setSelectedSubjectId(null);
     }
   };
 
   const handlePreviewFreePdf = (prod: Product | null) => {
     if (prod) {
-      window.history.pushState({ step: 'pdf-preview', id: prod.id }, '');
+      try {
+        window.history.pushState({ step: 'pdf-preview', id: prod.id }, '');
+      } catch {
+        // Fallback
+      }
       setPreviewPdf(prod);
     } else {
-      if (window.history.state?.step === 'pdf-preview') {
-        window.history.back();
-      } else {
-        setPreviewPdf(null);
-      }
+      setPreviewPdf(null);
     }
   };
 
   const handleSelectReaderPurchase = (purchase: Purchase | null) => {
     if (purchase) {
-      window.history.pushState({ step: 'purchase-reader', id: purchase.orderId }, '');
+      try {
+        window.history.pushState({ step: 'purchase-reader', id: purchase.orderId }, '');
+      } catch {
+        // Fallback
+      }
       setSelectedReaderPurchase(purchase);
     } else {
-      if (window.history.state?.step === 'purchase-reader') {
-        window.history.back();
-      } else {
-        setSelectedReaderPurchase(null);
-      }
+      setSelectedReaderPurchase(null);
     }
   };
 
   const handleDownloadNotes = (product: Product) => {
-    const purchase = purchases.find((p) => p.productId === product.id);
-    const driveUrl = product.driveFileLink || purchase?.driveFileLink;
-    if (driveUrl) {
-      window.open(driveUrl, '_blank', 'noopener,noreferrer');
+    const isFree = Boolean(product.isFree || Number(product.sellingPricePaise || 0) === 0);
+    if (isFree && !user) {
+      storePendingDownload(product);
+      handleOpenAuth('register');
+      setPendingDownloadToast(
+        `Please sign in or register to download "${product.title}". Your download will resume automatically right after sign-in!`
+      );
+      setTimeout(() => setPendingDownloadToast(null), 7000);
       return;
     }
-    window.open('https://drive.google.com', '_blank');
+
+    triggerFileDownload(product);
+    recordDownloadEvent(product, undefined, isFree);
   };
 
   const handleExecuteSearch = () => {
@@ -415,7 +618,7 @@ function AppContent() {
   if (currentView === 'admin' && isAdmin) {
     return (
       <AdminDashboard
-        onBackToStore={() => handleNavigate('home')}
+        onBackToStore={() => handleNavigate('browse')}
         onProductsChanged={() => {
           getPublishedProducts().then((latest) => {
             if (latest.length > 0) setProducts(latest);
@@ -436,6 +639,7 @@ function AppContent() {
         onNavigate={handleNavigate}
         onOpenAuth={handleOpenAuth}
         onOpenProfile={handleOpenProfile}
+        onOpenPolicy={handleOpenPolicy}
         purchaseCount={purchases.length}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
@@ -443,8 +647,8 @@ function AppContent() {
         settings={settings}
       />
 
-      {/* Main Content View */}
-      <main className="flex-1 w-full max-w-full min-w-0 pb-12 md:pb-0">
+      {/* Main Content View (All Features Render Full-Page, No Modal Overlays) */}
+      <main className="flex-1 w-full max-w-full min-w-0 pb-20 md:pb-0">
         {loading ? (
           <div className="py-24 text-center space-y-4">
             <div className="w-10 h-10 border-3 border-red-700 border-t-transparent rounded-full animate-spin mx-auto"></div>
@@ -455,6 +659,8 @@ function AppContent() {
         ) : currentView === 'home' ? (
           <HomeView
             products={products}
+            freeNotes={freeNotes}
+            purchases={purchases}
             settings={settings}
             purchasedProductIds={purchasedProductIds}
             onNavigate={handleNavigate}
@@ -475,6 +681,7 @@ function AppContent() {
             onSelectSubject={handleSelectFreeSubject}
             previewPdf={previewPdf}
             onPreviewPdf={handlePreviewFreePdf}
+            onRequireAuth={() => handleOpenAuth('register')}
           />
         ) : currentView === 'browse' ? (
           <BrowseNotesView
@@ -485,12 +692,128 @@ function AppContent() {
             onDownloadNotes={handleDownloadNotes}
             initialFilters={browseFilters}
           />
-        ) : (
+        ) : currentView === 'purchases' ? (
           <MyPurchasesView
             onBrowseNotes={() => handleNavigate('browse')}
             onOpenAuth={() => handleOpenAuth('login')}
             selectedReaderPurchase={selectedReaderPurchase}
             onSelectReaderPurchase={handleSelectReaderPurchase}
+          />
+        ) : currentView === 'previous-papers' ? (
+          <PreviousPapersView
+            products={products}
+            purchasedProductIds={purchasedProductIds}
+            purchases={purchases}
+            settings={settings}
+            onBack={() => {
+              if (window.history.length > 1) {
+                window.history.back();
+              } else {
+                handleNavigate('home');
+              }
+            }}
+            onViewDetails={handleOpenProductDetails}
+            onBuyNow={handleBuyNow}
+            onDownloadNotes={handleDownloadNotes}
+            onNavigate={handleNavigate}
+          />
+        ) : currentView === 'product-details' ? (
+          <ProductDetailsView
+            product={selectedProduct}
+            isPurchased={selectedProduct ? purchasedProductIds.has(selectedProduct.id) : false}
+            onBack={() => {
+              if (window.history.length > 1) {
+                window.history.back();
+              } else {
+                handleNavigate('browse');
+              }
+            }}
+            onBuyNow={handleBuyNow}
+            onDownloadNotes={handleDownloadNotes}
+            onRequireAuth={() => handleOpenAuth('register')}
+            onNavigate={handleNavigate}
+          />
+        ) : currentView === 'checkout' ? (
+          <CheckoutView
+            product={checkoutProduct}
+            onBack={() => {
+              if (selectedProduct) {
+                setCurrentView('product-details');
+                try {
+                  window.history.pushState(
+                    { step: 'product-details', view: 'product-details', id: selectedProduct.id },
+                    '',
+                    `/product/${selectedProduct.id}`
+                  );
+                } catch {
+                  // Fallback
+                }
+              } else if (window.history.length > 1) {
+                window.history.back();
+              } else {
+                handleNavigate('browse');
+              }
+            }}
+            onSuccess={handlePurchaseSuccess}
+            onRequireAuth={() => handleOpenAuth('login')}
+            onOpenPolicy={handleOpenPolicy}
+            onNavigateToPurchases={() => handleNavigate('purchases')}
+          />
+        ) : currentView === 'auth' ? (
+          <AuthView
+            initialMode={authInitialMode}
+            onBack={() => {
+              if (window.history.length > 1) {
+                window.history.back();
+              } else {
+                handleNavigate('browse');
+              }
+            }}
+            onSuccess={() => {
+              if (checkoutProduct) {
+                setCurrentView('checkout');
+              } else if (selectedProduct) {
+                setCurrentView('product-details');
+              } else {
+                handleNavigate('browse');
+              }
+            }}
+            onOpenPolicy={handleOpenPolicy}
+          />
+        ) : currentView === 'profile' ? (
+          <StudentProfileView
+            onBack={() => {
+              if (window.history.length > 1) {
+                window.history.back();
+              } else {
+                handleNavigate('browse');
+              }
+            }}
+            onNavigateToPurchases={() => handleNavigate('purchases')}
+            onNavigate={handleNavigate}
+            onOpenPolicy={handleOpenPolicy}
+            onOpenAuth={handleOpenAuth}
+          />
+        ) : currentView === 'policy' ? (
+          <PolicyView
+            type={policyType}
+            onBack={() => {
+              if (window.history.length > 1) {
+                window.history.back();
+              } else {
+                handleNavigate('browse');
+              }
+            }}
+            socialLinks={settings?.social}
+          />
+        ) : (
+          <BrowseNotesView
+            products={products}
+            purchasedProductIds={purchasedProductIds}
+            onViewDetails={handleOpenProductDetails}
+            onBuyNow={handleBuyNow}
+            onDownloadNotes={handleDownloadNotes}
+            initialFilters={browseFilters}
           />
         )}
       </main>
@@ -499,53 +822,43 @@ function AppContent() {
       <Footer
         onNavigate={handleNavigate}
         onOpenPolicy={handleOpenPolicy}
+        onOpenProfile={handleOpenProfile}
         socialLinks={settings?.social}
         settings={settings}
       />
 
-      {/* Product Details Modal */}
-      {selectedProduct && (
-        <ProductDetailsModal
-          product={selectedProduct}
-          isPurchased={purchasedProductIds.has(selectedProduct.id)}
-          onClose={handleCloseProductDetails}
-          onBuyNow={handleBuyNow}
-          onDownloadNotes={handleDownloadNotes}
-        />
+      {/* Unavailable Product Inline/Top Banner if accessed directly */}
+      {unavailableProductNotice && (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-stone-900 text-white text-xs font-semibold px-5 py-3 rounded-2xl shadow-2xl border border-stone-700 flex items-center space-x-3 max-w-md w-[90%] animate-in fade-in">
+          <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0"></span>
+          <span className="flex-1">{unavailableProductNotice}</span>
+          <button
+            type="button"
+            onClick={() => {
+              setUnavailableProductNotice(null);
+              handleNavigate('browse');
+            }}
+            className="px-2.5 py-1 bg-red-700 hover:bg-red-800 text-white rounded-lg text-[11px] font-bold cursor-pointer"
+          >
+            Browse
+          </button>
+        </div>
       )}
 
-      {/* Checkout Modal */}
-      {checkoutProduct && (
-        <CheckoutModal
-          product={checkoutProduct}
-          onClose={handleCloseCheckout}
-          onSuccess={handlePurchaseSuccess}
-          onRequireAuth={() => handleOpenAuth('login')}
-          onOpenPolicy={handleOpenPolicy}
-        />
+      {/* Free PDF Download Toast / Resumption Notification */}
+      {pendingDownloadToast && (
+        <div className="fixed bottom-16 sm:bottom-6 left-1/2 -translate-x-1/2 z-[10000] bg-emerald-900 text-white text-xs font-semibold px-4 py-3 rounded-2xl shadow-2xl border border-emerald-700 animate-in fade-in slide-in-from-bottom-2 duration-200 flex items-center space-x-2.5 max-w-md w-[90%]">
+          <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0"></span>
+          <span className="flex-1 leading-snug">{pendingDownloadToast}</span>
+          <button
+            type="button"
+            onClick={() => setPendingDownloadToast(null)}
+            className="text-emerald-300 hover:text-white font-bold text-xs p-1 cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
       )}
-
-      {/* Auth Modal */}
-      <AuthModal
-        isOpen={authModalOpen}
-        onClose={handleCloseAuth}
-        initialMode={authInitialMode}
-        onOpenPolicy={handleOpenPolicy}
-      />
-
-      {/* Student Profile Modal */}
-      <StudentProfileModal
-        isOpen={profileModalOpen}
-        onClose={handleCloseProfile}
-        onNavigateToPurchases={() => handleNavigate('purchases')}
-      />
-
-      {/* Legal & Policy Modals */}
-      <PolicyModal
-        type={policyType}
-        onClose={handleClosePolicy}
-        socialLinks={settings?.social}
-      />
 
       {/* Native Android Double-Back to Exit Toast */}
       {showExitToast && (

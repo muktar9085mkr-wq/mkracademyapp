@@ -12,7 +12,9 @@ import {
   Eye,
   X,
   Download,
-  AlertCircle
+  AlertCircle,
+  Share2,
+  Lock
 } from 'lucide-react';
 import { Product } from '../../types';
 import { useAuth } from '../../context/AuthContext';
@@ -22,6 +24,12 @@ import {
   matchFreeNoteSubject,
   FreeNoteSubjectConfig
 } from '../../services/productService';
+import {
+  shareOrCopyProduct,
+  storePendingDownload,
+  triggerFileDownload,
+  recordDownloadEvent
+} from '../../services/downloadService';
 
 interface FreePdfsViewProps {
   products?: Product[];
@@ -32,6 +40,7 @@ interface FreePdfsViewProps {
   onSelectSubject?: (subjectId: string | null) => void;
   previewPdf?: Product | null;
   onPreviewPdf?: (product: Product | null) => void;
+  onRequireAuth?: () => void;
 }
 
 export const FreePdfsView: React.FC<FreePdfsViewProps> = ({
@@ -42,9 +51,12 @@ export const FreePdfsView: React.FC<FreePdfsViewProps> = ({
   selectedSubjectId: propSubjectId,
   onSelectSubject,
   previewPdf: propPreviewPdf,
-  onPreviewPdf
+  onPreviewPdf,
+  onRequireAuth
 }) => {
-  const { isAdmin } = useAuth();
+  const { user, isAdmin } = useAuth();
+  const [authNotice, setAuthNotice] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // Active Subject Selection: controlled or internal fallback
   const [internalSubjectId, setInternalSubjectId] = useState<string | null>(null);
@@ -152,11 +164,25 @@ export const FreePdfsView: React.FC<FreePdfsViewProps> = ({
   };
 
   const handleDownload = (product: Product) => {
-    const downloadUrl = getDriveDirectDownloadUrl(product.driveFileLink) || product.driveFileLink;
-    if (downloadUrl) {
-      window.open(downloadUrl, '_blank', 'noopener,noreferrer');
-    } else {
-      onViewDetails(product);
+    if (!user) {
+      storePendingDownload(product);
+      setAuthNotice(`Please create a student account or log in to download "${product.title}". Your download will resume automatically right after sign-in!`);
+      if (onRequireAuth) {
+        onRequireAuth();
+      }
+      return;
+    }
+
+    triggerFileDownload(product);
+    recordDownloadEvent(product, undefined, true);
+  };
+
+  const handleShareProduct = async (product: Product, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const res = await shareOrCopyProduct(product);
+    if (res.action === 'copied') {
+      setCopiedId(product.id);
+      setTimeout(() => setCopiedId(null), 2000);
     }
   };
 
@@ -165,6 +191,88 @@ export const FreePdfsView: React.FC<FreePdfsViewProps> = ({
     setSearch('');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+
+  if (previewPdf) {
+    const embedUrl = getDrivePreviewEmbed(previewPdf.driveFileLink) || previewPdf.driveFileLink;
+
+    return (
+      <div className="w-full min-h-[calc(100vh-140px)] bg-stone-950 text-white flex flex-col animate-in fade-in duration-200">
+        {/* Full-Page Reader Header */}
+        <div className="bg-stone-900 px-4 sm:px-8 py-3.5 border-b border-stone-800 flex items-center justify-between gap-4">
+          <div className="flex items-center space-x-3 min-w-0">
+            <button
+              type="button"
+              onClick={() => setPreviewPdf(null)}
+              className="inline-flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-bold transition-colors cursor-pointer"
+            >
+              <ArrowLeft className="w-4 h-4 text-stone-400" />
+              <span>Back to Free Notes</span>
+            </button>
+            <div className="min-w-0">
+              <div className="flex items-center space-x-2">
+                <span className="bg-emerald-600 text-white text-[9px] font-black px-1.5 py-0.2 rounded-full uppercase">
+                  Free PDF
+                </span>
+                <h1 className="text-sm sm:text-base font-extrabold text-white truncate">
+                  {previewPdf.title}
+                </h1>
+              </div>
+              <p className="text-[11px] text-stone-400">
+                {previewPdf.classLevel} • {previewPdf.subject} • MKR Academy
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center space-x-2 shrink-0">
+            {previewPdf.driveFileLink && (
+              <button
+                type="button"
+                onClick={() => handleDownload(previewPdf)}
+                className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold flex items-center space-x-1.5 shadow-xs transition-colors cursor-pointer"
+              >
+                <Download className="w-4 h-4" />
+                <span>Download Free PDF</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Full-Page Document View */}
+        <div className="flex-1 bg-stone-950 p-3 sm:p-6 flex justify-center">
+          {embedUrl ? (
+            <div className="w-full max-w-6xl h-full min-h-[600px] flex flex-col rounded-3xl overflow-hidden border border-stone-800 bg-stone-900 shadow-2xl">
+              <iframe
+                src={embedUrl}
+                title={previewPdf.title}
+                className="w-full h-full flex-1 min-h-[600px] border-0"
+                allow="autoplay"
+              />
+            </div>
+          ) : (
+            <div className="bg-white text-stone-900 rounded-3xl max-w-md w-full p-8 shadow-2xl text-center space-y-4 my-auto border border-stone-200">
+              <div className="w-14 h-14 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center mx-auto">
+                <AlertCircle className="w-7 h-7" />
+              </div>
+              <h4 className="font-bold text-stone-900 text-base">{previewPdf.title}</h4>
+              <p className="text-xs text-stone-500">
+                No direct preview URL is attached for this free note.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setPreviewPdf(null);
+                  onViewDetails(previewPdf);
+                }}
+                className="px-6 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow-md cursor-pointer"
+              >
+                View Full Note Details
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10 space-y-6 sm:space-y-8 animate-in fade-in min-w-0">
@@ -184,6 +292,26 @@ export const FreePdfsView: React.FC<FreePdfsViewProps> = ({
           </>
         )}
       </nav>
+
+      {/* Mandatory Sign-up Notification Banner */}
+      {authNotice && (
+        <div className="bg-amber-50 border border-amber-300 rounded-2xl p-4 flex items-start justify-between gap-3 text-xs text-amber-900 shadow-sm animate-in fade-in">
+          <div className="flex items-start space-x-2.5">
+            <Lock className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+            <div>
+              <span className="font-bold">Student Registration Required: </span>
+              <span>{authNotice}</span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setAuthNotice(null)}
+            className="text-amber-600 hover:text-amber-900 font-bold text-xs cursor-pointer p-0.5"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* Main Header Strip */}
       <div className="w-full max-w-full bg-gradient-to-r from-emerald-900 via-stone-900 to-emerald-950 text-white rounded-3xl p-6 sm:p-10 shadow-lg relative overflow-hidden">
@@ -563,23 +691,31 @@ export const FreePdfsView: React.FC<FreePdfsViewProps> = ({
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-5 gap-2">
                       <button
                         onClick={() => setPreviewPdf(product)}
-                        className="py-2.5 px-3 rounded-xl border border-stone-300 hover:border-stone-400 hover:bg-stone-50 text-stone-700 font-bold text-xs flex items-center justify-center space-x-1.5 transition-colors cursor-pointer"
+                        className="col-span-2 py-2.5 px-2 rounded-xl border border-stone-300 hover:border-stone-400 hover:bg-stone-50 text-stone-700 font-bold text-xs flex items-center justify-center space-x-1 transition-colors cursor-pointer"
                         title="View PDF online"
                       >
                         <Eye className="w-3.5 h-3.5 text-stone-600" />
-                        <span>View PDF</span>
+                        <span>View</span>
                       </button>
 
                       <button
                         onClick={() => handleDownload(product)}
-                        className="py-2.5 px-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center justify-center space-x-1.5 shadow-md shadow-emerald-800/20 transition-all cursor-pointer"
-                        title="Download or open in Google Drive"
+                        className="col-span-2 py-2.5 px-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center justify-center space-x-1 shadow-md shadow-emerald-800/20 transition-all cursor-pointer"
+                        title="Download free note"
                       >
                         <Download className="w-3.5 h-3.5" />
                         <span>Download</span>
+                      </button>
+
+                      <button
+                        onClick={(e) => handleShareProduct(product, e)}
+                        className="col-span-1 py-2.5 px-2 rounded-xl border border-stone-200 hover:bg-stone-100 text-stone-600 hover:text-stone-900 font-bold text-xs flex items-center justify-center transition-colors cursor-pointer"
+                        title="Share Note"
+                      >
+                        <Share2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </div>
@@ -587,89 +723,6 @@ export const FreePdfsView: React.FC<FreePdfsViewProps> = ({
               ))}
             </div>
           )}
-        </div>
-      )}
-
-      {/* In-App PDF Preview Reader Modal */}
-      {previewPdf && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-stone-950/80 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-white rounded-3xl w-full max-w-4xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden border border-stone-200">
-            {/* Modal Header */}
-            <div className="p-4 sm:p-5 border-b border-stone-200 flex items-center justify-between bg-stone-50">
-              <div className="space-y-0.5 max-w-xl">
-                <div className="inline-flex items-center space-x-1.5 bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-md uppercase">
-                  <span>Free PDF Reader</span>
-                </div>
-                <h3 className="font-extrabold text-stone-900 text-sm sm:text-base truncate">
-                  {previewPdf.title}
-                </h3>
-              </div>
-
-              <div className="flex items-center space-x-2">
-                {previewPdf.driveFileLink && (
-                  <button
-                    onClick={() => handleDownload(previewPdf)}
-                    className="px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl flex items-center space-x-1.5 transition-colors cursor-pointer"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    <span>Download</span>
-                  </button>
-                )}
-                <button
-                  onClick={() => setPreviewPdf(null)}
-                  className="p-1.5 rounded-xl hover:bg-stone-200 text-stone-500 hover:text-stone-800 transition-colors cursor-pointer"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-
-            {/* Modal Body / Embed */}
-            <div className="flex-1 bg-stone-100 min-h-[450px] relative overflow-hidden flex flex-col items-center justify-center">
-              {previewPdf.driveFileLink ? (
-                <iframe
-                  src={getDrivePreviewEmbed(previewPdf.driveFileLink) || previewPdf.driveFileLink}
-                  title={previewPdf.title}
-                  className="w-full h-full min-h-[500px] border-0"
-                  allow="autoplay"
-                />
-              ) : (
-                <div className="p-8 text-center space-y-4 max-w-md">
-                  <div className="w-14 h-14 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center mx-auto">
-                    <AlertCircle className="w-7 h-7" />
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-stone-900 text-base">{previewPdf.title}</h4>
-                    <p className="text-xs text-stone-500 mt-1">
-                      No direct preview URL is attached for this free note.
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => {
-                      setPreviewPdf(null);
-                      onViewDetails(previewPdf);
-                    }}
-                    className="px-6 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow-md cursor-pointer"
-                  >
-                    View Complete Details
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* Modal Footer */}
-            <div className="p-3 sm:p-4 bg-white border-t border-stone-200 flex items-center justify-between text-xs text-stone-500">
-              <span className="font-semibold text-stone-700">
-                {previewPdf.classLevel} • {previewPdf.subject} • 100% Free Note
-              </span>
-              <button
-                onClick={() => setPreviewPdf(null)}
-                className="px-4 py-1.5 rounded-lg border border-stone-300 text-stone-700 hover:bg-stone-50 font-bold cursor-pointer"
-              >
-                Close Reader
-              </button>
-            </div>
-          </div>
         </div>
       )}
     </div>

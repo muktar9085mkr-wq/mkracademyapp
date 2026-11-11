@@ -358,18 +358,112 @@ export function matchFreeNoteSubject(p: Product | FreeNote, subjectId: string): 
   return false;
 }
 
+export type PYQExamCategory = 'HSLC' | 'Half Yearly' | 'Pre-Final';
+
+/**
+ * Checks if a product represents a Previous Year Question paper.
+ */
+export function isPYQProduct(p: Product): boolean {
+  if (!p) return false;
+  if (p.pyqType) return true;
+  if (p.tags && p.tags.some((t) => t.toLowerCase().includes('previous year') || t.toLowerCase().includes('pyq'))) {
+    return true;
+  }
+  const title = (p.title || '').toLowerCase();
+  const desc = (p.description || '').toLowerCase();
+  return (
+    title.includes('pyq') ||
+    title.includes('previous year') ||
+    title.includes('question paper') ||
+    title.includes('half yearly') ||
+    title.includes('pre-final') ||
+    desc.includes('previous year question') ||
+    desc.includes('pyq')
+  );
+}
+
+/**
+ * Gets the Exam Category of a PYQ: HSLC, Half Yearly, or Pre-Final.
+ */
+export function getPYQExamCategory(p: Product): PYQExamCategory {
+  if (p.pyqType) {
+    const pt = p.pyqType.toLowerCase();
+    if (pt.includes('half')) return 'Half Yearly';
+    if (pt.includes('pre')) return 'Pre-Final';
+    return 'HSLC';
+  }
+  const title = (p.title || '').toLowerCase();
+  const tagsStr = (p.tags || []).join(' ').toLowerCase();
+  if (title.includes('half yearly') || title.includes('half-yearly') || tagsStr.includes('half yearly')) {
+    return 'Half Yearly';
+  }
+  if (
+    title.includes('pre-final') ||
+    title.includes('pre final') ||
+    title.includes('pre-board') ||
+    title.includes('pre board') ||
+    tagsStr.includes('pre-final')
+  ) {
+    return 'Pre-Final';
+  }
+  return 'HSLC';
+}
+
+/**
+ * Gets the academic examination year of a PYQ paper.
+ */
+export function getPYQYear(p: Product): number {
+  if (p.pyqYear) {
+    const y = Number(p.pyqYear);
+    if (!isNaN(y) && y > 1990 && y < 2050) return y;
+  }
+  const match = (p.title || '').match(/\b(202[0-9])\b/);
+  if (match) return Number(match[1]);
+  return 2024;
+}
+
+export function getDeletedProductIds(): Set<string> {
+  try {
+    const raw = typeof window !== 'undefined' ? localStorage.getItem('mkr_deleted_product_ids') : null;
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw);
+    return new Set(Array.isArray(parsed) ? parsed : []);
+  } catch {
+    return new Set();
+  }
+}
+
+export function markProductAsDeletedLocally(id: string): void {
+  try {
+    if (typeof window === 'undefined') return;
+    const current = getDeletedProductIds();
+    current.add(id);
+    localStorage.setItem('mkr_deleted_product_ids', JSON.stringify(Array.from(current)));
+  } catch {
+    // ignore
+  }
+}
+
 function isLegacySampleDoc(id: string, title?: string): boolean {
   if (
     id.startsWith('dummy_') ||
     id.startsWith('test_fake_') ||
     id.startsWith('mkr_sample_') ||
+    id.startsWith('prod_pyq_') ||
+    id.startsWith('sample_') ||
+    id.includes('prod_pyq_') ||
     id === 'test_write_perm'
   ) {
     return true;
   }
   if (title) {
     const t = title.toLowerCase();
-    if (t.includes('fake sample test') || t.includes('dummy placeholder')) {
+    if (
+      t.includes('fake sample test') ||
+      t.includes('dummy placeholder') ||
+      t.includes('[sample]') ||
+      t.includes('(sample)')
+    ) {
       return true;
     }
   }
@@ -383,16 +477,20 @@ function isLegacySampleDoc(id: string, title?: string): boolean {
  */
 export function mergeWithBaselineProducts(firestoreProducts: Product[]): Product[] {
   const productMap = new Map<string, Product>();
+  const deletedIds = getDeletedProductIds();
 
   // 1. Seed with baseline authentic MKR Academy products
   for (const base of INITIAL_PRODUCTS) {
-    productMap.set(base.id, { ...base });
+    if (!deletedIds.has(base.id)) {
+      productMap.set(base.id, { ...base });
+    }
   }
 
   // 2. Overlay Firestore documents (preserving any new products and any field edits)
   for (const fp of firestoreProducts) {
     if (!fp || !fp.id) continue;
     if (isLegacySampleDoc(fp.id, fp.title)) continue;
+    if (deletedIds.has(fp.id)) continue;
 
     // Check if the product was explicitly deleted
     if ((fp as any)._deleted === true) {
@@ -406,6 +504,11 @@ export function mergeWithBaselineProducts(firestoreProducts: Product[]): Product
     } else {
       productMap.set(fp.id, fp);
     }
+  }
+
+  // Double check deleted IDs removal
+  for (const delId of deletedIds) {
+    productMap.delete(delId);
   }
 
   // 3. Sort stably by createdAt descending (newest study notes first)
@@ -724,9 +827,10 @@ export async function updateProduct(id: string, updates: Partial<Product>): Prom
  * Delete product (Admin only)
  */
 export async function deleteProduct(id: string): Promise<void> {
+  markProductAsDeletedLocally(id);
   try {
     const docRef = doc(db, PRODUCTS_COLLECTION, id);
-    await setDoc(docRef, { _deleted: true, published: false, updatedAt: new Date().toISOString() }, { merge: true });
+    await setDoc(docRef, { _deleted: true, published: false, updatedAt: new Date().toISOString() }, { merge: true }).catch(() => {});
     await deleteDoc(docRef).catch(() => {});
     logAdminActivity({
       action: 'PRODUCT_DELETE',
@@ -885,14 +989,31 @@ export async function syncBaselineProductsToFirestore(): Promise<{ synced: numbe
  */
 export async function deleteLegacySampleProductsAdmin(): Promise<number> {
   let count = 0;
+  const sampleIds = [
+    'prod_pyq_hslc_2024_sci',
+    'prod_pyq_hslc_2024_math',
+    'prod_pyq_halfyearly_2024_sci',
+    'prod_pyq_prefinal_2024_soc'
+  ];
+  for (let i = 1; i <= 20; i++) {
+    sampleIds.push(`mkr_prod_${i}`);
+  }
+  for (const sId of sampleIds) {
+    markProductAsDeletedLocally(sId);
+  }
+
   try {
-    // 1. Direct check of mkr_prod_1 through mkr_prod_20
-    for (let i = 1; i <= 20; i++) {
-      const docRef = doc(db, PRODUCTS_COLLECTION, `mkr_prod_${i}`);
-      const snap = await getDoc(docRef);
-      if (snap.exists()) {
-        await deleteDoc(docRef);
-        count++;
+    for (const sId of sampleIds) {
+      try {
+        const docRef = doc(db, PRODUCTS_COLLECTION, sId);
+        const snap = await getDoc(docRef);
+        if (snap.exists()) {
+          await setDoc(docRef, { _deleted: true, published: false }).catch(() => {});
+          await deleteDoc(docRef).catch(() => {});
+          count++;
+        }
+      } catch (e) {
+        // ignore
       }
     }
 
@@ -902,7 +1023,9 @@ export async function deleteLegacySampleProductsAdmin(): Promise<number> {
     for (const docSnap of snap.docs) {
       const data = docSnap.data();
       if (isLegacySampleDoc(docSnap.id, data.title)) {
-        await deleteDoc(doc(db, PRODUCTS_COLLECTION, docSnap.id));
+        markProductAsDeletedLocally(docSnap.id);
+        await setDoc(docSnap.ref, { _deleted: true, published: false }).catch(() => {});
+        await deleteDoc(doc(db, PRODUCTS_COLLECTION, docSnap.id)).catch(() => {});
         count++;
       }
     }
@@ -913,7 +1036,9 @@ export async function deleteLegacySampleProductsAdmin(): Promise<number> {
     for (const docSnap of snapFree.docs) {
       const data = docSnap.data();
       if (isLegacySampleDoc(docSnap.id, data.title)) {
-        await deleteDoc(doc(db, FREE_NOTES_COLLECTION, docSnap.id));
+        markProductAsDeletedLocally(docSnap.id);
+        await setDoc(docSnap.ref, { _deleted: true, published: false }).catch(() => {});
+        await deleteDoc(doc(db, FREE_NOTES_COLLECTION, docSnap.id)).catch(() => {});
         count++;
       }
     }

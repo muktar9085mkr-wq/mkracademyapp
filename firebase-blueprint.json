@@ -195,6 +195,25 @@
         "createdAt": { "type": "string" }
       },
       "required": ["adminUid", "adminEmail", "action", "targetType", "timestamp"]
+    },
+    "DownloadEvent": {
+      "title": "DownloadEvent",
+      "description": "Idempotent record of student PDF downloads",
+      "type": "object",
+      "properties": {
+        "eventId": { "type": "string", "maxLength": 128 },
+        "productId": { "type": "string", "maxLength": 128 },
+        "productTitle": { "type": "string", "maxLength": 250 },
+        "pdfId": { "type": "string", "maxLength": 128 },
+        "pdfName": { "type": "string", "maxLength": 250 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "userEmail": { "type": "string", "maxLength": 150 },
+        "userName": { "type": "string", "maxLength": 100 },
+        "isFree": { "type": "boolean" },
+        "downloadedAt": { "type": "string" },
+        "device": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["eventId", "productId", "userId", "downloadedAt"]
     }
   },
   "firestore": {
@@ -241,6 +260,10 @@
     "/user_sessions/{sessionId}": {
       "schema": "UserSession",
       "description": "Device and active session records"
+    },
+    "/download_events/{eventId}": {
+      "schema": "DownloadEvent",
+      "description": "Verified student PDF download events for analytics"
     }
   }
 }

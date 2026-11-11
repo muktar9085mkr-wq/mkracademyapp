@@ -295,7 +295,17 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       rzp.on('payment.failed', function (response: any) {
         console.error('Razorpay payment failed:', response.error);
         recordFailedOrder(orderId, response.error?.description || 'Payment failed').catch(() => {});
-        setErrorMessage(response.error?.description || 'Payment was unsuccessful or cancelled. You have not been charged.');
+
+        const isDomainError =
+          response.error?.reason === 'payment_risk_check_failed' ||
+          response.error?.description?.toLowerCase().includes('registered website') ||
+          response.error?.description?.toLowerCase().includes('website does not match');
+
+        const desc = isDomainError
+          ? 'Razorpay Live Security Notice: Payment blocked as website domain does not match your registered website list in Razorpay Dashboard. Please whitelist this URL in Razorpay Dashboard -> Website and App Settings or contact +91 9864012345 for instant activation.'
+          : (response.error?.description || 'Payment was unsuccessful or cancelled. You have not been charged.');
+
+        setErrorMessage(desc);
         setStep('failed');
         setIsSubmitting(false);
       });

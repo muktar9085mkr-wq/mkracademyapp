@@ -324,6 +324,54 @@ async function runTests() {
     assert(false, 'Test 20: Security alerts route check', err?.message);
   }
 
+  // Test 21: PDF Download Event Tracking Endpoint Protection
+  try {
+    const res = await fetch(`${BASE_URL}/api/downloads/record`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Forwarded-For': '10.0.0.21'
+      },
+      body: JSON.stringify({
+        eventId: 'dl_ev_unauth_test',
+        productId: 'prod_test_123',
+        isFree: true
+      })
+    });
+    assert(res.status === 401, 'Test 21.1: Unauthenticated request to /api/downloads/record blocked with HTTP 401');
+  } catch (err: any) {
+    assert(false, 'Test 21: Download record endpoint check', err?.message);
+  }
+
+  // Test 22: PDF Download Analytics Admin Endpoint Protection
+  try {
+    const res = await fetch(`${BASE_URL}/api/admin/download-analytics`, {
+      headers: { 'X-Forwarded-For': '10.0.0.22' }
+    });
+    assert(res.status === 401, 'Test 22.1: Unauthorized request to /api/admin/download-analytics blocked with HTTP 401');
+  } catch (err: any) {
+    assert(false, 'Test 22: Download analytics admin endpoint check', err?.message);
+  }
+
+  // Test 23: Notes-First Landing Page & SPA Routes (Root, /home, /notes, /product/:id)
+  try {
+    const rootRes = await fetch(`${BASE_URL}/`);
+    assert(rootRes.status === 200, 'Test 23.1: Root URL / serves 200 OK for Notes-First landing page');
+    const rootHtml = await rootRes.text();
+    assert(rootHtml.includes('<div id="root">'), 'Test 23.2: Root URL contains React application container');
+
+    const homeRes = await fetch(`${BASE_URL}/home`);
+    assert(homeRes.status === 200, 'Test 23.3: Direct /home URL serves 200 OK without 404 or redirect loop');
+
+    const notesRes = await fetch(`${BASE_URL}/notes`);
+    assert(notesRes.status === 200, 'Test 23.4: Direct /notes URL serves 200 OK');
+
+    const productRes = await fetch(`${BASE_URL}/product/demo-product-123`);
+    assert(productRes.status === 200, 'Test 23.5: Direct product deep link /product/:id serves 200 OK');
+  } catch (err: any) {
+    assert(false, 'Test 23: Notes-First landing page SPA routing check', err?.message);
+  }
+
   console.log('\n====================================================');
   console.log(`📊 TEST RESULTS: ${passed} PASSED, ${failed} FAILED`);
   console.log('====================================================');

@@ -1,15 +1,17 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   FileText,
   Download,
   Eye,
   CheckCircle2,
   Sparkles,
-  BookMarked,
   Tag,
-  ExternalLink
+  ExternalLink,
+  Share2,
+  Check
 } from 'lucide-react';
 import { Product } from '../../types';
+import { shareOrCopyProduct } from '../../services/downloadService';
 
 interface ProductCardProps {
   product: Product;
@@ -26,14 +28,27 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   onBuyNow,
   onDownloadNotes
 }) => {
+  const [copied, setCopied] = useState(false);
+
   const originalPrice = product.originalPricePaise / 100;
   const sellingPrice = product.sellingPricePaise / 100;
   
-  // Real mathematical discount percentage calculation (no false numbers)
+  // Real mathematical discount percentage calculation
   const discountPercent =
     originalPrice > sellingPrice
       ? Math.round(((originalPrice - sellingPrice) / originalPrice) * 100)
       : 0;
+
+  const isFree = Boolean(product.isFree || sellingPrice === 0);
+
+  const handleShare = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const res = await shareOrCopyProduct(product);
+    if (res.action === 'copied') {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
 
   // Category badge style
   const getCategoryBadge = () => {
@@ -76,22 +91,34 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           {/* Gradient Overlay */}
           <div className="absolute inset-0 bg-gradient-to-t from-stone-950/70 via-transparent to-transparent"></div>
 
-          {/* Top Badges */}
+          {/* Top Badges & Share Icon */}
           <div className="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between gap-1.5 flex-wrap">
-            <span className="bg-red-700/90 backdrop-blur-xs text-white text-[11px] font-bold px-2.5 py-1 rounded-md shadow-xs">
-              {product.classLevel}
-            </span>
+            <div className="flex items-center space-x-1.5">
+              <span className="bg-red-700/90 backdrop-blur-xs text-white text-[11px] font-bold px-2.5 py-1 rounded-md shadow-xs">
+                {product.classLevel}
+              </span>
 
-            {product.isFree || sellingPrice === 0 ? (
-              <span className="bg-emerald-600 text-white text-[11px] font-extrabold px-2.5 py-1 rounded-md shadow-xs flex items-center space-x-1">
-                <Sparkles className="w-3 h-3 text-emerald-100" />
-                <span>100% FREE</span>
-              </span>
-            ) : discountPercent > 0 ? (
-              <span className="bg-emerald-600 text-white text-[11px] font-bold px-2 py-0.5 rounded-md shadow-xs">
-                {discountPercent}% OFF
-              </span>
-            ) : null}
+              {isFree ? (
+                <span className="bg-emerald-600 text-white text-[11px] font-extrabold px-2.5 py-1 rounded-md shadow-xs flex items-center space-x-1">
+                  <Sparkles className="w-3 h-3 text-emerald-100" />
+                  <span>100% FREE</span>
+                </span>
+              ) : discountPercent > 0 ? (
+                <span className="bg-emerald-600 text-white text-[11px] font-bold px-2.5 py-1 rounded-md shadow-xs">
+                  {discountPercent}% OFF
+                </span>
+              ) : null}
+            </div>
+
+            {/* Quick Share Button */}
+            <button
+              type="button"
+              onClick={handleShare}
+              className="p-1.5 rounded-full bg-stone-900/70 hover:bg-stone-900 text-white transition-colors cursor-pointer shadow-xs"
+              title="Share or copy product link"
+            >
+              {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Share2 className="w-3.5 h-3.5" />}
+            </button>
           </div>
 
           {/* Bottom Overlay Info */}
@@ -155,7 +182,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
       <div className="p-4 sm:p-5 pt-0 border-t border-stone-100 mt-2 space-y-3">
         <div className="flex items-baseline justify-between pt-2">
           <div>
-            {product.isFree || sellingPrice === 0 ? (
+            {isFree ? (
               <span className="text-xl sm:text-2xl font-black text-emerald-700 font-sans flex items-center space-x-1">
                 <span>FREE</span>
                 <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded ml-1 uppercase">100% Free</span>
@@ -165,7 +192,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                 ₹{sellingPrice}
               </span>
             )}
-            {originalPrice > sellingPrice && !product.isFree && sellingPrice > 0 && (
+            {originalPrice > sellingPrice && !isFree && sellingPrice > 0 && (
               <span className="ml-2 text-xs text-stone-400 line-through">
                 ₹{originalPrice}
               </span>
@@ -187,46 +214,23 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           </button>
 
           {isPurchased ? (
-            product.driveFileLink ? (
-              <a
-                href={product.driveFileLink}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full py-2.5 px-3 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs flex items-center justify-center space-x-1.5 shadow-md shadow-blue-800/20 transition-all cursor-pointer"
-                title="Student purchased: Open Drive PDF in new tab"
-              >
-                <ExternalLink className="w-3.5 h-3.5" />
-                <span>Open Drive</span>
-              </a>
-            ) : (
-              <button
-                onClick={() => (onDownloadNotes ? onDownloadNotes(product) : onViewDetails(product))}
-                className="w-full py-2.5 px-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center justify-center space-x-1.5 shadow-sm transition-colors cursor-pointer"
-              >
-                <CheckCircle2 className="w-3.5 h-3.5" />
-                <span>Purchased</span>
-              </button>
-            )
-          ) : product.isFree || sellingPrice === 0 ? (
-            product.driveFileLink ? (
-              <a
-                href={product.driveFileLink}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full py-2.5 px-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center justify-center space-x-1.5 shadow-md shadow-emerald-800/20 transition-all cursor-pointer"
-              >
-                <ExternalLink className="w-3.5 h-3.5" />
-                <span>Free PDF</span>
-              </a>
-            ) : (
-              <button
-                onClick={() => onViewDetails(product)}
-                className="w-full py-2.5 px-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center justify-center space-x-1.5 shadow-md transition-all cursor-pointer"
-              >
-                <Download className="w-3.5 h-3.5" />
-                <span>Get Free</span>
-              </button>
-            )
+            <button
+              onClick={() => (onDownloadNotes ? onDownloadNotes(product) : onViewDetails(product))}
+              className="w-full py-2.5 px-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center justify-center space-x-1.5 shadow-sm transition-colors cursor-pointer"
+              title="Download or open purchased note"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Download</span>
+            </button>
+          ) : isFree ? (
+            <button
+              onClick={() => (onDownloadNotes ? onDownloadNotes(product) : onViewDetails(product))}
+              className="w-full py-2.5 px-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center justify-center space-x-1.5 shadow-md shadow-emerald-800/20 transition-all cursor-pointer"
+              title="Get free PDF note"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Get Free PDF</span>
+            </button>
           ) : (
             <button
               onClick={() => onBuyNow(product)}

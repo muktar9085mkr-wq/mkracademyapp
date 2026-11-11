@@ -19,6 +19,7 @@ import { PolicyType } from './PolicyModal';
 interface FooterProps {
   onNavigate: (view: string, filterParam?: any) => void;
   onOpenPolicy: (type: PolicyType) => void;
+  onOpenProfile?: () => void;
   socialLinks?: SocialLinks;
   settings?: AppPublicSettings | null;
 }
@@ -26,6 +27,7 @@ interface FooterProps {
 export const Footer: React.FC<FooterProps> = ({
   onNavigate,
   onOpenPolicy,
+  onOpenProfile,
   socialLinks,
   settings
 }) => {
@@ -45,9 +47,133 @@ export const Footer: React.FC<FooterProps> = ({
   const isEmailEnabled = effectiveSocial?.emailEnabled !== false && Boolean(contactEmail);
 
   return (
-    <footer className="w-full max-w-full overflow-hidden bg-stone-900 text-stone-300 pt-16 pb-12 border-t border-stone-800">
+    <footer className="w-full max-w-full overflow-hidden bg-stone-900 text-stone-300 pt-12 md:pt-16 pb-12 border-t border-stone-800">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-10 pb-12 border-b border-stone-800">
+        
+        {/* ==============================================================
+            1. MOBILE COMPACT FOOTER (Visible on mobile only: md:hidden)
+            Strictly 4 Social Media & Contact icons + About MKR Academy.
+            All other navigation sections moved to Profile Menu.
+            ============================================================== */}
+        <div className="md:hidden space-y-6 pb-8 border-b border-stone-800">
+          {/* Brand & About MKR Academy Summary */}
+          <div className="space-y-3">
+            <BrandLogo settings={settings?.logo} variant="light" size="md" />
+            <p className="text-stone-300 text-xs leading-relaxed">
+              <span className="font-semibold text-white">Quality Notes. Better Preparation. Better Results.</span>
+              <br />
+              Dedicated educational digital notes and preparation platform for Class 10 & 9 students and HSLC 2027 aspirants in Assamese and English mediums.
+            </p>
+
+            {/* About MKR Academy Action Button */}
+            <div className="pt-1">
+              <button
+                onClick={() => onOpenPolicy('about')}
+                type="button"
+                className="inline-flex items-center space-x-1.5 text-xs font-semibold text-red-400 hover:text-red-300 bg-stone-800/80 hover:bg-stone-800 px-3 py-1.5 rounded-lg border border-stone-700/60 transition-colors cursor-pointer"
+              >
+                <GraduationCap className="w-3.5 h-3.5 text-red-500" />
+                <span>About MKR Academy →</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Strictly 4 Social Media & Contact Icons (All Clickable) */}
+          <div className="space-y-2.5 pt-1">
+            <h4 className="text-[11px] font-bold uppercase tracking-wider text-stone-400 flex items-center space-x-1.5">
+              <span>Connect With Us</span>
+            </h4>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              {/* 1. WhatsApp Community */}
+              <a
+                href={`https://wa.me/${whatsappNumber}`}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center space-x-2.5 p-2.5 rounded-xl bg-emerald-950/40 border border-emerald-800/60 hover:bg-emerald-900/50 text-emerald-200 transition-colors shadow-xs"
+                title="WhatsApp Community"
+              >
+                <div className="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                  <MessageCircle className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <p className="font-bold text-[11px] text-white leading-tight truncate">WhatsApp</p>
+                  <p className="text-[10px] text-emerald-400 leading-tight">Community</p>
+                </div>
+              </a>
+
+              {/* 2. Instagram */}
+              <a
+                href={instagramUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center space-x-2.5 p-2.5 rounded-xl bg-pink-950/30 border border-pink-900/50 hover:bg-pink-900/40 text-pink-200 transition-colors shadow-xs"
+                title="Instagram"
+              >
+                <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-amber-500 via-pink-600 to-purple-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                  <Instagram className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <p className="font-bold text-[11px] text-white leading-tight truncate">Instagram</p>
+                  <p className="text-[10px] text-pink-400 leading-tight">@mkr_academy</p>
+                </div>
+              </a>
+
+              {/* 3. YouTube */}
+              <a
+                href={youtubeUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center space-x-2.5 p-2.5 rounded-xl bg-red-950/30 border border-red-900/50 hover:bg-red-900/40 text-red-200 transition-colors shadow-xs"
+                title="YouTube"
+              >
+                <div className="w-7 h-7 rounded-lg bg-red-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                  <Youtube className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <p className="font-bold text-[11px] text-white leading-tight truncate">YouTube</p>
+                  <p className="text-[10px] text-red-400 leading-tight">Classes & Tips</p>
+                </div>
+              </a>
+
+              {/* 4. Email */}
+              <a
+                href={`mailto:${contactEmail}`}
+                className="flex items-center space-x-2.5 p-2.5 rounded-xl bg-stone-800/80 border border-stone-700/60 hover:bg-stone-800 text-stone-200 transition-colors shadow-xs"
+                title="Email Support"
+              >
+                <div className="w-7 h-7 rounded-lg bg-stone-700 text-white flex items-center justify-center shrink-0 shadow-xs">
+                  <Mail className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <p className="font-bold text-[11px] text-white leading-tight truncate">Email Us</p>
+                  <p className="text-[10px] text-stone-400 leading-tight truncate">{contactEmail.split('@')[0]}</p>
+                </div>
+              </a>
+            </div>
+          </div>
+
+          {/* Quick Notice to Access Moved Sections in Profile Menu */}
+          <div className="bg-stone-800/60 border border-stone-800 rounded-xl p-3 flex items-center justify-between text-xs text-stone-400">
+            <span className="text-[11px] leading-tight">
+              Subjects, Classes, Policies & Invoices are in your <strong className="text-stone-200">Profile Menu</strong>.
+            </span>
+            {onOpenProfile && (
+              <button
+                onClick={onOpenProfile}
+                type="button"
+                className="shrink-0 ml-2 px-2.5 py-1 rounded-lg bg-red-700/80 hover:bg-red-700 text-white font-semibold text-[11px] transition-colors cursor-pointer"
+              >
+                Open Menu
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* ==============================================================
+            2. DESKTOP FULL FOOTER (Visible on desktop: hidden md:grid)
+            Unchanged 5-column layout with all subjects, classes, & policies
+            ============================================================== */}
+        <div className="hidden md:grid grid-cols-2 lg:grid-cols-5 gap-10 pb-12 border-b border-stone-800">
           
           {/* Brand & Mission */}
           <div className="lg:col-span-2 space-y-4">

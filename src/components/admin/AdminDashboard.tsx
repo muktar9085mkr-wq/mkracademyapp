@@ -70,7 +70,8 @@ import {
   FREE_NOTE_SUBJECTS,
   isFreeNote,
   matchFreeNoteSubject,
-  getProductPdfList
+  getProductPdfList,
+  isPYQProduct
 } from '../../services/productService';
 import {
   getAllOrdersAdmin,
@@ -94,6 +95,8 @@ import { AnalyticsDashboard } from './AnalyticsDashboard';
 import { SessionManager } from './SessionManager';
 import { ReportsManager } from './ReportsManager';
 import { UserDirectoryManager } from './UserDirectoryManager';
+import { PdfDownloadAnalytics } from './PdfDownloadAnalytics';
+import { PyqManager } from './PyqManager';
 import { getAllSessionsAdmin, UserSession } from '../../services/sessionService';
 
 interface AdminDashboardProps {
@@ -103,9 +106,11 @@ interface AdminDashboardProps {
 
 type AdminTab =
   | 'dashboard'
+  | 'download-analytics'
   | 'products'
   | 'add-product'
   | 'free-notes'
+  | 'pyq'
   | 'students'
   | 'sessions'
   | 'reports'
@@ -433,6 +438,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
       console.error('Failed to load admin dashboard data:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const refreshProductsList = async () => {
+    try {
+      const refreshed = await getAllProductsAdmin();
+      setProducts(refreshed);
+      if (onProductsChanged) onProductsChanged();
+    } catch (e) {
+      console.warn('Could not refresh products list:', e);
     }
   };
 
@@ -1241,6 +1256,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
           </button>
 
           <button
+            onClick={() => setCurrentTab('pyq')}
+            className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center justify-between transition-colors cursor-pointer ${
+              currentTab === 'pyq'
+                ? 'bg-amber-700 text-white shadow-xs'
+                : 'bg-white text-amber-900 hover:bg-amber-50/60 border border-amber-200'
+            }`}
+          >
+            <div className="flex items-center space-x-2.5">
+              <FileText className="w-4 h-4 text-amber-600" />
+              <span>PYQ Papers Manager</span>
+            </div>
+            <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${currentTab === 'pyq' ? 'bg-amber-950 text-white' : 'bg-amber-100 text-amber-900'}`}>
+              {products.filter((p) => isPYQProduct(p)).length}
+            </span>
+          </button>
+
+          <button
             onClick={() => setCurrentTab('orders')}
             className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center justify-between transition-colors ${
               currentTab === 'orders'
@@ -1302,6 +1334,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
           >
             <FileText className="w-4 h-4" />
             <span>Export Reports</span>
+          </button>
+
+          <button
+            onClick={() => setCurrentTab('download-analytics')}
+            className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center space-x-2.5 transition-colors cursor-pointer ${
+              currentTab === 'download-analytics'
+                ? 'bg-red-700 text-white shadow-xs'
+                : 'bg-white text-stone-700 hover:bg-stone-50 border border-stone-200'
+            }`}
+          >
+            <Download className="w-4 h-4" />
+            <span>PDF Download Analytics</span>
           </button>
 
           <button
@@ -1396,6 +1440,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
               products={products}
               sessions={sessions}
             />
+          )}
+
+          {/* TAB: DEDICATED PDF DOWNLOAD ANALYTICS */}
+          {currentTab === 'download-analytics' && (
+            <PdfDownloadAnalytics />
           )}
 
           {/* TAB: LEGACY DASHBOARD OVERVIEW */}
@@ -3155,6 +3204,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
               )}
             </div>
           )}
+
+          {/* TAB: PYQ PAPERS MANAGER (Year-Wise Locked Question Papers) */}
+          {currentTab === 'pyq' && (
+            <div className="space-y-6 animate-in fade-in">
+              <PyqManager
+                products={products}
+                onRefreshProducts={refreshProductsList}
+                onViewProduct={(p) => {
+                  handleEditClick(p);
+                  setCurrentTab('add-product');
+                }}
+              />
+            </div>
+          )}
+
           {currentTab === 'orders' && (
             <div className="space-y-6 animate-in fade-in">
               {/* Header and Search */}
