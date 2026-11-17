@@ -105,7 +105,7 @@ export const SessionManager: React.FC<SessionManagerProps> = ({ initialSessions,
     if (diffSec < 120) {
       return (
         <span className="text-emerald-800 font-bold flex items-center space-x-1">
-          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
           <span>Active now</span>
         </span>
       );
@@ -252,10 +252,10 @@ export const SessionManager: React.FC<SessionManagerProps> = ({ initialSessions,
       </div>
 
       {/* Sessions Table */}
-      <div className="bg-white rounded-2xl border border-stone-200 shadow-xs overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-stone-50 border-b border-stone-200 text-stone-500 font-bold uppercase tracking-wider">
+      <div className="bg-white rounded-2xl border border-stone-200/90 shadow-xs overflow-hidden">
+        <div className="overflow-x-auto admin-table-scroll">
+          <table className="w-full min-w-[780px] text-left text-xs">
+            <thead className="bg-stone-50/90 border-b border-stone-200 text-stone-500 text-[10px] font-bold uppercase tracking-wider">
               <tr>
                 <th className="py-3 px-4">Student / User</th>
                 <th className="py-3 px-4">Device & OS</th>
@@ -279,7 +279,7 @@ export const SessionManager: React.FC<SessionManagerProps> = ({ initialSessions,
                   const isSelf = s.uid === user?.uid;
 
                   return (
-                    <tr key={s.id} className="hover:bg-stone-50/60 transition-colors">
+                    <tr key={s.id} className="hover:bg-red-50/25 transition-colors">
                       <td className="py-3.5 px-4">
                         <div className="font-extrabold text-stone-900">{s.userName || 'Student'}</div>
                         <div className="text-[11px] text-stone-500 font-mono">{s.userEmail || s.uid}</div>

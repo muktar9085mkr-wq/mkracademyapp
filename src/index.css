@@ -14,6 +14,7 @@ html {
   padding: 0;
   overflow-x: hidden;
   -webkit-text-size-adjust: 100%;
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
 body {
@@ -24,6 +25,7 @@ body {
   padding: 0;
   overflow-x: hidden;
   position: relative;
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
 #root {
@@ -43,6 +45,38 @@ body {
 
 .pb-safe {
   padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Subtle scrollbar for crimson admin sidebar & wide data tables */
+.admin-scrollbar::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+.admin-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.admin-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.22);
+  border-radius: 9999px;
+}
+
+.admin-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.38);
+}
+
+.admin-table-scroll::-webkit-scrollbar {
+  height: 6px;
+}
+
+.admin-table-scroll::-webkit-scrollbar-track {
+  background: #f5f5f4;
+}
+
+.admin-table-scroll::-webkit-scrollbar-thumb {
+  background: #d6d3d1;
+  border-radius: 9999px;
 }
 
 /* Ensure mobile navigation stays strictly above any floating overlays */

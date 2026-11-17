@@ -231,3 +231,193 @@ exports.reconcilePaymentsHttp = onRequest(async (req, res) => {
   const result = await executePaymentMaintenance();
   res.json({ success: true, result });
 });
+
+/**
+ * Sync latest 10 uploads from MKR Academy YouTube channel into Firestore cache
+ */
+async function syncYouTubeFeedToFirestoreCache() {
+  const apiKey = (process.env.YOUTUBE_API_KEY || '').trim();
+  const settingsSnap = await db.collection('appSettings').doc('public').get().catch(() => null);
+  const settingsData = settingsSnap && settingsSnap.exists ? settingsSnap.data() : {};
+  const channelInput =
+    (process.env.YOUTUBE_CHANNEL_ID || '').trim() ||
+    (settingsData && settingsData.youtubeChannelId) ||
+    (settingsData && settingsData.social && settingsData.social.youtube) ||
+    'https://youtube.com/@mkracademy01';
+
+  let channelId = '';
+  const directMatch = String(channelInput).match(/(UC[a-zA-Z0-9_-]{22})/);
+  if (directMatch) {
+    channelId = directMatch[1];
+  } else {
+    const handleMatch = String(channelInput).match(/@([a-zA-Z0-9._-]+)/);
+    const handle = handleMatch ? handleMatch[1] : 'mkracademy01';
+    const pageRes = await fetch(`https://www.youtube.com/@${encodeURIComponent(handle)}`);
+    if (pageRes.ok) {
+      const html = await pageRes.text();
+      const idMatch = html.match(/"externalId"\s*:\s*"(UC[a-zA-Z0-9_-]{22})"/);
+      if (idMatch) channelId = idMatch[1];
+    }
+  }
+
+  if (!channelId) {
+    throw new Error('Could not resolve YouTube channel ID');
+  }
+
+  let videos = [];
+  let channelTitle = 'MKR Academy';
+  let source = 'youtube_rss_feed';
+
+  if (apiKey) {
+    try {
+      const chRes = await fetch(
+        `https://www.googleapis.com/youtube/v3/channels?part=contentDetails,snippet&id=${encodeURIComponent(channelId)}&key=${encodeURIComponent(apiKey)}`
+      );
+      if (chRes.ok) {
+        const chData = await chRes.json();
+        const ch = chData && chData.items && chData.items[0];
+        if (ch) {
+          channelTitle = (ch.snippet && ch.snippet.title) || channelTitle;
+          const uploadsId =
+            (ch.contentDetails && ch.contentDetails.relatedPlaylists && ch.contentDetails.relatedPlaylists.uploads) ||
+            `UU${channelId.slice(2)}`;
+          const plRes = await fetch(
+            `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet,contentDetails&playlistId=${encodeURIComponent(uploadsId)}&maxResults=10&key=${encodeURIComponent(apiKey)}`
+          );
+          if (plRes.ok) {
+            const plData = await plRes.json();
+            const seen = new Set();
+            for (const item of (plData.items || [])) {
+              const vid = (item.contentDetails && item.contentDetails.videoId) || (item.snippet && item.snippet.resourceId && item.snippet.resourceId.videoId);
+              if (!vid || seen.has(vid)) continue;
+              seen.add(vid);
+              videos.push({
+                videoId: vid,
+                title: (item.snippet && item.snippet.title) || 'MKR Academy Video',
+                contentUrl: `https://www.youtube.com/watch?v=${vid}`,
+                thumbnailUrl: `https://i.ytimg.com/vi/${vid}/hqdefault.jpg`,
+                publishedAt: (item.contentDetails && item.contentDetails.videoPublishedAt) || (item.snippet && item.snippet.publishedAt) || new Date().toISOString()
+              });
+            }
+            source = 'youtube_api_v3';
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Cloud Function YouTube API v3 error, falling back to RSS:', e.message);
+    }
+  }
+
+  if (videos.length === 0) {
+    const rssRes = await fetch(`https://www.youtube.com/feeds/videos.xml?channel_id=${encodeURIComponent(channelId)}`);
+    if (rssRes.ok) {
+      const xml = await rssRes.text();
+      const entryRegex = /<entry>([\s\S]*?)<\/entry>/gi;
+      const seen = new Set();
+      let m;
+      while ((m = entryRegex.exec(xml)) !== null) {
+        const block = m[1];
+        const vidMatch = block.match(/<yt:videoId>([^<]+)<\/yt:videoId>/i);
+        const titleMatch = block.match(/<title>([\s\S]*?)<\/title>/i);
+        const pubMatch = block.match(/<published>([^<]+)<\/published>/i);
+        const vid = vidMatch && vidMatch[1] ? vidMatch[1].trim() : '';
+        if (!vid || seen.has(vid)) continue;
+        seen.add(vid);
+        videos.push({
+          videoId: vid,
+          title: titleMatch && titleMatch[1] ? titleMatch[1].replace(/&amp;/g, '&').trim() : 'MKR Academy Video',
+          contentUrl: `https://www.youtube.com/watch?v=${vid}`,
+          thumbnailUrl: `https://i.ytimg.com/vi/${vid}/hqdefault.jpg`,
+          publishedAt: pubMatch && pubMatch[1] ? pubMatch[1].trim() : new Date().toISOString()
+        });
+      }
+    }
+  }
+
+  // Fallback to YouTube channel /videos ytInitialData if RSS returned non-200 (e.g. HTTP 404)
+  if (videos.length === 0) {
+    const pageRes = await fetch(`https://www.youtube.com/channel/${encodeURIComponent(channelId)}/videos`, {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept-Language': 'en-US,en;q=0.9'
+      }
+    });
+    if (pageRes.ok) {
+      const html = await pageRes.text();
+      const initMatch = html.match(/var\s+ytInitialData\s*=\s*(\{[\s\S]*?\});<\/script>/);
+      if (initMatch) {
+        const data = JSON.parse(initMatch[1]);
+        channelTitle =
+          (data.metadata && data.metadata.channelMetadataRenderer && data.metadata.channelMetadataRenderer.title) ||
+          channelTitle;
+        const tabs = (data.contents && data.contents.twoColumnBrowseResultsRenderer && data.contents.twoColumnBrowseResultsRenderer.tabs) || [];
+        const selTab = tabs.find((tb) => tb && tb.tabRenderer && tb.tabRenderer.selected) || tabs[1] || tabs[0];
+        const items = (selTab && selTab.tabRenderer && selTab.tabRenderer.content && selTab.tabRenderer.content.richGridRenderer && selTab.tabRenderer.content.richGridRenderer.contents) || [];
+        const seen = new Set();
+        for (const it of items) {
+          const content = it && it.richItemRenderer && it.richItemRenderer.content;
+          const lvm = content && content.lockupViewModel;
+          const vr = content && content.videoRenderer;
+          const vid = (lvm && lvm.contentId) || (vr && vr.videoId) || '';
+          if (!vid || seen.has(vid)) continue;
+          seen.add(vid);
+          const rawTitle =
+            (lvm && lvm.metadata && lvm.metadata.lockupMetadataViewModel && lvm.metadata.lockupMetadataViewModel.title && lvm.metadata.lockupMetadataViewModel.title.content) ||
+            (vr && vr.title && ((vr.title.runs && vr.title.runs[0] && vr.title.runs[0].text) || vr.title.simpleText)) ||
+            'MKR Academy Video';
+          videos.push({
+            videoId: vid,
+            title: String(rawTitle).replace(/&amp;/g, '&').trim(),
+            contentUrl: `https://www.youtube.com/watch?v=${vid}`,
+            thumbnailUrl: `https://i.ytimg.com/vi/${vid}/hqdefault.jpg`,
+            publishedAt: new Date(Date.now() - videos.length * 1000).toISOString()
+          });
+          if (videos.length >= 10) break;
+        }
+        source = 'youtube_channel_feed';
+      }
+    }
+  }
+
+  if (videos.length === 0) {
+    throw new Error('Could not fetch YouTube channel uploads from RSS or channel page');
+  }
+
+  const cacheRef = db.collection('youtube_feed_cache').doc('latest');
+  const existingCache = await cacheRef.get().catch(() => null);
+  const existingExcluded =
+    existingCache && existingCache.exists && Array.isArray(existingCache.data().excludedVideoIds)
+      ? existingCache.data().excludedVideoIds
+      : [];
+  const excludedSet = new Set(existingExcluded);
+
+  videos.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
+  const topVideos = videos.filter((v) => !excludedSet.has(v.videoId)).slice(0, 10);
+  const syncedAt = new Date().toISOString();
+
+  await cacheRef.set({
+    channelId,
+    channelTitle,
+    videos: topVideos,
+    excludedVideoIds: existingExcluded,
+    source,
+    syncedAt
+  }, { merge: true });
+
+  return { channelId, channelTitle, source, count: topVideos.length, syncedAt };
+}
+
+exports.refreshYoutubeCarouselCache = onSchedule('every 60 minutes', async () => {
+  return await syncYouTubeFeedToFirestoreCache();
+});
+
+exports.syncYoutubeCarouselHttp = onRequest(async (_req, res) => {
+  try {
+    const result = await syncYouTubeFeedToFirestoreCache();
+    res.json({ success: true, ...result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+

@@ -210,11 +210,58 @@ export interface AppLogoSettings {
   showImageOnly?: boolean;
 }
 
+export interface CountdownSettings {
+  mode: 'manual' | 'auto';
+  daysLeft: number;
+  targetDate: string;
+  label?: string;
+}
+
 export interface AppPublicSettings {
   logo?: AppLogoSettings;
   banner: PromotionalBanner;
   social: SocialLinks;
+  countdown?: CountdownSettings;
   announcement?: string;
   brandTagline?: string;
+  youtubeChannelId?: string;
   updatedAt?: string;
 }
+
+export type HomepageMediaContentType = 'youtube' | 'google_drive';
+
+export interface HomepageMediaItem {
+  id: string;
+  title: string;
+  contentType: HomepageMediaContentType;
+  contentUrl: string;
+  videoId?: string;
+  thumbnailUrl: string;
+  publishedAt?: string;
+  displayOrder: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface YouTubeFeedVideo {
+  videoId: string;
+  title: string;
+  contentUrl: string;
+  thumbnailUrl: string;
+  publishedAt: string;
+}
+
+export interface HomepageCarouselSlide {
+  id: string;
+  title: string;
+  contentType: HomepageMediaContentType;
+  contentUrl: string;
+  videoId?: string;
+  thumbnailUrl: string;
+  publishedAt?: string;
+  displayOrder: number;
+  source: 'auto_youtube' | 'manual_admin';
+  driveKind?: 'pdf' | 'video' | 'document' | 'file';
+}
+

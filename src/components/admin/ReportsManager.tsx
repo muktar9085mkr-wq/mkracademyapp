@@ -378,9 +378,9 @@ export const ReportsManager: React.FC<ReportsManagerProps> = ({
               <span className="text-xs text-stone-500 font-bold">{productRevenueRows.length} study materials sold</span>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-stone-50 border-b border-stone-200 text-stone-500 font-bold uppercase">
+            <div className="overflow-x-auto admin-table-scroll">
+              <table className="w-full min-w-[560px] text-left text-xs">
+                <thead className="bg-stone-50/90 border-b border-stone-200 text-stone-500 text-[10px] font-bold uppercase tracking-wider">
                   <tr>
                     <th className="py-2.5 px-4">Product Title</th>
                     <th className="py-2.5 px-4 text-center">Copies Sold</th>
@@ -448,9 +448,9 @@ export const ReportsManager: React.FC<ReportsManagerProps> = ({
               <h3 className="font-extrabold text-sm text-stone-900">User Roster Preview</h3>
               <span className="text-xs text-stone-500 font-bold">{students.length} accounts</span>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-stone-50 border-b border-stone-200 text-stone-500 font-bold uppercase">
+            <div className="overflow-x-auto admin-table-scroll">
+              <table className="w-full min-w-[640px] text-left text-xs">
+                <thead className="bg-stone-50/90 border-b border-stone-200 text-stone-500 text-[10px] font-bold uppercase tracking-wider">
                   <tr>
                     <th className="py-2.5 px-4">Name</th>
                     <th className="py-2.5 px-4">Email</th>
@@ -491,9 +491,9 @@ export const ReportsManager: React.FC<ReportsManagerProps> = ({
               <h3 className="font-extrabold text-sm text-stone-900">Recent Login & Session Activity</h3>
               <span className="text-xs text-stone-500 font-bold">{filteredSessions.length} recorded events</span>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-stone-50 border-b border-stone-200 text-stone-500 font-bold uppercase">
+            <div className="overflow-x-auto admin-table-scroll">
+              <table className="w-full min-w-[620px] text-left text-xs">
+                <thead className="bg-stone-50/90 border-b border-stone-200 text-stone-500 text-[10px] font-bold uppercase tracking-wider">
                   <tr>
                     <th className="py-2.5 px-4">Student</th>
                     <th className="py-2.5 px-4">Device</th>

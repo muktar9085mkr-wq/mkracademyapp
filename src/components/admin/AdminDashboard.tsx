@@ -50,7 +50,12 @@ import {
   Plus,
   ListOrdered,
   Smartphone,
-  Monitor
+  Monitor,
+  Menu,
+  X,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Clapperboard
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { Product, Order, UserProfile, AppPublicSettings, AppLogoSettings, ReconcileAndCleanupResult, ProductPdfEntry } from '../../types';
@@ -85,7 +90,9 @@ import {
 } from '../../services/orderService';
 import {
   getPublicSettings,
-  updatePublicSettings
+  updatePublicSettings,
+  computeEffectiveDaysLeft,
+  DEFAULT_COUNTDOWN_TARGET_DATE
 } from '../../services/settingsService';
 import {
   getRecentAdminActivityLogs,
@@ -97,6 +104,7 @@ import { ReportsManager } from './ReportsManager';
 import { UserDirectoryManager } from './UserDirectoryManager';
 import { PdfDownloadAnalytics } from './PdfDownloadAnalytics';
 import { PyqManager } from './PyqManager';
+import { HomepageMediaManager } from './HomepageMediaManager';
 import { getAllSessionsAdmin, UserSession } from '../../services/sessionService';
 
 interface AdminDashboardProps {
@@ -116,6 +124,8 @@ type AdminTab =
   | 'reports'
   | 'orders'
   | 'banner'
+  | 'homepage-media'
+  | 'countdown'
   | 'logo'
   | 'social'
   | 'payment-config'
@@ -125,6 +135,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
   const { user, isAdmin, logout } = useAuth();
 
   const [currentTab, setCurrentTab] = useState<AdminTab>('dashboard');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
   const [freeNotes, setFreeNotes] = useState<Product[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -134,6 +146,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
   const [loading, setLoading] = useState(true);
   const [auditLogs, setAuditLogs] = useState<AdminActivityLog[]>([]);
   const [auditLogsLoading, setAuditLogsLoading] = useState(false);
+
+  // Close mobile drawer on Escape and lock body scroll while open
+  useEffect(() => {
+    if (!mobileSidebarOpen) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setMobileSidebarOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [mobileSidebarOpen]);
 
   // Load audit logs function
   const loadAuditLogs = async () => {
@@ -255,6 +284,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
   const [bannerBadge, setBannerBadge] = useState('');
   const [bannerCta, setBannerCta] = useState('');
   const [bannerSaving, setBannerSaving] = useState(false);
+
+  // Days Left Countdown State (Editable in Admin Panel)
+  const [countdownMode, setCountdownMode] = useState<'manual' | 'auto'>('manual');
+  const [countdownDaysLeft, setCountdownDaysLeft] = useState<number>(95);
+  const [countdownTargetDate, setCountdownTargetDate] = useState<string>(DEFAULT_COUNTDOWN_TARGET_DATE);
+  const [countdownLabel, setCountdownLabel] = useState<string>('Days Left');
+  const [countdownSaving, setCountdownSaving] = useState<boolean>(false);
+  const [countdownMessage, setCountdownMessage] = useState<string | null>(null);
 
   // Logo & Branding State
   const [logoImageUrl, setLogoImageUrl] = useState('');
@@ -433,6 +470,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
         setSocialEmailEnabled(setts.social?.emailEnabled !== false);
         setSocialPhone(setts.social?.supportPhone || '+91 98640 12345');
         setSocialPhoneEnabled(setts.social?.supportPhoneEnabled !== false);
+
+        const initialCountdown = setts.countdown;
+        setCountdownMode(initialCountdown?.mode === 'manual' ? 'manual' : 'auto');
+        setCountdownTargetDate(initialCountdown?.targetDate || DEFAULT_COUNTDOWN_TARGET_DATE);
+        setCountdownDaysLeft(computeEffectiveDaysLeft(initialCountdown));
+        setCountdownLabel(initialCountdown?.label || 'Days Left');
       }
     } catch (err) {
       console.error('Failed to load admin dashboard data:', err);
@@ -887,19 +930,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
       if (editingProduct) {
         await updateProduct(editingProduct.id, payload);
         setFormMessage('Product and multiple PDF links updated successfully!');
+      } else if (payload.isFree || Number(payload.sellingPricePaise || 0) === 0) {
+        await addFreeNote(payload as any);
+        setFormMessage('New Free PDF created and displayed in the Free PDFs section!');
       } else {
         await addProduct(payload as any);
         setFormMessage('New educational product created successfully with multiple PDF links!');
       }
 
-      const refreshed = await getAllProductsAdmin();
+      const [refreshed, refreshedFree] = await Promise.all([
+        getAllProductsAdmin(),
+        getFreeNotes()
+      ]);
       setProducts(refreshed);
+      setFreeNotes(refreshedFree);
       if (onProductsChanged) {
         onProductsChanged();
       }
       setTimeout(() => {
         handleResetProductForm();
-        setCurrentTab('products');
+        setCurrentTab(payload.isFree || Number(payload.sellingPricePaise || 0) === 0 ? 'free-notes' : 'products');
       }, 1200);
     } catch (err: any) {
       setFormMessage(err.message || 'Failed to save product');
@@ -1098,6 +1148,40 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
     }
   };
 
+  const handleSaveCountdown = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCountdownSaving(true);
+    setCountdownMessage(null);
+    try {
+      const normalizedDays = Math.max(0, Math.min(3650, Math.floor(Number(countdownDaysLeft) || 0)));
+      const normalizedTargetDate = countdownTargetDate.trim() || DEFAULT_COUNTDOWN_TARGET_DATE;
+      const normalizedLabel = countdownLabel.trim() || 'Days Left';
+
+      await updatePublicSettings({
+        countdown: {
+          mode: countdownMode,
+          daysLeft: normalizedDays,
+          targetDate: normalizedTargetDate,
+          label: normalizedLabel
+        }
+      });
+
+      const refreshed = await getPublicSettings();
+      setSettings(refreshed);
+      if (onProductsChanged) {
+        onProductsChanged();
+      }
+      setCountdownDaysLeft(
+        countdownMode === 'manual' ? normalizedDays : computeEffectiveDaysLeft(refreshed.countdown)
+      );
+      setCountdownMessage('Days Left countdown updated live for all students!');
+    } catch (err: any) {
+      setCountdownMessage(err.message || 'Failed to update Days Left settings');
+    } finally {
+      setCountdownSaving(false);
+    }
+  };
+
   const handleSaveLogo = async (e: React.FormEvent) => {
     e.preventDefault();
     setLogoSaving(true);
@@ -1155,262 +1239,381 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
     }
   };
 
-  return (
-    <div className="min-h-screen bg-stone-100 flex flex-col">
-      {/* Top Admin Bar */}
-      <header className="bg-stone-900 text-white border-b border-stone-800 sticky top-0 z-30 px-4 sm:px-8 py-3 flex items-center justify-between">
-        <div className="flex items-center space-x-3">
-          <button
-            onClick={onBackToStore}
-            className="p-1.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-300 hover:text-white transition-colors flex items-center space-x-1 text-xs"
-            title="Return to Student App"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            <span className="hidden sm:inline">Store View</span>
-          </button>
-          <div className="h-4 w-px bg-stone-700"></div>
-          <div>
-            <h1 className="font-extrabold text-sm sm:text-base tracking-tight font-sans">
-              MKR ACADEMY <span className="text-red-500 font-bold">ADMIN PANEL</span>
-            </h1>
-            <p className="text-[10px] text-stone-400">Authenticated: {user?.email}</p>
+  const freeNotesCount = products.filter((p) => isFreeNote(p)).length;
+  const pyqCount = products.filter((p) => isPYQProduct(p)).length;
+
+  const TAB_TITLES: Record<AdminTab, string> = {
+    dashboard: 'Dashboard Overview',
+    'download-analytics': 'PDF Download Analytics',
+    products: 'Products & Notes',
+    'add-product': 'Add New Product',
+    'free-notes': 'Free Notes Manager',
+    pyq: 'PYQ Papers Manager',
+    orders: 'Orders & Payments',
+    students: 'User Directory',
+    sessions: 'Active Sessions',
+    reports: 'Export Reports',
+    banner: 'Banner Management',
+    'homepage-media': 'Homepage Media Manager',
+    countdown: 'Days Left (Countdown)',
+    logo: 'Logo & Branding',
+    social: 'Social & Support Links',
+    'payment-config': 'Payment Settings',
+    'audit-logs': 'Audit Activity Logs'
+  };
+
+  type NavItemConfig = {
+    id: AdminTab;
+    label: string;
+    icon: React.ComponentType<{ className?: string }>;
+    badge?: number | string;
+    pendingBadge?: number;
+    onSelect?: () => void;
+  };
+
+  const navGroups: { title: string; items: NavItemConfig[] }[] = [
+    {
+      title: 'Overview',
+      items: [
+        { id: 'dashboard', label: 'Dashboard Overview', icon: LayoutDashboard },
+        { id: 'download-analytics', label: 'PDF Download Analytics', icon: Download }
+      ]
+    },
+    {
+      title: 'Catalog & Content',
+      items: [
+        { id: 'products', label: 'Products & Notes', icon: Package, badge: products.length },
+        {
+          id: 'add-product',
+          label: 'Add New Product',
+          icon: PlusCircle,
+          onSelect: () => {
+            handleResetProductForm();
+            setCurrentTab('add-product');
+          }
+        },
+        { id: 'free-notes', label: 'Free Notes Manager', icon: Sparkles, badge: freeNotesCount },
+        { id: 'pyq', label: 'PYQ Papers Manager', icon: FileText, badge: pyqCount }
+      ]
+    },
+    {
+      title: 'Sales & Students',
+      items: [
+        {
+          id: 'orders',
+          label: 'Orders & Payments',
+          icon: ShoppingBag,
+          badge: orders.length,
+          pendingBadge: pendingOrders.length > 0 ? pendingOrders.length : undefined
+        },
+        { id: 'students', label: 'User Directory', icon: Users, badge: students.length },
+        { id: 'sessions', label: 'Active Sessions', icon: Smartphone, badge: sessions.length },
+        { id: 'reports', label: 'Export Reports', icon: BarChart3 }
+      ]
+    },
+    {
+      title: 'Storefront & Brand',
+      items: [
+        { id: 'banner', label: 'Banner Management', icon: Megaphone },
+        { id: 'homepage-media', label: 'Homepage Media Manager', icon: Clapperboard },
+        { id: 'countdown', label: 'Days Left (Countdown)', icon: Clock },
+        { id: 'logo', label: 'Logo & Branding', icon: Award },
+        { id: 'social', label: 'Social & Support Links', icon: Share2 }
+      ]
+    },
+    {
+      title: 'Finance & Security',
+      items: [
+        { id: 'payment-config', label: 'Payment Settings', icon: CreditCard },
+        { id: 'audit-logs', label: 'Audit Activity Logs', icon: ShieldCheck }
+      ]
+    }
+  ];
+
+  const renderSidebarNavContent = (isMobileDrawer: boolean) => {
+    const collapsed = !isMobileDrawer && sidebarCollapsed;
+    return (
+      <div className="flex flex-col h-full">
+        {/* Sidebar Brand Header */}
+        <div
+          className={`flex items-center border-b border-white/10 shrink-0 ${
+            collapsed ? 'justify-center px-2 h-16' : 'justify-between px-4 h-16'
+          }`}
+        >
+          <div className={`flex items-center min-w-0 ${collapsed ? 'justify-center' : 'space-x-2.5'}`}>
+            <div className="w-9 h-9 rounded-xl bg-white/15 border border-white/25 flex items-center justify-center shrink-0 shadow-xs">
+              <GraduationCap className="w-5 h-5 text-white" />
+            </div>
+            {!collapsed && (
+              <div className="min-w-0">
+                <p className="text-sm font-black tracking-tight text-white truncate leading-tight">
+                  MKR ACADEMY
+                </p>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-red-200/90 leading-tight">
+                  Admin Console
+                </p>
+              </div>
+            )}
           </div>
+
+          {isMobileDrawer ? (
+            <button
+              type="button"
+              onClick={() => setMobileSidebarOpen(false)}
+              className="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer shrink-0"
+              aria-label="Close navigation menu"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          ) : (
+            !collapsed && (
+              <button
+                type="button"
+                onClick={() => setSidebarCollapsed(true)}
+                className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-red-100 hover:text-white flex items-center justify-center transition-colors cursor-pointer shrink-0"
+                title="Collapse sidebar"
+                aria-label="Collapse sidebar"
+              >
+                <PanelLeftClose className="w-4 h-4" />
+              </button>
+            )
+          )}
         </div>
 
-        <div className="flex items-center space-x-2">
-          <button
-            onClick={async () => {
-              await logout();
-              onBackToStore();
-            }}
-            className="px-3 py-1.5 bg-stone-800 hover:bg-red-950/60 hover:text-red-400 text-stone-300 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-colors"
-          >
-            <LogOut className="w-3.5 h-3.5" />
-            <span>Sign Out</span>
-          </button>
-        </div>
-      </header>
-
-      {/* Admin Layout */}
-      <div className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 flex flex-col md:flex-row gap-6">
-        
-        {/* Navigation Sidebar */}
-        <aside className="w-full md:w-60 shrink-0 flex md:flex-col overflow-x-auto md:overflow-visible gap-1.5 pb-2 md:pb-0">
-          <button
-            onClick={() => setCurrentTab('dashboard')}
-            className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center space-x-2.5 transition-colors ${
-              currentTab === 'dashboard'
-                ? 'bg-red-700 text-white shadow-xs'
-                : 'bg-white text-stone-700 hover:bg-stone-50 border border-stone-200'
-            }`}
-          >
-            <LayoutDashboard className="w-4 h-4" />
-            <span>Dashboard Overview</span>
-          </button>
-
-          <button
-            onClick={() => setCurrentTab('products')}
-            className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center justify-between transition-colors ${
-              currentTab === 'products'
-                ? 'bg-red-700 text-white shadow-xs'
-                : 'bg-white text-stone-700 hover:bg-stone-50 border border-stone-200'
-            }`}
-          >
-            <div className="flex items-center space-x-2.5">
-              <Package className="w-4 h-4" />
-              <span>Products & Notes</span>
-            </div>
-            <span className="text-[11px] opacity-80">{products.length}</span>
-          </button>
-
-          <button
-            onClick={() => {
-              handleResetProductForm();
-              setCurrentTab('add-product');
-            }}
-            className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center space-x-2.5 transition-colors ${
-              currentTab === 'add-product'
-                ? 'bg-red-700 text-white shadow-xs'
-                : 'bg-white text-stone-700 hover:bg-stone-50 border border-stone-200'
-            }`}
-          >
-            <PlusCircle className="w-4 h-4" />
-            <span>Add New Product</span>
-          </button>
-
-          <button
-            onClick={() => setCurrentTab('free-notes')}
-            className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center justify-between transition-colors cursor-pointer ${
-              currentTab === 'free-notes'
-                ? 'bg-emerald-700 text-white shadow-xs'
-                : 'bg-white text-emerald-800 hover:bg-emerald-50 border border-emerald-200'
-            }`}
-          >
-            <div className="flex items-center space-x-2.5">
-              <Sparkles className="w-4 h-4 text-emerald-500" />
-              <span>Free Notes Manager</span>
-            </div>
-            <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${currentTab === 'free-notes' ? 'bg-emerald-900 text-white' : 'bg-emerald-100 text-emerald-800'}`}>
-              {products.filter((p) => isFreeNote(p)).length}
-            </span>
-          </button>
-
-          <button
-            onClick={() => setCurrentTab('pyq')}
-            className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center justify-between transition-colors cursor-pointer ${
-              currentTab === 'pyq'
-                ? 'bg-amber-700 text-white shadow-xs'
-                : 'bg-white text-amber-900 hover:bg-amber-50/60 border border-amber-200'
-            }`}
-          >
-            <div className="flex items-center space-x-2.5">
-              <FileText className="w-4 h-4 text-amber-600" />
-              <span>PYQ Papers Manager</span>
-            </div>
-            <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${currentTab === 'pyq' ? 'bg-amber-950 text-white' : 'bg-amber-100 text-amber-900'}`}>
-              {products.filter((p) => isPYQProduct(p)).length}
-            </span>
-          </button>
-
-          <button
-            onClick={() => setCurrentTab('orders')}
-            className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center justify-between transition-colors ${
-              currentTab === 'orders'
-                ? 'bg-red-700 text-white shadow-xs'
-                : 'bg-white text-stone-700 hover:bg-stone-50 border border-stone-200'
-            }`}
-          >
-            <div className="flex items-center space-x-2.5">
-              <ShoppingBag className="w-4 h-4" />
-              <span>Orders & Payments</span>
-            </div>
-            <div className="flex items-center space-x-1.5">
-              {pendingOrders.length > 0 && (
-                <span className="bg-amber-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full animate-pulse shadow-xs">
-                  {pendingOrders.length} Pending
-                </span>
+        {/* Navigation Groups */}
+        <nav className="flex-1 overflow-y-auto admin-scrollbar py-3 px-2.5 space-y-4">
+          {navGroups.map((group, groupIdx) => (
+            <div key={group.title} className="space-y-1">
+              {!collapsed ? (
+                <p className="px-3 pb-1 text-[10px] font-extrabold uppercase tracking-[0.12em] text-red-200/65">
+                  {group.title}
+                </p>
+              ) : (
+                groupIdx > 0 && <div className="border-t border-white/10 mx-2 my-2" />
               )}
-              <span className="text-[11px] opacity-80">{orders.length}</span>
+
+              {group.items.map((item) => {
+                const IconComp = item.icon;
+                const isActive = currentTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    title={collapsed ? item.label : undefined}
+                    onClick={() => {
+                      if (item.onSelect) {
+                        item.onSelect();
+                      } else {
+                        setCurrentTab(item.id);
+                      }
+                      if (isMobileDrawer) {
+                        setMobileSidebarOpen(false);
+                      }
+                    }}
+                    className={`w-full relative flex items-center rounded-xl transition-all cursor-pointer ${
+                      collapsed
+                        ? 'justify-center w-11 h-11 mx-auto px-0'
+                        : 'justify-between px-3 py-2.5 min-h-[40px] text-left'
+                    } ${
+                      isActive
+                        ? 'bg-white text-[#8B0F17] shadow-sm font-bold'
+                        : 'text-red-50/90 hover:bg-white/12 hover:text-white font-semibold'
+                    }`}
+                  >
+                    <div className={`flex items-center min-w-0 ${collapsed ? 'justify-center' : 'space-x-2.5'}`}>
+                      <IconComp
+                        className={`w-4 h-4 shrink-0 ${
+                          isActive ? 'text-[#991B1B]' : 'text-red-100/90'
+                        }`}
+                      />
+                      {!collapsed && (
+                        <span className="text-xs truncate">{item.label}</span>
+                      )}
+                    </div>
+
+                    {!collapsed && (item.badge !== undefined || item.pendingBadge !== undefined) && (
+                      <div className="flex items-center space-x-1 shrink-0 ml-2">
+                        {item.pendingBadge !== undefined && (
+                          <span className="bg-amber-400 text-stone-950 text-[9px] font-black px-1.5 py-0.5 rounded-full tabular-nums">
+                            {item.pendingBadge}
+                          </span>
+                        )}
+                        {item.badge !== undefined && (
+                          <span
+                            className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md tabular-nums ${
+                              isActive
+                                ? 'bg-red-50 text-[#8B0F17]'
+                                : 'bg-black/20 text-red-100/90'
+                            }`}
+                          >
+                            {item.badge}
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    {collapsed && item.pendingBadge !== undefined && (
+                      <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-amber-400 ring-2 ring-[#7F0E15]" />
+                    )}
+                  </button>
+                );
+              })}
             </div>
-          </button>
+          ))}
+        </nav>
 
-          <button
-            onClick={() => setCurrentTab('students')}
-            className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center justify-between transition-colors ${
-              currentTab === 'students'
-                ? 'bg-red-700 text-white shadow-xs'
-                : 'bg-white text-stone-700 hover:bg-stone-50 border border-stone-200'
-            }`}
-          >
-            <div className="flex items-center space-x-2.5">
-              <Users className="w-4 h-4" />
-              <span>User Directory</span>
+        {/* Sidebar Footer */}
+        <div className="p-3 border-t border-white/10 shrink-0 space-y-2 bg-black/15">
+          {!collapsed && (
+            <div className="px-2.5 py-2 rounded-xl bg-black/20 border border-white/10">
+              <p className="text-[10px] uppercase tracking-wider font-bold text-red-200/75">
+                Signed in as Admin
+              </p>
+              <p className="text-[11px] font-semibold text-white truncate mt-0.5">
+                {user?.email || 'muktar9085mkr@gmail.com'}
+              </p>
             </div>
-            <span className="text-[11px] opacity-80">{students.length}</span>
-          </button>
+          )}
 
-          <button
-            onClick={() => setCurrentTab('sessions')}
-            className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center justify-between transition-colors ${
-              currentTab === 'sessions'
-                ? 'bg-red-700 text-white shadow-xs'
-                : 'bg-white text-stone-700 hover:bg-stone-50 border border-stone-200'
-            }`}
-          >
-            <div className="flex items-center space-x-2.5">
-              <Smartphone className="w-4 h-4" />
-              <span>Active Sessions</span>
+          {isMobileDrawer ? (
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileSidebarOpen(false);
+                  onBackToStore();
+                }}
+                className="px-3 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex items-center justify-center space-x-1.5 cursor-pointer transition-colors"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>Store View</span>
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  await logout();
+                  onBackToStore();
+                }}
+                className="px-3 py-2.5 rounded-xl bg-white text-[#8B0F17] hover:bg-red-50 text-xs font-extrabold flex items-center justify-center space-x-1.5 cursor-pointer transition-colors"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span>Sign Out</span>
+              </button>
             </div>
-            <span className="text-[11px] opacity-80">{sessions.length}</span>
-          </button>
+          ) : collapsed ? (
+            <button
+              type="button"
+              onClick={() => setSidebarCollapsed(false)}
+              className="w-11 h-10 mx-auto rounded-xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer"
+              title="Expand sidebar"
+              aria-label="Expand sidebar"
+            >
+              <PanelLeftOpen className="w-4 h-4" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onBackToStore}
+              className="w-full px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex items-center justify-center space-x-1.5 transition-colors cursor-pointer"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Return to Student Store</span>
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  };
 
-          <button
-            onClick={() => setCurrentTab('reports')}
-            className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center space-x-2.5 transition-colors ${
-              currentTab === 'reports'
-                ? 'bg-red-700 text-white shadow-xs'
-                : 'bg-white text-stone-700 hover:bg-stone-50 border border-stone-200'
-            }`}
-          >
-            <FileText className="w-4 h-4" />
-            <span>Export Reports</span>
-          </button>
+  return (
+    <div className="min-h-screen bg-[#F6F5F4] flex text-stone-900">
+      {/* Desktop Collapsible Left Sidebar */}
+      <aside
+        className={`hidden lg:flex flex-col sticky top-0 h-screen shrink-0 transition-[width] duration-200 bg-gradient-to-b from-[#7F0E15] via-[#96121A] to-[#63090E] text-white border-r border-red-950/30 shadow-lg z-30 ${
+          sidebarCollapsed ? 'w-[76px]' : 'w-[264px]'
+        }`}
+      >
+        {renderSidebarNavContent(false)}
+      </aside>
 
-          <button
-            onClick={() => setCurrentTab('download-analytics')}
-            className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center space-x-2.5 transition-colors cursor-pointer ${
-              currentTab === 'download-analytics'
-                ? 'bg-red-700 text-white shadow-xs'
-                : 'bg-white text-stone-700 hover:bg-stone-50 border border-stone-200'
-            }`}
-          >
-            <Download className="w-4 h-4" />
-            <span>PDF Download Analytics</span>
-          </button>
+      {/* Mobile Slide-Over Navigation Drawer */}
+      {mobileSidebarOpen && (
+        <div className="lg:hidden fixed inset-0 z-50 flex">
+          <div
+            className="fixed inset-0 bg-stone-950/60 backdrop-blur-xs animate-in fade-in duration-150"
+            onClick={() => setMobileSidebarOpen(false)}
+          />
+          <aside className="relative z-10 w-[82vw] max-w-[300px] h-full bg-gradient-to-b from-[#7F0E15] via-[#96121A] to-[#63090E] text-white shadow-2xl border-r border-red-950/30 animate-in slide-in-from-left duration-200">
+            {renderSidebarNavContent(true)}
+          </aside>
+        </div>
+      )}
 
-          <button
-            onClick={() => setCurrentTab('banner')}
-            className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center space-x-2.5 transition-colors ${
-              currentTab === 'banner'
-                ? 'bg-red-700 text-white shadow-xs'
-                : 'bg-white text-stone-700 hover:bg-stone-50 border border-stone-200'
-            }`}
-          >
-            <Megaphone className="w-4 h-4" />
-            <span>Banner Management</span>
-          </button>
+      {/* Right Workspace Column */}
+      <div className="flex-1 min-w-0 flex flex-col">
+        {/* Sticky Top Admin Header Bar */}
+        <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-stone-200 border-t-2 border-t-[#991B1B] px-3.5 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-3">
+          <div className="flex items-center space-x-2.5 sm:space-x-3 min-w-0">
+            {/* Mobile Hamburger Trigger */}
+            <button
+              type="button"
+              onClick={() => setMobileSidebarOpen(true)}
+              className="lg:hidden w-10 h-10 rounded-xl bg-red-50 hover:bg-red-100 text-[#991B1B] border border-red-200/80 flex items-center justify-center transition-colors cursor-pointer shrink-0"
+              aria-label="Open admin navigation"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
 
-          <button
-            onClick={() => setCurrentTab('logo')}
-            className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center space-x-2.5 transition-colors ${
-              currentTab === 'logo'
-                ? 'bg-red-700 text-white shadow-xs'
-                : 'bg-white text-stone-700 hover:bg-stone-50 border border-stone-200'
-            }`}
-          >
-            <Sparkles className="w-4 h-4 text-amber-500" />
-            <span>Logo & Branding</span>
-          </button>
+            {/* Desktop Collapse Toggle */}
+            <button
+              type="button"
+              onClick={() => setSidebarCollapsed((c) => !c)}
+              className="hidden lg:flex w-9 h-9 rounded-xl bg-stone-100 hover:bg-red-50 text-stone-600 hover:text-[#991B1B] border border-stone-200 items-center justify-center transition-colors cursor-pointer shrink-0"
+              title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            >
+              {sidebarCollapsed ? <PanelLeftOpen className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
+            </button>
 
-          <button
-            onClick={() => setCurrentTab('social')}
-            className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center space-x-2.5 transition-colors ${
-              currentTab === 'social'
-                ? 'bg-red-700 text-white shadow-xs'
-                : 'bg-white text-stone-700 hover:bg-stone-50 border border-stone-200'
-            }`}
-          >
-            <Share2 className="w-4 h-4" />
-            <span>Social & Support Links</span>
-          </button>
+            <div className="min-w-0">
+              <div className="flex items-center space-x-1.5 text-xs sm:text-sm font-extrabold text-stone-900 truncate">
+                <span className="text-[#991B1B] hidden sm:inline">MKR Admin</span>
+                <ChevronRight className="w-3.5 h-3.5 text-stone-400 hidden sm:inline shrink-0" />
+                <span className="truncate">{TAB_TITLES[currentTab]}</span>
+              </div>
+              <p className="text-[10px] text-stone-500 truncate hidden sm:block">
+                Authenticated: {user?.email}
+              </p>
+            </div>
+          </div>
 
-          <button
-            onClick={() => setCurrentTab('payment-config')}
-            className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center space-x-2.5 transition-colors ${
-              currentTab === 'payment-config'
-                ? 'bg-red-700 text-white shadow-xs'
-                : 'bg-white text-stone-700 hover:bg-stone-50 border border-stone-200'
-            }`}
-          >
-            <CreditCard className="w-4 h-4" />
-            <span>Payment Settings</span>
-          </button>
+          <div className="flex items-center space-x-2 shrink-0">
+            <button
+              type="button"
+              onClick={onBackToStore}
+              className="px-3 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold flex items-center space-x-1.5 transition-colors cursor-pointer whitespace-nowrap"
+              title="Return to Student App"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Store View</span>
+            </button>
 
-          <button
-            onClick={() => setCurrentTab('audit-logs')}
-            className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center space-x-2.5 transition-colors ${
-              currentTab === 'audit-logs'
-                ? 'bg-red-700 text-white shadow-xs'
-                : 'bg-white text-stone-700 hover:bg-stone-50 border border-stone-200'
-            }`}
-          >
-            <ShieldCheck className="w-4 h-4 text-emerald-600" />
-            <span>Audit Activity Logs</span>
-          </button>
-        </aside>
+            <button
+              type="button"
+              onClick={async () => {
+                await logout();
+                onBackToStore();
+              }}
+              className="px-3 py-2 rounded-xl bg-[#991B1B] hover:bg-[#7F1D1D] text-white text-xs font-bold flex items-center space-x-1.5 shadow-xs transition-colors cursor-pointer whitespace-nowrap"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span>Sign Out</span>
+            </button>
+          </div>
+        </header>
 
-        {/* Tab Content Area */}
-        <main className="flex-1 bg-white rounded-3xl border border-stone-200 shadow-xs p-6 sm:p-8 overflow-x-auto">
+        {/* Main Workspace Container */}
+        <main className="flex-1 w-full max-w-[1440px] mx-auto px-3.5 py-4 sm:px-6 sm:py-6 lg:px-8 lg:py-7 min-w-0 space-y-6">
           {/* TAB: REAL-TIME ANALYTICS DASHBOARD */}
           {currentTab === 'dashboard' && (
             <AnalyticsDashboard
@@ -1911,7 +2114,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
 
           {/* TAB: PRODUCTS CATALOG */}
           {currentTab === 'products' && (
-            <div className="space-y-6 animate-in fade-in">
+            <div className="bg-white rounded-2xl border border-stone-200/90 shadow-xs p-4 sm:p-6 lg:p-7 space-y-6 animate-in fade-in">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <h2 className="text-xl font-extrabold text-stone-900 font-sans">
@@ -1995,8 +2198,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
 
                   {/* Products Table */}
                   <div className="border border-stone-200 rounded-2xl overflow-hidden">
-                    <table className="w-full text-left text-xs">
-                      <thead className="bg-stone-50 border-b border-stone-200 text-stone-500 uppercase text-[10px] font-bold">
+                    <div className="overflow-x-auto admin-table-scroll w-full">
+                    <table className="w-full min-w-[780px] text-left text-xs">
+                      <thead className="bg-stone-50/90 border-b border-stone-200 text-stone-500 uppercase text-[10px] font-bold tracking-wider">
                         <tr>
                           <th className="py-3 px-4">Title & Subject</th>
                           <th className="py-3 px-4">Class & Medium</th>
@@ -2013,7 +2217,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
                         p.classLevel.toLowerCase().includes(productSearch.toLowerCase())
                       )
                       .map((p) => (
-                        <tr key={p.id} className="hover:bg-stone-50/50">
+                        <tr key={p.id} className="hover:bg-red-50/25 transition-colors">
                           <td className="py-3 px-4">
                             <div className="flex items-center space-x-3">
                               <img
@@ -2129,17 +2333,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
                           </td>
                         </tr>
                       ))}
-                  </tbody>
-                </table>
-              </div>
-            </>
+                    </tbody>
+                  </table>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
           )}
-        </div>
-      )}
 
           {/* TAB: ADD / EDIT PRODUCT */}
           {currentTab === 'add-product' && (
-            <div className="space-y-6 animate-in fade-in max-w-4xl">
+            <div className="bg-white rounded-2xl border border-stone-200/90 shadow-xs p-4 sm:p-6 lg:p-7 space-y-6 animate-in fade-in max-w-4xl">
               {/* Header */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-stone-200">
                 <div>
@@ -2776,7 +2981,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
 
           {/* TAB: FREE NOTES MANAGER (Dedicated 5-Subject Management) */}
           {currentTab === 'free-notes' && (
-            <div className="space-y-6 animate-in fade-in">
+            <div className="bg-white rounded-2xl border border-stone-200/90 shadow-xs p-4 sm:p-6 lg:p-7 space-y-6 animate-in fade-in">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <div className="inline-flex items-center space-x-1.5 bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2.5 py-0.5 rounded-md uppercase mb-1">
@@ -2906,8 +3111,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
 
                 return (
                   <div className="border border-stone-200 rounded-2xl overflow-hidden shadow-2xs">
-                    <table className="w-full text-left text-xs">
-                      <thead className="bg-stone-50 border-b border-stone-200 text-stone-500 uppercase text-[10px] font-bold">
+                    <div className="overflow-x-auto admin-table-scroll w-full">
+                    <table className="w-full min-w-[760px] text-left text-xs">
+                      <thead className="bg-stone-50/90 border-b border-stone-200 text-stone-500 uppercase text-[10px] font-bold tracking-wider">
                         <tr>
                           <th className="py-3 px-4">Title & Chapter</th>
                           <th className="py-3 px-4">Assigned Subject</th>
@@ -2919,7 +3125,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
                       </thead>
                       <tbody className="divide-y divide-stone-100">
                         {freeList.map((note) => (
-                          <tr key={note.id} className="hover:bg-stone-50/60 transition-colors">
+                          <tr key={note.id} className="hover:bg-red-50/25 transition-colors">
                             <td className="py-3 px-4">
                               <div className="flex items-center space-x-3">
                                 {note.coverImagePath ? (
@@ -3010,6 +3216,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
                         ))}
                       </tbody>
                     </table>
+                    </div>
                   </div>
                 );
               })()}
@@ -3220,7 +3427,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
           )}
 
           {currentTab === 'orders' && (
-            <div className="space-y-6 animate-in fade-in">
+            <div className="bg-white rounded-2xl border border-stone-200/90 shadow-xs p-4 sm:p-6 lg:p-7 space-y-6 animate-in fade-in">
               {/* Header and Search */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
@@ -3712,9 +3919,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
 
               {/* 2. DESKTOP RESPONSIVE TABLE VIEW (Visible on desktop: hidden lg:block with scrollable container) */}
               <div className="hidden lg:block border border-stone-200 rounded-2xl overflow-hidden shadow-2xs">
-                <div className="overflow-x-auto w-full">
+                <div className="overflow-x-auto admin-table-scroll w-full">
                   <table className="w-full min-w-[980px] text-left text-xs">
-                    <thead className="bg-stone-50 border-b border-stone-200 text-stone-500 uppercase text-[10px] font-bold">
+                    <thead className="bg-stone-50/90 border-b border-stone-200 text-stone-500 uppercase text-[10px] font-bold tracking-wider">
                       <tr>
                         <th className="py-3 px-4 w-48">Order & Payment IDs</th>
                         <th className="py-3 px-4 w-48">Student & Contact</th>
@@ -3736,7 +3943,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
                         </tr>
                       ) : (
                         filteredOrdersList.map((o) => (
-                          <tr key={o.id} className="hover:bg-stone-50/60 transition-colors">
+                          <tr key={o.id} className="hover:bg-red-50/25 transition-colors">
                             <td className="py-3 px-4 font-mono">
                               <div className="flex items-center space-x-1.5">
                                 <span className="font-bold text-stone-900">{o.id}</span>
@@ -3962,8 +4169,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
                   </div>
 
                   <div className="border border-stone-200 rounded-2xl overflow-hidden shadow-2xs">
-                    <table className="w-full text-left text-xs">
-                      <thead className="bg-stone-50 border-b border-stone-200 text-stone-500 uppercase text-[10px] font-bold">
+                    <div className="overflow-x-auto admin-table-scroll w-full">
+                    <table className="w-full min-w-[820px] text-left text-xs">
+                      <thead className="bg-stone-50/90 border-b border-stone-200 text-stone-500 uppercase text-[10px] font-bold tracking-wider">
                         <tr>
                           <th className="py-3 px-4">Archived Order ID</th>
                           <th className="py-3 px-4">Student & Contact</th>
@@ -4040,6 +4248,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
                         )}
                       </tbody>
                     </table>
+                    </div>
                   </div>
                 </div>
               )}
@@ -4130,7 +4339,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
 
           {/* TAB: BANNER MANAGEMENT */}
           {currentTab === 'banner' && (
-            <div className="space-y-6 animate-in fade-in max-w-2xl">
+            <div className="bg-white rounded-2xl border border-stone-200/90 shadow-xs p-4 sm:p-6 lg:p-7 space-y-6 animate-in fade-in max-w-2xl">
               <div>
                 <h2 className="text-xl font-extrabold text-stone-900 font-sans">
                   Promotional Banner Management
@@ -4207,12 +4416,228 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
                   <span>Save & Publish Banner</span>
                 </button>
               </form>
+
+              <div className="p-4 rounded-2xl bg-red-50 border border-red-200 flex items-center justify-between gap-3">
+                <div className="space-y-0.5">
+                  <p className="text-xs font-bold text-red-900">Looking for the Days Left Counter?</p>
+                  <p className="text-[11px] text-red-700">
+                    Edit the homepage Days Left number or target exam date directly.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setCurrentTab('countdown')}
+                  className="px-3 py-2 rounded-xl bg-red-700 hover:bg-red-800 text-white text-xs font-bold shrink-0 cursor-pointer"
+                >
+                  Edit Days Left →
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* TAB: DAYS LEFT COUNTDOWN MANAGEMENT */}
+          {currentTab === 'countdown' && (
+            <div className="bg-white rounded-2xl border border-stone-200/90 shadow-xs p-4 sm:p-6 lg:p-7 space-y-6 animate-in fade-in max-w-2xl">
+              <div>
+                <h2 className="text-xl font-extrabold text-stone-900 font-sans flex items-center space-x-2">
+                  <Clock className="w-5 h-5 text-red-600" />
+                  <span>Days Left Counter Settings</span>
+                </h2>
+                <p className="text-xs text-stone-500 mt-0.5">
+                  Edit the &quot;Days Left&quot; value displayed on the student homepage statistics card. Changes update in real time.
+                </p>
+              </div>
+
+              {countdownMessage && (
+                <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs text-emerald-800 flex items-center space-x-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span className="font-semibold">{countdownMessage}</span>
+                </div>
+              )}
+
+              {/* Live Student Card Preview */}
+              <div className="bg-stone-50 p-5 rounded-3xl border border-stone-200 flex items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-stone-500">
+                    Live Student Homepage Preview
+                  </span>
+                  <p className="text-xs text-stone-600">
+                    {countdownMode === 'manual'
+                      ? 'Manual Days Mode: Displays the exact number of days you enter.'
+                      : `Auto Date Mode: Calculates days remaining until ${countdownTargetDate || DEFAULT_COUNTDOWN_TARGET_DATE}.`}
+                  </p>
+                </div>
+                <div className="bg-white rounded-2xl p-3 border border-stone-200 shadow-xs text-center flex flex-col items-center justify-center min-w-[84px] min-h-[76px] shrink-0">
+                  <div className="w-6 h-6 rounded-lg bg-red-50 text-red-700 flex items-center justify-center mb-1">
+                    <Clock className="w-3.5 h-3.5" />
+                  </div>
+                  <span className="text-sm font-black text-stone-900 leading-tight">
+                    {computeEffectiveDaysLeft({
+                      mode: countdownMode,
+                      daysLeft: countdownDaysLeft,
+                      targetDate: countdownTargetDate,
+                      label: countdownLabel
+                    })}
+                    d
+                  </span>
+                  <span className="text-[10px] font-semibold text-stone-500 tracking-tight leading-tight">
+                    {countdownLabel.trim() || 'Days Left'}
+                  </span>
+                </div>
+              </div>
+
+              <form onSubmit={handleSaveCountdown} className="bg-white p-5 rounded-3xl border border-stone-200 space-y-5 text-xs">
+                {/* Mode Selector */}
+                <div className="space-y-2">
+                  <label className="block text-stone-800 font-bold">
+                    Countdown Mode
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setCountdownMode('manual')}
+                      className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${
+                        countdownMode === 'manual'
+                          ? 'bg-red-50 border-red-600 text-red-900 ring-1 ring-red-600'
+                          : 'bg-stone-50 border-stone-200 text-stone-700 hover:bg-stone-100'
+                      }`}
+                    >
+                      <p className="font-bold text-xs">Manual Editable Days</p>
+                      <p className="text-[11px] opacity-80 mt-0.5">
+                        Directly set the exact number of days (e.g. 95d)
+                      </p>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setCountdownMode('auto')}
+                      className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${
+                        countdownMode === 'auto'
+                          ? 'bg-red-50 border-red-600 text-red-900 ring-1 ring-red-600'
+                          : 'bg-stone-50 border-stone-200 text-stone-700 hover:bg-stone-100'
+                      }`}
+                    >
+                      <p className="font-bold text-xs">Auto Countdown by Date</p>
+                      <p className="text-[11px] opacity-80 mt-0.5">
+                        Automatically counts down daily to an exam date
+                      </p>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Manual Days Input */}
+                {countdownMode === 'manual' ? (
+                  <div className="space-y-2.5">
+                    <label htmlFor="countdownDaysInput" className="block text-stone-800 font-bold">
+                      Days Left (Editable Number)
+                    </label>
+                    <div className="flex items-center space-x-2">
+                      <button
+                        type="button"
+                        onClick={() => setCountdownDaysLeft((d) => Math.max(0, (Number(d) || 0) - 1))}
+                        className="px-3.5 py-2.5 rounded-xl bg-stone-100 hover:bg-stone-200 border border-stone-300 font-black text-stone-800 cursor-pointer"
+                        aria-label="Decrease days by 1"
+                      >
+                        -1
+                      </button>
+                      <input
+                        id="countdownDaysInput"
+                        type="number"
+                        min={0}
+                        max={3650}
+                        required
+                        value={countdownDaysLeft}
+                        onChange={(e) => {
+                          const val = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
+                          setCountdownDaysLeft(Number.isNaN(val) ? 0 : Math.max(0, Math.min(3650, val)));
+                        }}
+                        className="w-32 text-center bg-stone-50 border border-stone-300 rounded-xl px-3 py-2.5 text-base font-black text-stone-900 focus:bg-white focus:outline-none focus:border-red-600"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setCountdownDaysLeft((d) => Math.min(3650, (Number(d) || 0) + 1))}
+                        className="px-3.5 py-2.5 rounded-xl bg-stone-100 hover:bg-stone-200 border border-stone-300 font-black text-stone-800 cursor-pointer"
+                        aria-label="Increase days by 1"
+                      >
+                        +1
+                      </button>
+                      <span className="text-stone-500 font-semibold">days</span>
+                    </div>
+
+                    {/* Quick Preset Buttons */}
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      <span className="text-[11px] text-stone-500 self-center mr-1">Quick set:</span>
+                      {[15, 30, 45, 60, 90, 120, 180].map((preset) => (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => setCountdownDaysLeft(preset)}
+                          className={`px-2.5 py-1 rounded-lg border text-[11px] font-bold transition-colors cursor-pointer ${
+                            countdownDaysLeft === preset
+                              ? 'bg-red-700 text-white border-red-700'
+                              : 'bg-stone-50 text-stone-700 border-stone-200 hover:bg-stone-100'
+                          }`}
+                        >
+                          {preset}d
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    <label htmlFor="countdownTargetDateInput" className="block text-stone-800 font-bold">
+                      Target Exam Date
+                    </label>
+                    <input
+                      id="countdownTargetDateInput"
+                      type="date"
+                      required
+                      value={countdownTargetDate}
+                      onChange={(e) => setCountdownTargetDate(e.target.value)}
+                      className="w-full sm:w-64 bg-stone-50 border border-stone-300 rounded-xl px-3.5 py-2.5 text-stone-900 font-bold focus:bg-white focus:outline-none focus:border-red-600"
+                    />
+                    <p className="text-[11px] text-stone-500">
+                      Days remaining until this date will automatically update every day.
+                    </p>
+                  </div>
+                )}
+
+                {/* Editable Card Label */}
+                <div className="space-y-1.5 pt-2 border-t border-stone-100">
+                  <label htmlFor="countdownLabelInput" className="block text-stone-800 font-bold">
+                    Card Label Text
+                  </label>
+                  <input
+                    id="countdownLabelInput"
+                    type="text"
+                    maxLength={30}
+                    value={countdownLabel}
+                    onChange={(e) => setCountdownLabel(e.target.value)}
+                    placeholder="Days Left"
+                    className="w-full sm:w-72 bg-stone-50 border border-stone-300 rounded-xl px-3.5 py-2 text-stone-900 font-semibold focus:bg-white focus:outline-none focus:border-red-600"
+                  />
+                  <p className="text-[11px] text-stone-500">
+                    Label displayed below the number (default: Days Left).
+                  </p>
+                </div>
+
+                <div className="pt-2">
+                  <button
+                    type="submit"
+                    disabled={countdownSaving}
+                    className="py-2.5 px-6 rounded-xl bg-red-700 hover:bg-red-800 disabled:bg-stone-300 text-white font-bold flex items-center space-x-2 shadow-sm cursor-pointer"
+                  >
+                    {countdownSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                    <span>{countdownSaving ? 'Saving...' : 'Save Days Left Setting'}</span>
+                  </button>
+                </div>
+              </form>
             </div>
           )}
 
           {/* TAB: LOGO MANAGEMENT */}
           {currentTab === 'logo' && (
-            <div className="space-y-6 animate-in fade-in max-w-3xl">
+            <div className="bg-white rounded-2xl border border-stone-200/90 shadow-xs p-4 sm:p-6 lg:p-7 space-y-6 animate-in fade-in max-w-3xl">
               <div>
                 <h2 className="text-xl font-extrabold text-stone-900 font-sans flex items-center space-x-2">
                   <Sparkles className="w-5 h-5 text-amber-500" />
@@ -4415,7 +4840,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
 
           {/* TAB: SOCIAL & SUPPORT LINKS (WITH ENABLE/DISABLE TOGGLES) */}
           {currentTab === 'social' && (
-            <div className="space-y-6 animate-in fade-in max-w-3xl">
+            <div className="bg-white rounded-2xl border border-stone-200/90 shadow-xs p-4 sm:p-6 lg:p-7 space-y-6 animate-in fade-in max-w-3xl">
               <div>
                 <h2 className="text-xl font-extrabold text-stone-900 font-sans flex items-center space-x-2">
                   <Share2 className="w-5 h-5 text-red-700" />
@@ -4663,7 +5088,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
 
           {/* TAB: PAYMENT CONFIG */}
           {currentTab === 'payment-config' && (
-            <div className="space-y-6 animate-in fade-in max-w-3xl">
+            <div className="bg-white rounded-2xl border border-stone-200/90 shadow-xs p-4 sm:p-6 lg:p-7 space-y-6 animate-in fade-in max-w-3xl">
               <div>
                 <h2 className="text-xl font-extrabold text-stone-900 font-sans">
                   Razorpay Live Payment Gateway
@@ -4687,7 +5112,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
                   </div>
 
                   <span className="bg-emerald-100 text-emerald-800 font-bold px-3 py-1 rounded-full uppercase text-[10px] tracking-wider flex items-center space-x-1.5 shadow-xs">
-                    <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse"></span>
+                    <span className="w-2 h-2 rounded-full bg-emerald-600"></span>
                     <span>Live Gateway Active</span>
                   </span>
                 </div>
@@ -4812,9 +5237,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
             </div>
           )}
 
+          {/* TAB: HOMEPAGE MEDIA MANAGER (Mobile Carousel) */}
+          {currentTab === 'homepage-media' && (
+            <HomepageMediaManager />
+          )}
+
           {/* TAB: AUDIT ACTIVITY LOGS (Improvement 12) */}
           {currentTab === 'audit-logs' && (
-            <div className="space-y-6 animate-in fade-in">
+            <div className="bg-white rounded-2xl border border-stone-200/90 shadow-xs p-4 sm:p-6 lg:p-7 space-y-6 animate-in fade-in">
               <div className="flex flex-wrap items-center justify-between gap-4">
                 <div>
                   <h2 className="text-xl font-extrabold text-stone-900 font-sans flex items-center space-x-2">
@@ -4851,9 +5281,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
                   </p>
                 </div>
               ) : (
-                <div className="overflow-x-auto rounded-2xl border border-stone-200 shadow-xs">
-                  <table className="w-full text-left text-xs text-stone-700 border-collapse">
-                    <thead className="bg-stone-50 text-stone-500 font-bold uppercase text-[10px] tracking-wider border-b border-stone-200">
+                <div className="overflow-x-auto admin-table-scroll rounded-2xl border border-stone-200 shadow-xs">
+                  <table className="w-full min-w-[720px] text-left text-xs text-stone-700 border-collapse">
+                    <thead className="bg-stone-50/90 text-stone-500 font-bold uppercase text-[10px] tracking-wider border-b border-stone-200">
                       <tr>
                         <th className="p-3">Timestamp (IST)</th>
                         <th className="p-3">Action</th>
@@ -4870,7 +5300,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
                           : dateObj.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
 
                         return (
-                          <tr key={log.id} className="hover:bg-stone-50/80 transition-colors">
+                          <tr key={log.id} className="hover:bg-red-50/25 transition-colors">
                             <td className="p-3 text-stone-500 whitespace-nowrap">{formattedTime}</td>
                             <td className="p-3">
                               <span className="font-bold text-red-700 bg-red-50 border border-red-100 px-2 py-0.5 rounded-md">

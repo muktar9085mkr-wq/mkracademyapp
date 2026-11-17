@@ -14,7 +14,7 @@ export interface AdminActivityLog {
   adminEmail: string;
   action: string;
   targetId: string;
-  targetType: 'product' | 'order' | 'settings' | 'banner' | 'user' | 'system';
+  targetType: 'product' | 'order' | 'settings' | 'banner' | 'user' | 'system' | 'media';
   details?: Record<string, any>;
   timestamp: string;
   createdAt: string;
@@ -52,7 +52,7 @@ function sanitizeAuditDetails(details?: Record<string, any>): Record<string, any
 export async function logAdminActivity(params: {
   action: string;
   targetId?: string;
-  targetType: 'product' | 'order' | 'settings' | 'banner' | 'user' | 'system';
+  targetType: 'product' | 'order' | 'settings' | 'banner' | 'user' | 'system' | 'media';
   details?: Record<string, any>;
 }): Promise<void> {
   const currentUser = auth.currentUser;

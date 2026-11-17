@@ -2,27 +2,26 @@ import React, { useState, useMemo } from 'react';
 import {
   Search,
   BookOpen,
-  ExternalLink,
   FileText,
-  Sparkles,
   ArrowUpDown,
-  Filter,
-  CheckCircle2,
   ArrowLeft,
   Eye,
-  X,
   Download,
   AlertCircle,
   Share2,
-  Lock
+  Lock,
+  Calculator,
+  FlaskConical,
+  Globe,
+  PenTool,
+  LucideIcon
 } from 'lucide-react';
 import { Product } from '../../types';
 import { useAuth } from '../../context/AuthContext';
 import {
   FREE_NOTE_SUBJECTS,
   isFreeNote,
-  matchFreeNoteSubject,
-  FreeNoteSubjectConfig
+  matchFreeNoteSubject
 } from '../../services/productService';
 import {
   shareOrCopyProduct,
@@ -43,18 +42,25 @@ interface FreePdfsViewProps {
   onRequireAuth?: () => void;
 }
 
+const SUBJECT_ICONS: Record<string, LucideIcon> = {
+  mathematics: Calculator,
+  science: FlaskConical,
+  english: BookOpen,
+  'social-science': Globe,
+  assamese: PenTool
+};
+
 export const FreePdfsView: React.FC<FreePdfsViewProps> = ({
   products = [],
   freeNotes,
   onViewDetails,
-  onNavigateToAdmin,
   selectedSubjectId: propSubjectId,
   onSelectSubject,
   previewPdf: propPreviewPdf,
   onPreviewPdf,
   onRequireAuth
 }) => {
-  const { user, isAdmin } = useAuth();
+  const { user } = useAuth();
   const [authNotice, setAuthNotice] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
@@ -69,7 +75,7 @@ export const FreePdfsView: React.FC<FreePdfsViewProps> = ({
     }
   };
 
-  // Search & Sorting state (scoped to current view)
+  // Search & Sorting state (scoped to selected subject view)
   const [search, setSearch] = useState('');
   const [sortOrder, setSortOrder] = useState<'newest' | 'oldest' | 'title'>('newest');
 
@@ -84,22 +90,21 @@ export const FreePdfsView: React.FC<FreePdfsViewProps> = ({
     }
   };
 
-  // Filter only published Free Notes from dedicated freeNotes collection or fallback products
+  // Filter only published Free Notes from dedicated freeNotes collection and any free products (deduplicated)
   const allFreeNotes = useMemo(() => {
-    if (freeNotes && freeNotes.length > 0) {
-      return freeNotes.filter((p) => p.published !== false);
-    }
-    return products.filter((p) => isFreeNote(p));
+    const map = new Map<string, Product>();
+    products.forEach((p) => {
+      if (isFreeNote(p)) {
+        map.set(p.id, { ...p, isFree: true });
+      }
+    });
+    (freeNotes || []).forEach((p) => {
+      if (p && p.published !== false) {
+        map.set(p.id, { ...p, isFree: true });
+      }
+    });
+    return Array.from(map.values());
   }, [freeNotes, products]);
-
-  // Compute live count of free notes for each of the 5 subjects strictly from real data
-  const subjectCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    for (const sub of FREE_NOTE_SUBJECTS) {
-      counts[sub.id] = allFreeNotes.filter((p) => matchFreeNoteSubject(p, sub.id)).length;
-    }
-    return counts;
-  }, [allFreeNotes]);
 
   // Active subject configuration object
   const activeSubjectConfig = useMemo(() => {
@@ -107,16 +112,14 @@ export const FreePdfsView: React.FC<FreePdfsViewProps> = ({
     return FREE_NOTE_SUBJECTS.find((s) => s.id === selectedSubjectId) || null;
   }, [selectedSubjectId]);
 
-  // Filter and sort notes for the selected subject (or all if 'all' selected)
+  // Filter and sort notes for the selected subject
   const displayedNotes = useMemo(() => {
     let list = allFreeNotes;
 
-    // Apply exact subject filter
     if (selectedSubjectId && selectedSubjectId !== 'all') {
       list = list.filter((p) => matchFreeNoteSubject(p, selectedSubjectId));
     }
 
-    // Apply search filter
     if (search.trim()) {
       const q = search.toLowerCase().trim();
       list = list.filter((p) => {
@@ -130,7 +133,6 @@ export const FreePdfsView: React.FC<FreePdfsViewProps> = ({
       });
     }
 
-    // Apply sorting
     return [...list].sort((a, b) => {
       if (sortOrder === 'oldest') {
         return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
@@ -138,7 +140,6 @@ export const FreePdfsView: React.FC<FreePdfsViewProps> = ({
       if (sortOrder === 'title') {
         return a.title.localeCompare(b.title);
       }
-      // Default: 'newest'
       return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
     });
   }, [allFreeNotes, selectedSubjectId, search, sortOrder]);
@@ -153,20 +154,12 @@ export const FreePdfsView: React.FC<FreePdfsViewProps> = ({
     return url;
   };
 
-  // Helper to generate a direct download / export URL from Drive link
-  const getDriveDirectDownloadUrl = (url?: string): string | null => {
-    if (!url) return null;
-    const match = url.match(/\/d\/([a-zA-Z0-9_-]+)/) || url.match(/id=([a-zA-Z0-9_-]+)/);
-    if (match && match[1]) {
-      return `https://drive.google.com/uc?export=download&id=${match[1]}`;
-    }
-    return url;
-  };
-
   const handleDownload = (product: Product) => {
     if (!user) {
       storePendingDownload(product);
-      setAuthNotice(`Please create a student account or log in to download "${product.title}". Your download will resume automatically right after sign-in!`);
+      setAuthNotice(
+        `Please create a student account or log in to download "${product.title}". Your download will resume automatically right after sign-in!`
+      );
       if (onRequireAuth) {
         onRequireAuth();
       }
@@ -192,52 +185,44 @@ export const FreePdfsView: React.FC<FreePdfsViewProps> = ({
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  // Full-Page In-App PDF Reader
   if (previewPdf) {
     const embedUrl = getDrivePreviewEmbed(previewPdf.driveFileLink) || previewPdf.driveFileLink;
 
     return (
       <div className="w-full min-h-[calc(100vh-140px)] bg-stone-950 text-white flex flex-col animate-in fade-in duration-200">
-        {/* Full-Page Reader Header */}
         <div className="bg-stone-900 px-4 sm:px-8 py-3.5 border-b border-stone-800 flex items-center justify-between gap-4">
           <div className="flex items-center space-x-3 min-w-0">
             <button
               type="button"
               onClick={() => setPreviewPdf(null)}
-              className="inline-flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-bold transition-colors cursor-pointer"
+              className="inline-flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-bold transition-colors cursor-pointer shrink-0"
             >
               <ArrowLeft className="w-4 h-4 text-stone-400" />
-              <span>Back to Free Notes</span>
+              <span>Back</span>
             </button>
             <div className="min-w-0">
-              <div className="flex items-center space-x-2">
-                <span className="bg-emerald-600 text-white text-[9px] font-black px-1.5 py-0.2 rounded-full uppercase">
-                  Free PDF
-                </span>
-                <h1 className="text-sm sm:text-base font-extrabold text-white truncate">
-                  {previewPdf.title}
-                </h1>
-              </div>
-              <p className="text-[11px] text-stone-400">
-                {previewPdf.classLevel} • {previewPdf.subject} • MKR Academy
+              <h1 className="text-sm sm:text-base font-extrabold text-white truncate">
+                {previewPdf.title}
+              </h1>
+              <p className="text-[11px] text-stone-400 truncate">
+                {previewPdf.classLevel} • {previewPdf.subject}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center space-x-2 shrink-0">
-            {previewPdf.driveFileLink && (
-              <button
-                type="button"
-                onClick={() => handleDownload(previewPdf)}
-                className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold flex items-center space-x-1.5 shadow-xs transition-colors cursor-pointer"
-              >
-                <Download className="w-4 h-4" />
-                <span>Download Free PDF</span>
-              </button>
-            )}
-          </div>
+          {previewPdf.driveFileLink && (
+            <button
+              type="button"
+              onClick={() => handleDownload(previewPdf)}
+              className="px-4 py-2 bg-red-700 hover:bg-red-800 text-white rounded-xl text-xs font-bold flex items-center space-x-1.5 shadow-xs transition-colors cursor-pointer shrink-0"
+            >
+              <Download className="w-4 h-4" />
+              <span>Download</span>
+            </button>
+          )}
         </div>
 
-        {/* Full-Page Document View */}
         <div className="flex-1 bg-stone-950 p-3 sm:p-6 flex justify-center">
           {embedUrl ? (
             <div className="w-full max-w-6xl h-full min-h-[600px] flex flex-col rounded-3xl overflow-hidden border border-stone-800 bg-stone-900 shadow-2xl">
@@ -255,7 +240,7 @@ export const FreePdfsView: React.FC<FreePdfsViewProps> = ({
               </div>
               <h4 className="font-bold text-stone-900 text-base">{previewPdf.title}</h4>
               <p className="text-xs text-stone-500">
-                No direct preview URL is attached for this free note.
+                No direct preview URL is attached for this note.
               </p>
               <button
                 type="button"
@@ -263,9 +248,9 @@ export const FreePdfsView: React.FC<FreePdfsViewProps> = ({
                   setPreviewPdf(null);
                   onViewDetails(previewPdf);
                 }}
-                className="px-6 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow-md cursor-pointer"
+                className="px-6 py-2.5 bg-red-700 hover:bg-red-800 text-white font-bold text-xs rounded-xl shadow-md cursor-pointer"
               >
-                View Full Note Details
+                View Note Details
               </button>
             </div>
           )}
@@ -275,25 +260,8 @@ export const FreePdfsView: React.FC<FreePdfsViewProps> = ({
   }
 
   return (
-    <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10 space-y-6 sm:space-y-8 animate-in fade-in min-w-0">
-      
-      {/* Breadcrumb Navigation */}
-      <nav aria-label="Breadcrumb" className="flex items-center space-x-2 text-xs text-stone-500 font-medium">
-        <button
-          onClick={() => setSelectedSubjectId(null)}
-          className="hover:text-stone-900 transition-colors cursor-pointer"
-        >
-          Free Notes
-        </button>
-        {activeSubjectConfig && (
-          <>
-            <span>/</span>
-            <span className="text-stone-900 font-bold">{activeSubjectConfig.name} ({activeSubjectConfig.assamese})</span>
-          </>
-        )}
-      </nav>
-
-      {/* Mandatory Sign-up Notification Banner */}
+    <div className="w-full max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-10 space-y-5 sm:space-y-6 animate-in fade-in min-w-0">
+      {/* Mandatory Sign-up Notification Banner (shown only on unauthenticated download attempt) */}
       {authNotice && (
         <div className="bg-amber-50 border border-amber-300 rounded-2xl p-4 flex items-start justify-between gap-3 text-xs text-amber-900 shadow-sm animate-in fade-in">
           <div className="flex items-start space-x-2.5">
@@ -313,215 +281,88 @@ export const FreePdfsView: React.FC<FreePdfsViewProps> = ({
         </div>
       )}
 
-      {/* Main Header Strip */}
-      <div className="w-full max-w-full bg-gradient-to-r from-emerald-900 via-stone-900 to-emerald-950 text-white rounded-3xl p-6 sm:p-10 shadow-lg relative overflow-hidden">
-        <div className="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
-
-        <div className="relative max-w-3xl space-y-3">
-          <div className="inline-flex items-center space-x-2 bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider backdrop-blur-xs">
-            <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-            <span>100% Free Study Materials • বিনামূলীয়া অধ্যয়ন সামগ্ৰী</span>
-          </div>
-
-          <h1 className="text-2xl sm:text-4xl font-black font-sans tracking-tight text-white break-words">
-            {activeSubjectConfig
-              ? `${activeSubjectConfig.name} Free Notes (${activeSubjectConfig.assamese})`
-              : 'MKR Academy Free Notes Portal'}
+      {/* VIEW 1: MINIMAL FIVE-SUBJECT SELECTION GRID */}
+      {selectedSubjectId === null ? (
+        <section className="space-y-4 sm:space-y-6">
+          <h1 className="text-lg sm:text-2xl font-black text-stone-900 tracking-tight text-center md:text-left">
+            Free Notes
           </h1>
 
-          <p className="text-xs sm:text-sm text-stone-300 leading-relaxed break-words">
-            {activeSubjectConfig
-              ? `Browse all verified free chapter notes, practice papers, and formulas for ${activeSubjectConfig.name}. Open in Google Drive or download free without any registration or payment.`
-              : 'Chapter-wise notes, formulas, and solved question sets organized across the 5 core subjects. Select any subject below to explore available free study materials.'}
-          </p>
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-5">
+            {FREE_NOTE_SUBJECTS.map((sub, index) => {
+              const Icon = SUBJECT_ICONS[sub.id] || BookOpen;
+              const isFifth = index === 4;
 
-          <div className="flex flex-wrap items-center gap-3 pt-2 text-xs font-semibold text-emerald-200">
-            <span className="flex items-center space-x-1.5 bg-emerald-950/60 border border-emerald-800/80 px-3 py-1 rounded-xl">
-              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-              <span>
-                {activeSubjectConfig
-                  ? `${subjectCounts[activeSubjectConfig.id] || 0} Free Notes in ${activeSubjectConfig.name}`
-                  : `${allFreeNotes.length} Total Free Notes Available Across Subjects`}
-              </span>
-            </span>
-            <span className="text-stone-300">
-              • Direct Google Drive Access
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Quick Subject Tabs Bar (Always accessible on desktop and mobile) */}
-      <div className="bg-white p-2 sm:p-3 rounded-2xl border border-stone-200 shadow-xs flex items-center space-x-2 overflow-x-auto scrollbar-none">
-        <button
-          onClick={() => {
-            setSelectedSubjectId(null);
-            setSearch('');
-          }}
-          className={`px-3.5 py-2 rounded-xl text-xs font-bold shrink-0 transition-all cursor-pointer flex items-center space-x-1.5 ${
-            selectedSubjectId === null
-              ? 'bg-stone-900 text-white shadow-xs'
-              : 'bg-stone-100 text-stone-700 hover:bg-stone-200'
-          }`}
-        >
-          <span>All 5 Subjects</span>
-        </button>
-
-        {FREE_NOTE_SUBJECTS.map((sub) => {
-          const count = subjectCounts[sub.id] || 0;
-          const isSelected = selectedSubjectId === sub.id;
-          return (
-            <button
-              key={sub.id}
-              onClick={() => handleSelectSubject(sub.id)}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold shrink-0 transition-all cursor-pointer flex items-center space-x-2 ${
-                isSelected
-                  ? 'bg-emerald-700 text-white shadow-xs'
-                  : 'bg-stone-50 hover:bg-stone-100 text-stone-700 border border-stone-200'
-              }`}
-            >
-              <span>{sub.icon}</span>
-              <span>{sub.name}</span>
-              <span
-                className={`text-[10px] px-1.5 py-0.5 rounded-full font-extrabold ${
-                  isSelected
-                    ? 'bg-emerald-900 text-emerald-100'
-                    : count > 0
-                    ? 'bg-emerald-100 text-emerald-800'
-                    : 'bg-stone-200 text-stone-600'
-                }`}
-              >
-                {count}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* VIEW 1: SUBJECT CARDS OVERVIEW (When no specific subject is selected) */}
-      {selectedSubjectId === null ? (
-        <div className="space-y-8">
-          <div>
-            <div className="flex items-center space-x-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-600"></span>
-              <h2 className="text-xl sm:text-2xl font-extrabold text-stone-900 font-sans">
-                Select a Subject to Explore Free Notes
-              </h2>
-            </div>
-            <p className="text-xs text-stone-500 mt-1">
-              Choose from the five core subjects below to view all available free study materials.
-            </p>
-          </div>
-
-          {/* The 5 Subject Cards Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {FREE_NOTE_SUBJECTS.map((sub) => {
-              const count = subjectCounts[sub.id] || 0;
               return (
                 <div
                   key={sub.id}
-                  onClick={() => handleSelectSubject(sub.id)}
-                  className={`group bg-white rounded-3xl border border-stone-200 hover:border-emerald-500 p-6 shadow-xs hover:shadow-xl transition-all duration-300 flex flex-col justify-between cursor-pointer relative overflow-hidden`}
+                  className={isFifth ? 'col-span-2 flex justify-center md:col-span-1' : ''}
                 >
-                  {/* Subject Header */}
-                  <div className="space-y-4">
-                    <div className="flex items-start justify-between">
-                      <div className="w-14 h-14 rounded-2xl bg-stone-100 group-hover:bg-emerald-50 flex items-center justify-center text-3xl transition-colors border border-stone-200 group-hover:border-emerald-200">
-                        {sub.icon}
-                      </div>
-
-                      <span
-                        className={`text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider ${
-                          count > 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-stone-100 text-stone-500'
-                        }`}
-                      >
-                        {count > 0 ? `${count} Free ${count === 1 ? 'Note' : 'Notes'}` : '0 Notes'}
-                      </span>
+                  <button
+                    type="button"
+                    onClick={() => handleSelectSubject(sub.id)}
+                    className={`${
+                      isFifth ? 'w-[calc(50%-0.375rem)] md:w-full' : 'w-full'
+                    } h-full group bg-white rounded-2xl border border-stone-200/90 shadow-xs hover:shadow-md hover:border-red-300 hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-200 px-3 py-5 sm:py-7 flex flex-col items-center justify-center gap-3 cursor-pointer focus:outline-none focus:ring-2 focus:ring-red-600/20`}
+                  >
+                    <div className="w-12 h-12 rounded-2xl bg-red-50 text-red-700 group-hover:bg-red-700 group-hover:text-white transition-colors duration-200 flex items-center justify-center shrink-0">
+                      <Icon className="w-6 h-6" />
                     </div>
-
-                    <div className="space-y-1">
-                      <h3 className="text-xl font-extrabold text-stone-900 group-hover:text-emerald-800 transition-colors font-sans">
-                        {sub.name}
-                      </h3>
-                      <p className="text-xs font-semibold text-stone-500">
-                        {sub.assamese} • Free Study Material
-                      </p>
-                    </div>
-
-                    <p className="text-xs text-stone-600 leading-relaxed">
-                      {count > 0
-                        ? `Access ${count} chapter-wise note${count > 1 ? 's' : ''} with solved questions and exam tips.`
-                        : `No free notes uploaded yet for ${sub.name}. Check back shortly!`}
-                    </p>
-                  </div>
-
-                  {/* Card Action */}
-                  <div className="pt-6 mt-4 border-t border-stone-100 flex items-center justify-between">
-                    <span className="text-xs font-extrabold text-emerald-700 group-hover:text-emerald-800 flex items-center space-x-1">
-                      <span>View {sub.name} Notes</span>
-                      <span className="group-hover:translate-x-1 transition-transform">→</span>
+                    <span className="text-sm sm:text-base font-extrabold text-stone-900 group-hover:text-red-800 transition-colors text-center leading-tight">
+                      {sub.name}
                     </span>
-                    <span className="text-[11px] text-stone-400 font-medium">100% Free PDF</span>
-                  </div>
+                  </button>
                 </div>
               );
             })}
           </div>
-
-          {/* Quick Notice for Admin */}
-          {isAdmin && onNavigateToAdmin && (
-            <div className="bg-stone-100 border border-stone-300/80 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-stone-700">
-              <div className="space-y-0.5">
-                <p className="font-bold text-stone-900">Administrator Tools</p>
-                <p className="text-stone-500">
-                  You can add or update Free Notes for any of the 5 subjects in the Admin Panel Free Notes Manager.
-                </p>
-              </div>
-              <button
-                onClick={onNavigateToAdmin}
-                className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-xl shrink-0 transition-colors cursor-pointer"
-              >
-                Open Free Notes Manager →
-              </button>
-            </div>
-          )}
-        </div>
+        </section>
       ) : (
-        /* VIEW 2: SUBJECT NOTES LISTING (When a specific subject is selected) */
-        <div className="space-y-6">
-          {/* Back Button & Subject Header */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-stone-200">
-            <button
-              onClick={() => setSelectedSubjectId(null)}
-              className="inline-flex items-center space-x-2 text-xs font-bold text-stone-700 hover:text-emerald-800 bg-stone-100 hover:bg-stone-200 px-3.5 py-2 rounded-xl transition-colors cursor-pointer self-start"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Back to All Subjects</span>
-            </button>
+        /* VIEW 2: SELECTED SUBJECT NOTES LISTING */
+        <div className="space-y-5">
+          {/* Minimal Back Button & Subject Title */}
+          <div className="flex items-center justify-between gap-3 pb-3 border-b border-stone-200">
+            <div className="flex items-center space-x-3 min-w-0">
+              <button
+                type="button"
+                onClick={() => setSelectedSubjectId(null)}
+                className="inline-flex items-center space-x-1.5 text-xs font-bold text-stone-700 hover:text-red-800 bg-white border border-stone-200 hover:border-red-200 px-3 py-2 rounded-xl transition-colors cursor-pointer shrink-0 shadow-xs"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>Back</span>
+              </button>
 
-            <div className="flex items-center space-x-2 text-xs text-stone-500">
-              <span>Showing:</span>
-              <strong className="text-stone-900 font-bold">
-                {activeSubjectConfig?.name} ({displayedNotes.length} available)
-              </strong>
+              {activeSubjectConfig && (
+                <div className="flex items-center space-x-2.5 min-w-0">
+                  <div className="w-8 h-8 rounded-xl bg-red-50 text-red-700 flex items-center justify-center shrink-0">
+                    {React.createElement(SUBJECT_ICONS[activeSubjectConfig.id] || BookOpen, {
+                      className: 'w-4 h-4'
+                    })}
+                  </div>
+                  <h1 className="text-lg sm:text-xl font-black text-stone-900 truncate">
+                    {activeSubjectConfig.name}
+                  </h1>
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Search & Sort Bar for the Selected Subject */}
-          <div className="bg-white p-4 rounded-2xl border border-stone-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          {/* Search & Sort Bar */}
+          <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-stone-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="relative flex-1">
               <input
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder={`Search within ${activeSubjectConfig?.name || 'subject'} free notes by chapter or topic...`}
-                className="w-full bg-stone-50 focus:bg-white text-stone-900 placeholder-stone-400 text-xs sm:text-sm rounded-xl pl-9 pr-9 py-2.5 border border-stone-200 focus:border-emerald-600 focus:outline-none transition-all"
+                placeholder={`Search ${activeSubjectConfig?.name || 'subject'} notes...`}
+                className="w-full bg-stone-50 focus:bg-white text-stone-900 placeholder-stone-400 text-xs sm:text-sm rounded-xl pl-9 pr-9 py-2.5 border border-stone-200 focus:border-red-600 focus:outline-none transition-all"
               />
               <Search className="w-4 h-4 text-stone-400 absolute left-3 top-3" />
               {search && (
                 <button
+                  type="button"
                   onClick={() => setSearch('')}
-                  className="absolute right-3 top-2.5 text-xs text-stone-400 hover:text-stone-700 font-bold"
+                  className="absolute right-3 top-2.5 text-xs text-stone-400 hover:text-stone-700 font-bold cursor-pointer"
                 >
                   ✕
                 </button>
@@ -535,36 +376,32 @@ export const FreePdfsView: React.FC<FreePdfsViewProps> = ({
               </span>
               <select
                 value={sortOrder}
-                onChange={(e) => setSortOrder(e.target.value as any)}
-                className="bg-stone-50 border border-stone-200 text-stone-800 font-bold text-xs rounded-xl px-2.5 py-2 focus:outline-none focus:border-emerald-600 cursor-pointer"
+                onChange={(e) => setSortOrder(e.target.value as 'newest' | 'oldest' | 'title')}
+                className="bg-stone-50 border border-stone-200 text-stone-800 font-bold text-xs rounded-xl px-2.5 py-2 focus:outline-none focus:border-red-600 cursor-pointer"
               >
-                <option value="newest">🔥 Newest First</option>
-                <option value="oldest">⏳ Oldest First</option>
-                <option value="title">🔤 Title (A to Z)</option>
+                <option value="newest">Newest First</option>
+                <option value="oldest">Oldest First</option>
+                <option value="title">Title (A to Z)</option>
               </select>
             </div>
           </div>
 
-          {/* Subject Notes Listing or Specific Empty State */}
+          {/* Notes Grid */}
           {displayedNotes.length === 0 ? (
-            <div className="bg-white rounded-3xl border border-stone-200 p-8 sm:p-14 text-center max-w-xl mx-auto space-y-4 shadow-xs">
-              <div className="w-16 h-16 rounded-2xl bg-stone-100 text-stone-400 flex items-center justify-center mx-auto text-3xl">
-                {activeSubjectConfig?.icon || '📚'}
+            <div className="bg-white rounded-2xl border border-stone-200 p-8 text-center max-w-md mx-auto space-y-4 shadow-xs">
+              <div className="w-12 h-12 rounded-2xl bg-red-50 text-red-700 flex items-center justify-center mx-auto">
+                {React.createElement(
+                  (activeSubjectConfig && SUBJECT_ICONS[activeSubjectConfig.id]) || BookOpen,
+                  { className: 'w-6 h-6' }
+                )}
               </div>
-              <div className="space-y-1.5">
-                <h3 className="text-xl font-extrabold text-stone-900 font-sans">
-                  {search ? 'No notes matched your search' : 'No free notes available yet.'}
-                </h3>
-                <p className="text-xs sm:text-sm text-stone-600 leading-relaxed">
-                  {search
-                    ? `No free study materials found for "${search}" in ${activeSubjectConfig?.name}. Try a different keyword.`
-                    : `Free study materials for ${activeSubjectConfig?.name || 'this subject'} will be uploaded soon by MKR Academy. Check back shortly!`}
-                </p>
-              </div>
-
-              <div className="pt-2 flex flex-wrap justify-center gap-2">
+              <p className="text-sm font-bold text-stone-800">
+                {search ? 'No matching notes found' : `No notes available for ${activeSubjectConfig?.name || 'this subject'}`}
+              </p>
+              <div className="flex justify-center gap-2">
                 {search && (
                   <button
+                    type="button"
                     onClick={() => setSearch('')}
                     className="px-4 py-2 bg-stone-100 hover:bg-stone-200 text-stone-800 text-xs font-bold rounded-xl transition-colors cursor-pointer"
                   >
@@ -572,155 +409,111 @@ export const FreePdfsView: React.FC<FreePdfsViewProps> = ({
                   </button>
                 )}
                 <button
+                  type="button"
                   onClick={() => setSelectedSubjectId(null)}
-                  className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer"
+                  className="px-4 py-2 bg-red-700 hover:bg-red-800 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer"
                 >
-                  Browse Other Subjects
+                  Back to Subjects
                 </button>
               </div>
-
-              {isAdmin && onNavigateToAdmin && (
-                <div className="pt-4 border-t border-stone-100">
-                  <button
-                    onClick={onNavigateToAdmin}
-                    className="px-4 py-2 bg-stone-900 hover:bg-stone-800 text-white font-bold text-xs rounded-xl transition-colors cursor-pointer"
-                  >
-                    + Add {activeSubjectConfig?.name} Free Note in Admin Panel
-                  </button>
-                </div>
-              )}
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {displayedNotes.map((product) => (
-                <div
-                  key={product.id}
-                  className="group bg-white rounded-2xl border border-stone-200 overflow-hidden shadow-xs hover:shadow-xl hover:border-emerald-400 transition-all duration-300 flex flex-col justify-between"
-                >
-                  <div>
-                    {/* Thumbnail or Subject Banner */}
-                    <div className="relative aspect-16/10 w-full overflow-hidden bg-stone-100">
-                      {product.coverImagePath ? (
-                        <img
-                          src={product.coverImagePath}
-                          alt={product.title}
-                          loading="lazy"
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                        />
-                      ) : (
-                        <div className="w-full h-full bg-gradient-to-br from-stone-900 to-stone-800 flex flex-col items-center justify-center text-white p-4 text-center space-y-2">
-                          <span className="text-3xl">{activeSubjectConfig?.icon || '📖'}</span>
-                          <span className="text-xs font-extrabold uppercase tracking-wider text-emerald-400">
-                            {product.subject}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+              {displayedNotes.map((product) => {
+                const SubjectIcon =
+                  (activeSubjectConfig && SUBJECT_ICONS[activeSubjectConfig.id]) || BookOpen;
+
+                return (
+                  <div
+                    key={product.id}
+                    className="group bg-white rounded-2xl border border-stone-200 overflow-hidden shadow-xs hover:shadow-md hover:border-red-300 transition-all duration-200 flex flex-col justify-between"
+                  >
+                    <div>
+                      <div className="relative aspect-16/10 w-full overflow-hidden bg-stone-100">
+                        {product.coverImagePath ? (
+                          <img
+                            src={product.coverImagePath}
+                            alt={product.title}
+                            loading="lazy"
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                          />
+                        ) : (
+                          <div className="w-full h-full bg-gradient-to-br from-stone-900 to-stone-800 flex flex-col items-center justify-center text-white p-4 text-center space-y-2">
+                            <SubjectIcon className="w-8 h-8 text-red-400" />
+                            <span className="text-xs font-extrabold uppercase tracking-wider text-stone-200">
+                              {product.subject}
+                            </span>
+                          </div>
+                        )}
+
+                        <div className="absolute inset-0 bg-gradient-to-t from-stone-950/60 via-transparent to-transparent" />
+
+                        <div className="absolute bottom-2.5 left-2.5 right-2.5 flex items-center justify-between text-white text-xs font-medium">
+                          <span className="bg-stone-900/80 backdrop-blur-xs px-2 py-0.5 rounded text-[11px]">
+                            {product.classLevel || 'Class 10'}
                           </span>
+                          {product.pageCount ? (
+                            <span className="flex items-center space-x-1 bg-stone-900/80 backdrop-blur-xs px-2 py-0.5 rounded text-[11px]">
+                              <FileText className="w-3 h-3 text-red-400" />
+                              <span>{product.pageCount} Pages</span>
+                            </span>
+                          ) : null}
                         </div>
-                      )}
-
-                      {/* Gradient overlay */}
-                      <div className="absolute inset-0 bg-gradient-to-t from-stone-950/70 via-transparent to-transparent"></div>
-
-                      {/* 100% Free Badge */}
-                      <div className="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between">
-                        <span className="bg-emerald-600 text-white text-[11px] font-extrabold px-2.5 py-1 rounded-md shadow-xs flex items-center space-x-1">
-                          <Sparkles className="w-3 h-3 text-emerald-100" />
-                          <span>100% FREE NOTE</span>
-                        </span>
-                        <span className="bg-stone-900/90 text-stone-200 text-[10px] font-bold px-2 py-0.5 rounded-md">
-                          {product.fileType || 'PDF Document'}
-                        </span>
                       </div>
 
-                      {/* Metadata bar at bottom of thumbnail */}
-                      <div className="absolute bottom-2.5 left-2.5 right-2.5 flex items-center justify-between text-white text-xs font-medium">
-                        <span className="bg-stone-900/80 backdrop-blur-xs px-2 py-0.5 rounded text-[11px]">
-                          {product.classLevel || 'Class 10'} • {product.medium || 'Both Mediums'}
-                        </span>
-                        {product.pageCount ? (
-                          <span className="flex items-center space-x-1 bg-stone-900/80 backdrop-blur-xs px-2 py-0.5 rounded text-[11px]">
-                            <FileText className="w-3 h-3 text-emerald-400" />
-                            <span>{product.pageCount} Pages</span>
-                          </span>
-                        ) : null}
-                      </div>
-                    </div>
+                      <div className="p-4 sm:p-5 space-y-2">
+                        <h3
+                          onClick={() => onViewDetails(product)}
+                          className="font-bold text-stone-900 text-base line-clamp-2 hover:text-red-700 cursor-pointer transition-colors leading-snug"
+                          title={product.title}
+                        >
+                          {product.title}
+                        </h3>
 
-                    {/* Card Content */}
-                    <div className="p-4 sm:p-5 space-y-2.5">
-                      <div className="flex items-center justify-between text-xs text-stone-500">
-                        <span className="font-extrabold text-emerald-700 uppercase tracking-wider text-[11px]">
-                          {product.subject}
-                        </span>
-                        {product.createdAt && (
-                          <span className="text-[10px] text-stone-400">
-                            {new Date(product.createdAt).toLocaleDateString()}
-                          </span>
+                        {product.chapters && product.chapters.length > 0 && (
+                          <div className="text-[11px] text-stone-600 bg-stone-50 p-2 rounded-lg border border-stone-100">
+                            <span className="font-bold text-stone-800">Chapter: </span>
+                            <span>{product.chapters.join(', ')}</span>
+                          </div>
                         )}
                       </div>
+                    </div>
 
-                      <h3
-                        onClick={() => onViewDetails(product)}
-                        className="font-bold text-stone-900 text-base line-clamp-2 hover:text-emerald-700 cursor-pointer transition-colors leading-snug"
-                        title={product.title}
-                      >
-                        {product.title}
-                      </h3>
+                    <div className="p-4 sm:p-5 pt-0">
+                      <div className="grid grid-cols-5 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setPreviewPdf(product)}
+                          className="col-span-2 py-2.5 px-2 rounded-xl border border-stone-300 hover:border-stone-400 hover:bg-stone-50 text-stone-700 font-bold text-xs flex items-center justify-center space-x-1 transition-colors cursor-pointer"
+                          title="View PDF"
+                        >
+                          <Eye className="w-3.5 h-3.5 text-stone-600" />
+                          <span>View</span>
+                        </button>
 
-                      {/* Chapter or topic name if available in record */}
-                      {product.chapters && product.chapters.length > 0 ? (
-                        <div className="text-[11px] text-stone-600 bg-stone-50 p-2 rounded-lg border border-stone-100">
-                          <span className="font-bold text-stone-800">Chapter / Topic: </span>
-                          <span>{product.chapters.join(', ')}</span>
-                        </div>
-                      ) : product.shortDescription ? (
-                        <p className="text-stone-600 text-xs line-clamp-2 leading-relaxed">
-                          {product.shortDescription}
-                        </p>
-                      ) : null}
+                        <button
+                          type="button"
+                          onClick={() => handleDownload(product)}
+                          className="col-span-2 py-2.5 px-2 rounded-xl bg-red-700 hover:bg-red-800 text-white font-bold text-xs flex items-center justify-center space-x-1 shadow-xs transition-colors cursor-pointer"
+                          title="Download PDF"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          <span>Download</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={(e) => handleShareProduct(product, e)}
+                          className="col-span-1 py-2.5 px-2 rounded-xl border border-stone-200 hover:bg-stone-100 text-stone-600 hover:text-stone-900 font-bold text-xs flex items-center justify-center transition-colors cursor-pointer"
+                          title={copiedId === product.id ? 'Copied' : 'Share Note'}
+                        >
+                          <Share2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
                   </div>
-
-                  {/* Card Action Buttons (View PDF and Download PDF) */}
-                  <div className="p-4 sm:p-5 pt-0 border-t border-stone-100 mt-2 space-y-2">
-                    <div className="flex items-center justify-between pt-2 text-xs">
-                      <span className="text-emerald-700 font-extrabold text-sm flex items-center space-x-1">
-                        <span>₹0</span>
-                        <span className="text-[11px] font-bold text-stone-400 uppercase ml-1">Free Access</span>
-                      </span>
-                      <span className="text-[10px] text-stone-400 uppercase font-mono">
-                        Google Drive
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-5 gap-2">
-                      <button
-                        onClick={() => setPreviewPdf(product)}
-                        className="col-span-2 py-2.5 px-2 rounded-xl border border-stone-300 hover:border-stone-400 hover:bg-stone-50 text-stone-700 font-bold text-xs flex items-center justify-center space-x-1 transition-colors cursor-pointer"
-                        title="View PDF online"
-                      >
-                        <Eye className="w-3.5 h-3.5 text-stone-600" />
-                        <span>View</span>
-                      </button>
-
-                      <button
-                        onClick={() => handleDownload(product)}
-                        className="col-span-2 py-2.5 px-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center justify-center space-x-1 shadow-md shadow-emerald-800/20 transition-all cursor-pointer"
-                        title="Download free note"
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                        <span>Download</span>
-                      </button>
-
-                      <button
-                        onClick={(e) => handleShareProduct(product, e)}
-                        className="col-span-1 py-2.5 px-2 rounded-xl border border-stone-200 hover:bg-stone-100 text-stone-600 hover:text-stone-900 font-bold text-xs flex items-center justify-center transition-colors cursor-pointer"
-                        title="Share Note"
-                      >
-                        <Share2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

@@ -7,17 +7,10 @@ import {
   ShieldCheck,
   Search,
   X,
-  LogOut,
-  ChevronDown,
   Sparkles,
   GraduationCap,
-  Lock,
   FileText,
   Phone,
-  Scale,
-  Receipt,
-  ChevronRight,
-  ArrowRight,
   Menu,
   Bell,
   Flame
@@ -44,8 +37,6 @@ export const Navbar: React.FC<NavbarProps> = ({
   currentView,
   onNavigate,
   onOpenAuth,
-  onOpenProfile,
-  onOpenPolicy,
   purchaseCount,
   searchQuery,
   onSearchChange,
@@ -66,6 +57,31 @@ export const Navbar: React.FC<NavbarProps> = ({
     onExecuteSearch();
     setMobileSearchOpen(false);
   };
+
+  // Prevent background scrolling while the mobile drawer is open
+  useEffect(() => {
+    if (mobileDrawerOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [mobileDrawerOpen]);
+
+  // Close drawer and popups when Escape key is pressed
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setMobileDrawerOpen(false);
+        setNotificationsOpen(false);
+        setMobileSearchOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   return (
     <header className="w-full max-w-full sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-stone-200 shadow-xs select-none">
@@ -125,93 +141,80 @@ export const Navbar: React.FC<NavbarProps> = ({
             )}
           </form>
 
-          {/* Navigation Links - Desktop Only */}
-          <nav className="hidden lg:flex items-center space-x-1">
+          {/* Navigation Links - Desktop */}
+          <nav className="flex items-center space-x-1 sm:space-x-2">
             <button
               onClick={() => onNavigate('home')}
-              className={`px-3 py-2 rounded-lg text-sm font-semibold transition-colors cursor-pointer ${
+              className={`px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-colors cursor-pointer ${
                 currentView === 'home'
-                  ? 'text-red-700 bg-red-50'
-                  : 'text-stone-700 hover:text-stone-900 hover:bg-stone-100'
+                  ? 'bg-red-50 text-red-700'
+                  : 'text-stone-700 hover:text-red-700 hover:bg-stone-50'
               }`}
             >
               Home
             </button>
+
             <button
               onClick={() => onNavigate('browse')}
-              className={`px-3 py-2 rounded-lg text-sm font-semibold transition-colors cursor-pointer ${
+              className={`px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-colors cursor-pointer ${
                 currentView === 'browse'
-                  ? 'text-red-700 bg-red-50'
-                  : 'text-stone-700 hover:text-stone-900 hover:bg-stone-100'
+                  ? 'bg-red-50 text-red-700'
+                  : 'text-stone-700 hover:text-red-700 hover:bg-stone-50'
               }`}
             >
-              Browse Notes
+              Study Notes
             </button>
-            <button
-              onClick={() => onNavigate('browse', { classLevel: 'HSLC 2027' })}
-              className="px-3 py-2 rounded-lg text-sm font-semibold text-red-700 hover:bg-red-50 transition-colors flex items-center space-x-1 cursor-pointer"
-            >
-              <span className="w-2 h-2 rounded-full bg-red-600 animate-pulse"></span>
-              <span>HSLC 2027</span>
-            </button>
+
             <button
               onClick={() => onNavigate('free-pdfs')}
-              className={`px-3 py-2 rounded-lg text-sm font-bold flex items-center space-x-1.5 transition-colors cursor-pointer ${
+              className={`flex items-center space-x-1 px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-colors cursor-pointer ${
                 currentView === 'free-pdfs'
-                  ? 'text-emerald-800 bg-emerald-100 shadow-xs'
-                  : 'text-emerald-700 hover:text-emerald-900 hover:bg-emerald-50'
+                  ? 'bg-emerald-50 text-emerald-800 font-bold'
+                  : 'text-stone-700 hover:text-emerald-700 hover:bg-emerald-50/50'
               }`}
             >
               <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
               <span>Free PDFs</span>
-              <span className="bg-emerald-600 text-white text-[10px] font-black px-1.5 py-0.2 rounded-full uppercase">
-                FREE
+              <span className="bg-emerald-600 text-white text-[9px] font-bold px-1.5 py-0.2 rounded-full uppercase leading-none">
+                Free
               </span>
             </button>
+
             <button
               onClick={() => onNavigate('previous-papers')}
-              className={`px-3 py-2 rounded-lg text-sm font-semibold transition-colors cursor-pointer ${
+              className={`flex items-center space-x-1 px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-colors cursor-pointer ${
                 currentView === 'previous-papers'
-                  ? 'text-red-700 bg-red-50'
-                  : 'text-stone-700 hover:text-stone-900 hover:bg-stone-100'
+                  ? 'bg-red-50 text-red-700 font-bold'
+                  : 'text-stone-700 hover:text-red-700 hover:bg-stone-50'
               }`}
             >
-              Previous Papers
+              <FileText className="w-3.5 h-3.5 text-amber-600" />
+              <span>PYQs</span>
             </button>
-            <button
-              onClick={() => onNavigate('browse', { medium: 'Assamese Medium' })}
-              className="px-3 py-2 rounded-lg text-sm font-semibold text-stone-700 hover:text-stone-900 hover:bg-stone-100 transition-colors cursor-pointer"
-            >
-              অসমীয়া মাধ্যম
-            </button>
-          </nav>
 
-          {/* User & Actions (Top Right - Desktop) */}
-          <div className="flex items-center space-x-1.5 sm:space-x-3 shrink-0">
-            {/* Desktop My Purchases Button */}
+            {/* My Purchases Button */}
             <button
               onClick={() => onNavigate('purchases')}
-              className={`hidden sm:flex relative px-3 py-2 rounded-lg text-sm font-semibold items-center space-x-1.5 transition-colors cursor-pointer ${
+              className={`relative flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-colors cursor-pointer ${
                 currentView === 'purchases'
-                  ? 'bg-red-700 text-white'
-                  : 'bg-stone-100 text-stone-800 hover:bg-stone-200'
+                  ? 'bg-red-50 text-red-700'
+                  : 'text-stone-700 hover:text-red-700 hover:bg-stone-50'
               }`}
-              title="My Purchases"
             >
               <ShoppingBag className="w-4 h-4" />
-              <span className="hidden md:inline">My Purchases</span>
+              <span>My Purchases</span>
               {purchaseCount > 0 && (
-                <span className="ml-1 bg-red-600 text-white text-[11px] font-bold px-1.5 py-0.2 rounded-full">
+                <span className="bg-red-600 text-white text-[10px] font-bold px-1.5 py-0.2 rounded-full min-w-4 text-center">
                   {purchaseCount}
                 </span>
               )}
             </button>
 
-            {/* Admin Dashboard Badge (Desktop & Tablet) */}
+            {/* Admin Link */}
             {isAdmin && (
               <button
                 onClick={() => onNavigate('admin')}
-                className={`hidden sm:flex px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-bold items-center space-x-1 sm:space-x-1.5 transition-colors cursor-pointer ${
+                className={`flex items-center space-x-1 px-3 py-2 rounded-xl text-xs sm:text-sm font-bold transition-colors cursor-pointer ${
                   currentView === 'admin'
                     ? 'bg-stone-900 text-white'
                     : 'bg-red-100 text-red-800 hover:bg-red-200'
@@ -264,7 +267,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </div>
               )}
             </div>
-          </div>
+          </nav>
         </div>
       </div>
 
@@ -478,7 +481,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   onNavigate('free-pdfs');
                   setMobileDrawerOpen(false);
                 }}
-                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl font-medium text-left ${
+                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl font-medium text-left ${
                   currentView === 'free-pdfs' ? 'bg-emerald-50 text-emerald-800 font-bold' : 'text-stone-700 hover:bg-stone-100'
                 }`}
               >
@@ -494,7 +497,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   onNavigate('previous-papers');
                   setMobileDrawerOpen(false);
                 }}
-                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl font-medium text-left ${
+                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl font-medium text-left ${
                   currentView === 'previous-papers' ? 'bg-red-50 text-red-700 font-bold' : 'text-stone-700 hover:bg-stone-100'
                 }`}
               >
@@ -510,7 +513,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   onNavigate('purchases');
                   setMobileDrawerOpen(false);
                 }}
-                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl font-medium text-left ${
+                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl font-medium text-left ${
                   currentView === 'purchases' ? 'bg-red-50 text-red-700 font-bold' : 'text-stone-700 hover:bg-stone-100'
                 }`}
               >

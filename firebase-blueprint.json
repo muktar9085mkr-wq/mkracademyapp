@@ -110,13 +110,15 @@
     },
     "AppPublicSettings": {
       "title": "AppPublicSettings",
-      "description": "Public branding, banner config, and social contact links",
+      "description": "Public branding, banner config, countdown config, and social contact links",
       "type": "object",
       "properties": {
         "banner": { "type": "object" },
         "social": { "type": "object" },
         "contact": { "type": "object" },
+        "countdown": { "type": "object" },
         "announcement": { "type": "string" },
+        "youtubeChannelId": { "type": "string", "maxLength": 200 },
         "updatedAt": { "type": "string" }
       }
     },
@@ -189,12 +191,44 @@
         "adminEmail": { "type": "string", "maxLength": 150 },
         "action": { "type": "string", "maxLength": 100 },
         "targetId": { "type": "string", "maxLength": 128 },
-        "targetType": { "type": "string", "enum": ["product", "order", "settings", "banner", "user", "system"] },
+        "targetType": { "type": "string", "enum": ["product", "order", "settings", "banner", "user", "system", "media"] },
         "details": { "type": "object" },
         "timestamp": { "type": "string" },
         "createdAt": { "type": "string" }
       },
       "required": ["adminUid", "adminEmail", "action", "targetType", "timestamp"]
+    },
+    "HomepageMedia": {
+      "title": "HomepageMedia",
+      "description": "Mobile homepage media carousel entry for YouTube or Google Drive content without description field",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "maxLength": 250 },
+        "contentType": { "type": "string", "enum": ["youtube", "google_drive"] },
+        "contentUrl": { "type": "string", "maxLength": 1000 },
+        "videoId": { "type": "string", "maxLength": 128 },
+        "thumbnailUrl": { "type": "string", "maxLength": 1000 },
+        "publishedAt": { "type": "string" },
+        "displayOrder": { "type": "number" },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["title", "contentType", "contentUrl", "thumbnailUrl", "displayOrder", "isActive", "createdAt", "updatedAt"]
+    },
+    "YoutubeFeedCache": {
+      "title": "YoutubeFeedCache",
+      "description": "Cached latest YouTube uploads synced via backend to minimize YouTube API quota usage",
+      "type": "object",
+      "properties": {
+        "channelId": { "type": "string", "maxLength": 200 },
+        "channelTitle": { "type": "string", "maxLength": 250 },
+        "videos": { "type": "array" },
+        "excludedVideoIds": { "type": "array" },
+        "source": { "type": "string", "maxLength": 50 },
+        "syncedAt": { "type": "string" }
+      },
+      "required": ["channelId", "videos", "syncedAt"]
     },
     "DownloadEvent": {
       "title": "DownloadEvent",
@@ -264,6 +298,14 @@
     "/download_events/{eventId}": {
       "schema": "DownloadEvent",
       "description": "Verified student PDF download events for analytics"
+    },
+    "/homepage_media/{mediaId}": {
+      "schema": "HomepageMedia",
+      "description": "Mobile homepage 16:9 media carousel items (Google Drive & YouTube)"
+    },
+    "/youtube_feed_cache/{cacheId}": {
+      "schema": "YoutubeFeedCache",
+      "description": "Cached latest 10 YouTube uploads synced from official MKR Academy channel"
     }
   }
 }

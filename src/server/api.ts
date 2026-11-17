@@ -26,6 +26,7 @@ import {
   sanitizeEmail,
   sanitizeAmountPaise
 } from './sanitize';
+import { getLatestYouTubeFeed } from './youtubeMedia';
 
 dotenv.config();
 
@@ -631,7 +632,7 @@ export function createApiApp() {
     requireAdmin,
     async (_req: Request, res: Response): Promise<void> => {
       try {
-        const collectionsToExport = ['products', 'freeNotes', 'orders', 'purchases', 'appSettings', 'homepage_banners'];
+        const collectionsToExport = ['products', 'freeNotes', 'orders', 'purchases', 'appSettings', 'homepage_banners', 'homepage_media'];
         const backupData: Record<string, any[]> = {};
 
         for (const colName of collectionsToExport) {
@@ -1110,6 +1111,51 @@ export function createApiApp() {
     } catch (err: any) {
       console.error('Failed to compute download analytics:', err);
       res.status(500).json({ error: 'Failed to retrieve download analytics' });
+    }
+  });
+
+  /**
+   * Public Cached YouTube Feed Endpoint for Mobile Homepage Media Carousel
+   * Never exposes private API keys; returns cached latest 10 uploads cleanly.
+   */
+  router.get('/media/youtube', async (_req: Request, res: Response): Promise<void> => {
+    try {
+      const feed = await getLatestYouTubeFeed({ forceRefresh: false });
+      res.json({
+        success: true,
+        ...feed
+      });
+    } catch (err: any) {
+      console.error('Error serving YouTube carousel feed:', err);
+      res.status(500).json({
+        success: false,
+        videos: [],
+        error: 'Failed to load YouTube videos'
+      });
+    }
+  });
+
+  /**
+   * Admin Force-Sync YouTube Channel Feed Endpoint
+   * Protected with requireAdmin. Accepts optional channelInput (UC ID or @handle) and forces a fresh sync.
+   */
+  router.post('/admin/media/sync-youtube', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+    try {
+      const channelInput = sanitizeText(req.body?.channelInput || '', 200);
+      const feed = await getLatestYouTubeFeed({
+        forceRefresh: true,
+        channelInput: channelInput || undefined
+      });
+      res.json({
+        success: true,
+        ...feed
+      });
+    } catch (err: any) {
+      console.error('Admin YouTube sync error:', err);
+      res.status(500).json({
+        success: false,
+        error: isProduction() ? 'Failed to sync YouTube channel' : err?.message
+      });
     }
   });
 

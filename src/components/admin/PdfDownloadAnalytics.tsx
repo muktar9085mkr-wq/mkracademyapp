@@ -636,10 +636,10 @@ export const PdfDownloadAnalytics: React.FC = () => {
             No study materials matched the selected filters.
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
+          <div className="overflow-x-auto admin-table-scroll">
+            <table className="w-full min-w-[720px] text-left border-collapse text-xs">
               <thead>
-                <tr className="bg-stone-50 border-b border-stone-200 text-stone-500 uppercase tracking-wider font-bold text-[10px]">
+                <tr className="bg-stone-50/90 border-b border-stone-200 text-stone-500 uppercase tracking-wider font-bold text-[10px]">
                   <th className="py-3 px-4">Study Material / Title</th>
                   <th className="py-3 px-3">Type</th>
                   <th className="py-3 px-3 text-center">Total Downloads</th>
@@ -661,7 +661,7 @@ export const PdfDownloadAnalytics: React.FC = () => {
                     : 'Never';
 
                   return (
-                    <tr key={p.productId} className="hover:bg-stone-50/70 transition-colors">
+                    <tr key={p.productId} className="hover:bg-red-50/25 transition-colors">
                       <td className="py-3 px-4">
                         <div className="font-bold text-stone-900">{p.productTitle}</div>
                         <div className="text-[10px] text-stone-400 font-mono mt-0.5">
@@ -725,10 +725,10 @@ export const PdfDownloadAnalytics: React.FC = () => {
             No download events recorded yet. When students download free or paid notes, events will appear here in real time.
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
+          <div className="overflow-x-auto admin-table-scroll">
+            <table className="w-full min-w-[680px] text-left border-collapse text-xs">
               <thead>
-                <tr className="bg-stone-50 border-b border-stone-200 text-stone-500 uppercase tracking-wider font-bold text-[10px]">
+                <tr className="bg-stone-50/90 border-b border-stone-200 text-stone-500 uppercase tracking-wider font-bold text-[10px]">
                   <th className="py-2.5 px-4">Student</th>
                   <th className="py-2.5 px-3">Product / Chapter</th>
                   <th className="py-2.5 px-3">Type</th>
@@ -738,7 +738,7 @@ export const PdfDownloadAnalytics: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-stone-100 text-stone-700">
                 {recentEvents.slice(0, 15).map((ev) => (
-                  <tr key={ev.id || ev.eventId} className="hover:bg-stone-50/60">
+                  <tr key={ev.id || ev.eventId} className="hover:bg-red-50/25 transition-colors">
                     <td className="py-2 px-4">
                       <div className="font-bold text-stone-900">{ev.userName || 'Student'}</div>
                       <div className="text-[10px] text-stone-400">{ev.userEmail}</div>

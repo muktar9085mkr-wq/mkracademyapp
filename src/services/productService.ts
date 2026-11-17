@@ -319,8 +319,13 @@ export const FREE_NOTE_SUBJECTS: FreeNoteSubjectConfig[] = [
  * Strictly adheres to rule: only designated free notes, not merely zero price.
  */
 export function isFreeNote(p: Product | FreeNote): boolean {
-  if (p.published === false) return false;
-  return p.isFree === true || (p as any).freeNote === true || (p as any).category === 'Free';
+  if (!p || p.published === false) return false;
+  return (
+    p.isFree === true ||
+    (p as any).freeNote === true ||
+    (p as any).category === 'Free' ||
+    Number((p as any).sellingPricePaise ?? 0) === 0
+  );
 }
 
 /**
@@ -524,16 +529,20 @@ export function mergeWithBaselineProducts(firestoreProducts: Product[]): Product
  */
 export function mergeWithBaselineFreeNotes(firestoreNotes: Product[]): Product[] {
   const noteMap = new Map<string, Product>();
+  const deletedIds = getDeletedProductIds();
 
   // 1. Seed with baseline authentic MKR Academy free notes
   for (const base of INITIAL_FREE_NOTES) {
-    noteMap.set(base.id, { ...base });
+    if (!deletedIds.has(base.id)) {
+      noteMap.set(base.id, { ...base, isFree: true });
+    }
   }
 
   // 2. Overlay Firestore documents (preserving newly added notes and edits)
   for (const fn of firestoreNotes) {
     if (!fn || !fn.id) continue;
     if (isLegacySampleDoc(fn.id, fn.title)) continue;
+    if (deletedIds.has(fn.id)) continue;
 
     if ((fn as any)._deleted === true) {
       noteMap.delete(fn.id);
@@ -546,6 +555,10 @@ export function mergeWithBaselineFreeNotes(firestoreNotes: Product[]): Product[]
     } else {
       noteMap.set(fn.id, { ...fn, isFree: true });
     }
+  }
+
+  for (const delId of deletedIds) {
+    noteMap.delete(delId);
   }
 
   // 3. Sort stably by createdAt descending
@@ -677,9 +690,24 @@ export function subscribeToFreeNotes(
   onError?: (error: Error) => void
 ): () => void {
   try {
-    const q = query(collection(db, FREE_NOTES_COLLECTION));
-    const unsubscribe = onSnapshot(
-      q,
+    let freeCollectionItems: Product[] = [];
+    let productFreeItems: Product[] = [];
+
+    const emitMerged = () => {
+      const combinedMap = new Map<string, Product>();
+      for (const item of productFreeItems) {
+        combinedMap.set(item.id, item);
+      }
+      for (const item of freeCollectionItems) {
+        combinedMap.set(item.id, item);
+      }
+      const merged = mergeWithBaselineFreeNotes(Array.from(combinedMap.values()));
+      callback(merged.filter((p) => p.published !== false));
+    };
+
+    const qFree = query(collection(db, FREE_NOTES_COLLECTION));
+    const unsubFree = onSnapshot(
+      qFree,
       (querySnapshot) => {
         const items: Product[] = [];
         querySnapshot.forEach((docSnap) => {
@@ -687,18 +715,44 @@ export function subscribeToFreeNotes(
           if (isLegacySampleDoc(docSnap.id, data.title)) return;
           items.push({ id: docSnap.id, ...data, isFree: true });
         });
-
-        const merged = mergeWithBaselineFreeNotes(items);
-        callback(merged.filter((p) => p.published !== false));
+        freeCollectionItems = items;
+        emitMerged();
       },
       (error) => {
         console.warn('Real-time free notes subscription issue:', error);
-        callback(INITIAL_FREE_NOTES.filter((p) => p.published !== false));
+        emitMerged();
         if (onError) onError(error);
       }
     );
 
-    return unsubscribe;
+    const qProd = query(collection(db, PRODUCTS_COLLECTION));
+    const unsubProd = onSnapshot(
+      qProd,
+      (prodSnapshot) => {
+        const items: Product[] = [];
+        prodSnapshot.forEach((docSnap) => {
+          const data = docSnap.data() as Product;
+          if (isLegacySampleDoc(docSnap.id, data.title)) return;
+          if ((data as any)._deleted === true) {
+            items.push({ ...data, id: docSnap.id });
+            return;
+          }
+          if (isFreeNote(data)) {
+            items.push({ ...data, id: docSnap.id, isFree: true });
+          }
+        });
+        productFreeItems = items;
+        emitMerged();
+      },
+      () => {
+        // Products listener fallback is silent; freeNotes collection remains active
+      }
+    );
+
+    return () => {
+      unsubFree();
+      unsubProd();
+    };
   } catch (err: any) {
     console.warn('Failed to attach free notes listener:', err);
     callback(INITIAL_FREE_NOTES.filter((p) => p.published !== false));

@@ -169,52 +169,42 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
     <div className="w-full min-h-[calc(100vh-140px)] bg-stone-50 py-6 sm:py-10 animate-in fade-in duration-200">
       <div className="w-full max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
         
-        {/* Navigation Bar / Breadcrumb */}
-        <div className="flex items-center justify-between pb-3 border-b border-stone-200">
+        {/* Navigation Bar */}
+        <div className="flex items-center pb-2 border-b border-stone-200">
           <button
             type="button"
             onClick={onBack}
-            className="inline-flex items-center space-x-2 text-stone-600 hover:text-stone-900 font-bold text-xs sm:text-sm px-3 py-1.5 rounded-xl hover:bg-stone-200 transition-colors cursor-pointer"
+            className="inline-flex items-center space-x-1.5 text-stone-700 hover:text-red-700 font-bold text-xs sm:text-sm px-2.5 py-1.5 rounded-xl hover:bg-stone-200/70 transition-colors cursor-pointer"
           >
-            <ArrowLeft className="w-4 h-4 text-stone-500" />
-            <span>Back to Previous Page</span>
+            <ArrowLeft className="w-4 h-4" />
+            <span>Back</span>
           </button>
-
-          <div className="flex items-center space-x-2 text-xs text-stone-500">
-            <span>Student Account</span>
-            <span className="text-stone-400">•</span>
-            <span className="font-semibold text-stone-800 truncate max-w-[150px]">{user.email}</span>
-          </div>
         </div>
 
         {/* Profile Card Header */}
-        <div className="bg-white rounded-3xl p-6 sm:p-8 border border-stone-200 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="flex items-center space-x-4">
-            <div className="w-16 h-16 rounded-2xl bg-red-700 text-white flex items-center justify-center font-bold text-2xl uppercase shadow-md shrink-0">
-              {(profile?.displayName || user.displayName || user.email || 'S')[0]}
+        <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 border border-stone-200 shadow-sm flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3.5 sm:gap-4 overflow-hidden">
+          <div className="flex items-center space-x-3.5 min-w-0 flex-1">
+            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-red-700 text-white flex items-center justify-center font-bold text-lg sm:text-xl uppercase shadow-sm shrink-0">
+              {(profile?.displayName || user.displayName || user.email || 'M')[0]}
             </div>
-            <div className="min-w-0">
-              <h1 className="text-xl sm:text-2xl font-extrabold text-stone-900 truncate">
-                {profile?.displayName || user.displayName || 'Student Account'}
+            <div className="min-w-0 flex-1">
+              <h1 className="text-base sm:text-xl font-extrabold text-stone-900 truncate leading-snug">
+                {profile?.displayName || user.displayName || 'MKR Academy Student'}
               </h1>
-              <p className="text-xs text-stone-500 truncate mt-0.5">
-                {user.email} • {profile?.phoneNumber || 'Mobile unverified'}
-              </p>
-              {isAdmin && (
-                <span className="inline-flex items-center space-x-1 mt-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-stone-900 text-emerald-400">
-                  <ShieldCheck className="w-3 h-3" />
-                  <span>Admin Access Active</span>
-                </span>
+              {user.email && (
+                <p className="text-xs sm:text-sm text-stone-500 truncate mt-0.5">
+                  {user.email}
+                </p>
               )}
             </div>
           </div>
 
-          <div className="flex items-center space-x-2 self-stretch sm:self-auto">
+          <div className="flex items-center space-x-2 shrink-0">
             {isAdmin && (
               <button
                 type="button"
                 onClick={() => onNavigate?.('admin')}
-                className="flex-1 sm:flex-none py-2.5 px-4 rounded-xl bg-stone-900 hover:bg-stone-800 text-white text-xs font-bold transition-colors cursor-pointer"
+                className="flex-1 sm:flex-none py-2 px-3.5 rounded-xl bg-stone-900 hover:bg-stone-800 text-white text-xs font-bold transition-colors cursor-pointer"
               >
                 Admin Panel
               </button>
@@ -225,7 +215,7 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
                 await logout();
                 onBack();
               }}
-              className="flex-1 sm:flex-none py-2.5 px-4 rounded-xl bg-stone-100 hover:bg-red-50 text-stone-700 hover:text-red-700 text-xs font-bold flex items-center justify-center space-x-1.5 transition-colors cursor-pointer"
+              className="flex-1 sm:flex-none py-2 px-3.5 rounded-xl bg-stone-100 hover:bg-red-50 text-stone-700 hover:text-red-700 text-xs font-bold flex items-center justify-center space-x-1.5 transition-colors cursor-pointer"
             >
               <LogOut className="w-3.5 h-3.5" />
               <span>Sign Out</span>

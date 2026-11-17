@@ -370,15 +370,20 @@ export const MyPurchasesView: React.FC<MyPurchasesViewProps> = ({
                       className="w-full h-full object-cover"
                     />
                     <div className="absolute top-2.5 right-2.5">
-                      {purchase.approvalMethod === 'admin_manual' ? (
+                      {purchase.entitlementStatus === 'revoked' ? (
+                        <span className="bg-red-700 text-white text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center space-x-1 shadow-xs">
+                          <AlertCircle className="w-3 h-3" />
+                          <span>Revoked</span>
+                        </span>
+                      ) : purchase.approvalMethod === 'admin_manual' ? (
                         <span className="bg-emerald-700 text-white text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center space-x-1 shadow-xs" title={`Manually approved by ${purchase.approvedByAdminEmail || 'Admin'}`}>
                           <ShieldCheck className="w-3 h-3 text-emerald-200" />
-                          <span>Approved by Admin</span>
+                          <span>Paid • Approved by Admin</span>
                         </span>
                       ) : (
                         <span className="bg-emerald-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center space-x-1 shadow-xs">
                           <ShieldCheck className="w-3 h-3" />
-                          <span>Verified Active</span>
+                          <span>Paid • Verified</span>
                         </span>
                       )}
                     </div>
@@ -397,6 +402,22 @@ export const MyPurchasesView: React.FC<MyPurchasesViewProps> = ({
                           <span>Purchased On:</span>
                         </span>
                         <span className="font-semibold text-stone-700">{purchaseDateFormatted}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span>Payment Status:</span>
+                        <span
+                          className={`font-bold ${
+                            purchase.entitlementStatus === 'revoked'
+                              ? 'text-red-700'
+                              : 'text-emerald-700'
+                          }`}
+                        >
+                          {purchase.entitlementStatus === 'revoked'
+                            ? 'Revoked'
+                            : purchase.approvalMethod === 'admin_manual'
+                            ? 'Paid (Manual Approval)'
+                            : 'Paid'}
+                        </span>
                       </div>
                       <div className="flex items-center justify-between">
                         <span>Order ID:</span>

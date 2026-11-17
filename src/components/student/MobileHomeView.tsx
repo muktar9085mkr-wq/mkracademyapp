@@ -1,11 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import {
   GraduationCap,
-  Target,
   BookOpen,
-  Sparkles,
   Clock,
-  Calendar,
   FileText,
   ShoppingBag,
   Video,
@@ -13,20 +10,16 @@ import {
   Download,
   MessageCircle,
   MoreHorizontal,
-  ArrowRight,
   ChevronRight,
   PenTool,
   FlaskConical,
   Calculator,
-  Globe,
-  Bell,
-  CheckCircle2,
-  ExternalLink,
-  Flame,
-  Award
+  Globe
 } from 'lucide-react';
 import { Product, AppPublicSettings, Purchase } from '../../types';
 import { useAuth } from '../../context/AuthContext';
+import { computeEffectiveDaysLeft } from '../../services/settingsService';
+import { MobileMediaCarousel } from './MobileMediaCarousel';
 
 interface MobileHomeViewProps {
   products: Product[];
@@ -69,11 +62,9 @@ export const MobileHomeView: React.FC<MobileHomeViewProps> = ({
   const { user } = useAuth();
   const [lastReading, setLastReading] = useState<LastReadingItem | null>(null);
 
-  // 1. Calculate dynamic countdown to HSLC 2027 (Assam Board approx Feb 15, 2027)
-  const targetDate = new Date('2027-02-15T09:00:00+05:30');
-  const now = new Date();
-  const diffTime = targetDate.getTime() - now.getTime();
-  const daysLeft = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+  // 1. Compute Days Left from Admin Settings (supports manual editable days or auto date countdown)
+  const daysLeft = computeEffectiveDaysLeft(settings?.countdown);
+  const daysLeftLabel = settings?.countdown?.label?.trim() || 'Days Left';
 
   // 2. Load "Continue Reading" state from localStorage or recent purchases
   useEffect(() => {
@@ -104,24 +95,34 @@ export const MobileHomeView: React.FC<MobileHomeViewProps> = ({
     }
   }, [purchases, products]);
 
-  // 3. Dynamic statistics from real Firestore products
-  const publishedProducts = products.filter((p) => p.published);
-  const totalSubjectSet = new Set<string>();
-  publishedProducts.forEach((p) => {
-    if (p.subject) totalSubjectSet.add(p.subject);
-  });
-  freeNotes.forEach((n) => {
-    if (n.subject) totalSubjectSet.add(n.subject);
-  });
-  const totalSubjectsCount = Math.max(5, totalSubjectSet.size);
+  // 3. Dynamic statistics from real Firestore data (no hardcoded values)
+  const publishedProducts = products.filter((p) => p.published !== false);
+  const publishedFreeNotes = freeNotes.filter((n) => n.published !== false);
 
-  const availablePdfsCount = publishedProducts.length + freeNotes.length;
-  const totalPurchasesDisplay = purchases.length > 0 ? `${purchases.length} Yours` : '1,250+';
+  const allAvailablePdfs: Product[] = [...publishedProducts, ...publishedFreeNotes].filter(
+    (item, index, self) => item?.id && index === self.findIndex((t) => t.id === item.id)
+  );
+
+  const subjectKeySet = new Set<string>([
+    'mathematics',
+    'general science',
+    'english',
+    'social science',
+    'assamese'
+  ]);
+  allAvailablePdfs.forEach((item) => {
+    if (item.subject && item.subject.trim()) {
+      const normalized = item.subject.trim().toLowerCase();
+      subjectKeySet.add(normalized === 'science' ? 'general science' : normalized);
+    }
+  });
+  const totalSubjectsCount = subjectKeySet.size;
+  const availablePdfsCount = allAvailablePdfs.length;
+  const yourPurchasesCount = purchases.length;
 
   // 4. LATEST PDF UPDATES - Real-time merged and sorted from Firestore
   // Combines published study notes & free chapter notes, latest upload date first
-  const allLatestItems: Product[] = [...publishedProducts, ...freeNotes]
-    .filter((item, index, self) => index === self.findIndex((t) => t.id === item.id))
+  const allLatestItems: Product[] = [...allAvailablePdfs]
     .sort((a, b) => {
       const timeA = new Date(a.updatedAt || a.createdAt || 0).getTime();
       const timeB = new Date(b.updatedAt || b.createdAt || 0).getTime();
@@ -202,157 +203,185 @@ export const MobileHomeView: React.FC<MobileHomeViewProps> = ({
     }
   ];
 
+  const continueReadingBlock = lastReading ? (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between px-0.5">
+        <h2 className="text-xs font-extrabold uppercase tracking-wider text-stone-500">
+          Continue Reading
+        </h2>
+        <span className="text-[11px] text-red-700 font-bold flex items-center space-x-1">
+          <span className="w-1.5 h-1.5 rounded-full bg-red-600 animate-ping"></span>
+          <span>Recent Note</span>
+        </span>
+      </div>
+
+      <div className="bg-white rounded-3xl p-3.5 md:p-4 border border-stone-200 shadow-xs flex items-center space-x-3.5">
+        {/* Thumbnail */}
+        <div className="w-16 h-16 md:w-18 md:h-18 rounded-2xl bg-stone-100 overflow-hidden shrink-0 border border-stone-200 shadow-inner relative">
+          <img
+            src={
+              lastReading.coverImagePath ||
+              'https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=200&q=80'
+            }
+            alt={lastReading.title}
+            className="w-full h-full object-cover"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-stone-900/60 to-transparent flex items-end p-1">
+            <span className="text-[8px] font-black text-white bg-red-700 px-1 py-0.2 rounded uppercase">
+              PDF
+            </span>
+          </div>
+        </div>
+
+        {/* Title & Info */}
+        <div className="min-w-0 flex-1 space-y-0.5">
+          <span className="text-[10px] font-bold text-red-700 uppercase tracking-wider">
+            {lastReading.subject} {lastReading.classLevel ? `• ${lastReading.classLevel}` : ''}
+          </span>
+          <h3 className="text-xs md:text-sm font-bold text-stone-900 truncate">
+            {lastReading.title}
+          </h3>
+          <p className="text-[10px] md:text-[11px] text-stone-500">
+            Continue exam preparation right where you left off
+          </p>
+        </div>
+
+        {/* Action */}
+        <button
+          type="button"
+          onClick={() => {
+            const target =
+              products.find((p) => p.id === lastReading.id) ||
+              freeNotes.find((n) => n.id === lastReading.id);
+            if (target) {
+              onViewDetails(target);
+            } else {
+              onNavigate('browse');
+            }
+          }}
+          className="px-3 md:px-4 py-2 bg-red-700 hover:bg-red-800 text-white rounded-xl text-xs font-bold shrink-0 shadow-xs active:scale-95 transition-transform cursor-pointer"
+        >
+          Continue
+        </button>
+      </div>
+    </div>
+  ) : null;
+
   return (
-    <div className="w-full bg-stone-50 text-stone-900 pb-24 space-y-5 animate-in fade-in duration-200 overflow-x-hidden">
-      
+    <div className="w-full max-w-7xl mx-auto md:px-6 lg:px-8 bg-stone-50 text-stone-900 pb-24 md:pb-14 md:pt-6 space-y-5 md:space-y-7 animate-in fade-in duration-200 overflow-x-hidden">
       {/* ==============================================================
-          1. HERO BANNER: TARGET HSLC 2027 (Premium Red & Light-Pink Theme)
+          1. TOP HERO GRID (Media Carousel + Stats & Continue Reading on Desktop)
           ============================================================== */}
-      <section className="px-4 pt-3">
-        <div className="relative rounded-3xl overflow-hidden bg-gradient-to-br from-red-700 via-red-800 to-stone-900 text-white shadow-xl shadow-red-950/20 border border-red-600/40 p-5 sm:p-6">
-          {/* Subtle background educational glow and motifs */}
-          <div className="absolute top-0 right-0 w-44 h-44 bg-rose-500/15 rounded-full blur-2xl pointer-events-none"></div>
-          <div className="absolute -bottom-8 -left-8 w-36 h-36 bg-amber-400/10 rounded-full blur-xl pointer-events-none"></div>
+      <div className="lg:grid lg:grid-cols-12 lg:gap-6 lg:items-start space-y-5 lg:space-y-0">
+        {/* Homepage Media Carousel (YouTube + Google Drive Dynamic Slider) */}
+        <div className="lg:col-span-7">
+          <MobileMediaCarousel onNavigate={onNavigate} />
+        </div>
 
-          <div className="relative z-10 space-y-3">
-            {/* Top Tag & Target Icon */}
-            <div className="flex items-center justify-between">
-              <div className="inline-flex items-center space-x-1.5 bg-white/20 backdrop-blur-md px-3 py-1 rounded-full border border-white/25">
-                <Target className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
-                <span className="text-[11px] font-black tracking-wider uppercase text-white">
-                  TARGET HSLC 2027
+        {/* Right Hero Column on Desktop: 4 Real-Time Statistics Cards + Continue Reading */}
+        <div className="lg:col-span-5 space-y-5 lg:space-y-4">
+          <section className="px-4 md:px-0">
+            <div className="grid grid-cols-4 md:grid-cols-4 lg:grid-cols-2 gap-2 md:gap-3">
+              {/* 1. Days Left */}
+              <button
+                type="button"
+                onClick={() => onNavigate('browse', { classLevel: 'HSLC 2027' })}
+                aria-label={`${daysLeft} ${daysLeftLabel} — View HSLC 2027 Study Notes`}
+                className="group w-full bg-white rounded-2xl p-2.5 md:p-4 border border-stone-200/90 shadow-xs hover:shadow-md hover:border-red-300 hover:-translate-y-0.5 active:scale-[0.97] transition-all duration-200 text-center flex flex-col items-center justify-center min-h-[72px] md:min-h-[96px] cursor-pointer focus:outline-none focus:ring-2 focus:ring-red-600/20"
+              >
+                <div className="w-6 h-6 md:w-9 md:h-9 rounded-lg md:rounded-xl bg-red-50 text-red-700 group-hover:scale-105 transition-transform flex items-center justify-center mb-1 md:mb-1.5">
+                  <Clock className="w-3.5 h-3.5 md:w-4.5 md:h-4.5" />
+                </div>
+                <span className="text-xs sm:text-sm md:text-lg font-black text-stone-900 leading-tight tabular-nums">
+                  {daysLeft}d
                 </span>
-              </div>
-              <span className="bg-red-950/70 border border-white/15 text-[10px] font-bold px-2 py-0.5 rounded-full text-rose-200">
-                Assam Board
-              </span>
-            </div>
+                <span className="text-[9.5px] md:text-xs font-semibold text-stone-500 tracking-tight leading-tight truncate max-w-full mt-0.5">
+                  {daysLeftLabel}
+                </span>
+              </button>
 
-            {/* Main Title */}
-            <div>
-              <h1 className="text-xl sm:text-2xl font-black tracking-tight leading-snug">
-                Complete Exam Preparation
-              </h1>
-              <p className="text-rose-100 text-xs mt-1 font-medium leading-relaxed">
-                Assamese • English • Science • Mathematics • Social Science
-              </p>
-            </div>
+              {/* 2. Subjects */}
+              <button
+                type="button"
+                onClick={() => onNavigate('subjects')}
+                aria-label={`${totalSubjectsCount} Subjects — View all subjects`}
+                className="group w-full bg-white rounded-2xl p-2.5 md:p-4 border border-stone-200/90 shadow-xs hover:shadow-md hover:border-blue-300 hover:-translate-y-0.5 active:scale-[0.97] transition-all duration-200 text-center flex flex-col items-center justify-center min-h-[72px] md:min-h-[96px] cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-600/20"
+              >
+                <div className="w-6 h-6 md:w-9 md:h-9 rounded-lg md:rounded-xl bg-blue-50 text-blue-700 group-hover:scale-105 transition-transform flex items-center justify-center mb-1 md:mb-1.5">
+                  <BookOpen className="w-3.5 h-3.5 md:w-4.5 md:h-4.5" />
+                </div>
+                <span className="text-xs sm:text-sm md:text-lg font-black text-stone-900 leading-tight tabular-nums">
+                  {totalSubjectsCount}
+                </span>
+                <span className="text-[9.5px] md:text-xs font-semibold text-stone-500 tracking-tight leading-tight mt-0.5">
+                  Subjects
+                </span>
+              </button>
 
-            {/* Educational Feature Pills */}
-            <div className="flex flex-wrap gap-1.5 pt-0.5">
-              <span className="bg-white/15 text-[10px] font-semibold px-2 py-0.5 rounded-md backdrop-blur-xs text-white">
-                ✓ Solved Question Banks
-              </span>
-              <span className="bg-white/15 text-[10px] font-semibold px-2 py-0.5 rounded-md backdrop-blur-xs text-white">
-                ✓ Chapter Formulas
-              </span>
-              <span className="bg-white/15 text-[10px] font-semibold px-2 py-0.5 rounded-md backdrop-blur-xs text-white">
-                ✓ 100% Verified Notes
-              </span>
-            </div>
-
-            {/* Banner CTAs */}
-            <div className="grid grid-cols-2 gap-2.5 pt-2">
+              {/* 3. Available PDFs */}
               <button
                 type="button"
                 onClick={() => onNavigate('browse')}
-                className="py-2.5 px-3 bg-white hover:bg-rose-50 text-red-800 rounded-xl font-extrabold text-xs flex items-center justify-center space-x-1.5 shadow-md active:scale-98 transition-transform cursor-pointer"
+                aria-label={`${availablePdfsCount} Available PDFs — Open PDF Library`}
+                className="group w-full bg-white rounded-2xl p-2.5 md:p-4 border border-stone-200/90 shadow-xs hover:shadow-md hover:border-emerald-300 hover:-translate-y-0.5 active:scale-[0.97] transition-all duration-200 text-center flex flex-col items-center justify-center min-h-[72px] md:min-h-[96px] cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-600/20"
               >
-                <span>Study Notes</span>
-                <ArrowRight className="w-3.5 h-3.5 text-red-700" />
+                <div className="w-6 h-6 md:w-9 md:h-9 rounded-lg md:rounded-xl bg-emerald-50 text-emerald-700 group-hover:scale-105 transition-transform flex items-center justify-center mb-1 md:mb-1.5">
+                  <FileText className="w-3.5 h-3.5 md:w-4.5 md:h-4.5" />
+                </div>
+                <span className="text-xs sm:text-sm md:text-lg font-black text-stone-900 leading-tight tabular-nums">
+                  {availablePdfsCount}
+                </span>
+                <span className="text-[9.5px] md:text-xs font-semibold text-stone-500 tracking-tight leading-tight mt-0.5">
+                  Available PDFs
+                </span>
               </button>
+
+              {/* 4. Your Purchases */}
               <button
                 type="button"
-                onClick={() => onNavigate('free-pdfs')}
-                className="py-2.5 px-3 bg-red-900/80 hover:bg-red-900 text-white border border-white/20 rounded-xl font-bold text-xs flex items-center justify-center space-x-1.5 active:scale-98 transition-transform cursor-pointer"
+                onClick={() => onNavigate('purchases')}
+                aria-label={`${yourPurchasesCount} Your Purchases — View purchased notes`}
+                className="group w-full bg-white rounded-2xl p-2.5 md:p-4 border border-stone-200/90 shadow-xs hover:shadow-md hover:border-purple-300 hover:-translate-y-0.5 active:scale-[0.97] transition-all duration-200 text-center flex flex-col items-center justify-center min-h-[72px] md:min-h-[96px] cursor-pointer focus:outline-none focus:ring-2 focus:ring-purple-600/20"
               >
-                <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                <span>Free Chapter PDFs</span>
+                <div className="w-6 h-6 md:w-9 md:h-9 rounded-lg md:rounded-xl bg-purple-50 text-purple-700 group-hover:scale-105 transition-transform flex items-center justify-center mb-1 md:mb-1.5">
+                  <ShoppingBag className="w-3.5 h-3.5 md:w-4.5 md:h-4.5" />
+                </div>
+                <span className="text-xs sm:text-sm md:text-lg font-black text-stone-900 leading-tight tabular-nums">
+                  {yourPurchasesCount}
+                </span>
+                <span className="text-[9.5px] md:text-xs font-semibold text-stone-500 tracking-tight leading-tight truncate max-w-full mt-0.5">
+                  Your Purchases
+                </span>
               </button>
             </div>
-          </div>
+          </section>
+
+          {/* Continue Reading placed inside right hero column on Desktop */}
+          {continueReadingBlock && (
+            <section className="hidden lg:block">{continueReadingBlock}</section>
+          )}
         </div>
-      </section>
+      </div>
 
       {/* ==============================================================
-          2. STATISTICS SECTION (4 Compact Real-Time Cards)
+          2. QUICK ACCESS FEATURES (4 cols Mobile/Tablet, 8 cols Desktop)
           ============================================================== */}
-      <section className="px-4">
-        <div className="grid grid-cols-4 gap-2">
-          {/* 1. Days Left */}
-          <div className="bg-white rounded-2xl p-2.5 border border-stone-200/90 shadow-xs text-center flex flex-col items-center justify-center min-h-[72px]">
-            <div className="w-6 h-6 rounded-lg bg-red-50 text-red-700 flex items-center justify-center mb-1">
-              <Clock className="w-3.5 h-3.5" />
-            </div>
-            <span className="text-xs sm:text-sm font-black text-stone-900 leading-tight">
-              {daysLeft}d
-            </span>
-            <span className="text-[9.5px] font-semibold text-stone-500 tracking-tight leading-tight">
-              Days Left
-            </span>
-          </div>
-
-          {/* 2. Total Subjects */}
-          <div className="bg-white rounded-2xl p-2.5 border border-stone-200/90 shadow-xs text-center flex flex-col items-center justify-center min-h-[72px]">
-            <div className="w-6 h-6 rounded-lg bg-blue-50 text-blue-700 flex items-center justify-center mb-1">
-              <BookOpen className="w-3.5 h-3.5" />
-            </div>
-            <span className="text-xs sm:text-sm font-black text-stone-900 leading-tight">
-              {totalSubjectsCount}
-            </span>
-            <span className="text-[9.5px] font-semibold text-stone-500 tracking-tight leading-tight">
-              Subjects
-            </span>
-          </div>
-
-          {/* 3. Available PDFs */}
-          <div className="bg-white rounded-2xl p-2.5 border border-stone-200/90 shadow-xs text-center flex flex-col items-center justify-center min-h-[72px]">
-            <div className="w-6 h-6 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center mb-1">
-              <FileText className="w-3.5 h-3.5" />
-            </div>
-            <span className="text-xs sm:text-sm font-black text-stone-900 leading-tight">
-              {availablePdfsCount}
-            </span>
-            <span className="text-[9.5px] font-semibold text-stone-500 tracking-tight leading-tight">
-              Available PDFs
-            </span>
-          </div>
-
-          {/* 4. Total Purchases */}
-          <div className="bg-white rounded-2xl p-2.5 border border-stone-200/90 shadow-xs text-center flex flex-col items-center justify-center min-h-[72px]">
-            <div className="w-6 h-6 rounded-lg bg-purple-50 text-purple-700 flex items-center justify-center mb-1">
-              <ShoppingBag className="w-3.5 h-3.5" />
-            </div>
-            <span className="text-xs sm:text-sm font-black text-stone-900 leading-tight">
-              {totalPurchasesDisplay}
-            </span>
-            <span className="text-[9.5px] font-semibold text-stone-500 tracking-tight leading-tight truncate max-w-full">
-              Purchases
-            </span>
-          </div>
-        </div>
-      </section>
-
-      {/* ==============================================================
-          3. QUICK ACCESS FEATURES (4-Column Grid, 2 Rows)
-          No Online Tests shortcut as strictly requested.
-          ============================================================== */}
-      <section className="px-4 space-y-2">
+      <section className="px-4 md:px-0 space-y-2">
         <h2 className="text-xs font-extrabold uppercase tracking-wider text-stone-500 px-0.5">
           Quick Access
         </h2>
-        <div className="bg-white rounded-3xl p-3.5 border border-stone-200 shadow-xs">
-          <div className="grid grid-cols-4 gap-y-3 gap-x-2 text-center">
+        <div className="bg-white rounded-3xl p-3.5 md:p-5 border border-stone-200 shadow-xs">
+          <div className="grid grid-cols-4 lg:grid-cols-8 gap-y-3 gap-x-2 md:gap-4 text-center">
             {/* 1. Study Notes */}
             <button
               type="button"
               onClick={() => onNavigate('browse')}
               className="flex flex-col items-center group cursor-pointer"
             >
-              <div className="w-11 h-11 rounded-2xl bg-red-50 text-red-700 flex items-center justify-center shadow-xs group-hover:bg-red-100 transition-colors">
+              <div className="w-11 h-11 md:w-12 md:h-12 rounded-2xl bg-red-50 text-red-700 flex items-center justify-center shadow-xs group-hover:bg-red-100 transition-colors">
                 <BookOpen className="w-5 h-5" />
               </div>
-              <span className="text-[11px] font-bold text-stone-800 mt-1.5 leading-tight">
+              <span className="text-[11px] md:text-xs font-bold text-stone-800 mt-1.5 leading-tight">
                 Study Notes
               </span>
             </button>
@@ -364,10 +393,10 @@ export const MobileHomeView: React.FC<MobileHomeViewProps> = ({
               rel="noopener noreferrer"
               className="flex flex-col items-center group cursor-pointer"
             >
-              <div className="w-11 h-11 rounded-2xl bg-blue-50 text-blue-700 flex items-center justify-center shadow-xs group-hover:bg-blue-100 transition-colors">
+              <div className="w-11 h-11 md:w-12 md:h-12 rounded-2xl bg-blue-50 text-blue-700 flex items-center justify-center shadow-xs group-hover:bg-blue-100 transition-colors">
                 <Video className="w-5 h-5" />
               </div>
-              <span className="text-[11px] font-bold text-stone-800 mt-1.5 leading-tight">
+              <span className="text-[11px] md:text-xs font-bold text-stone-800 mt-1.5 leading-tight">
                 Video Classes
               </span>
             </a>
@@ -378,10 +407,10 @@ export const MobileHomeView: React.FC<MobileHomeViewProps> = ({
               onClick={() => onNavigate('browse', { category: 'Premium' })}
               className="flex flex-col items-center group cursor-pointer"
             >
-              <div className="w-11 h-11 rounded-2xl bg-amber-50 text-amber-700 flex items-center justify-center shadow-xs group-hover:bg-amber-100 transition-colors">
+              <div className="w-11 h-11 md:w-12 md:h-12 rounded-2xl bg-amber-50 text-amber-700 flex items-center justify-center shadow-xs group-hover:bg-amber-100 transition-colors">
                 <GraduationCap className="w-5 h-5" />
               </div>
-              <span className="text-[11px] font-bold text-stone-800 mt-1.5 leading-tight">
+              <span className="text-[11px] md:text-xs font-bold text-stone-800 mt-1.5 leading-tight">
                 Courses
               </span>
             </button>
@@ -392,10 +421,10 @@ export const MobileHomeView: React.FC<MobileHomeViewProps> = ({
               onClick={() => onNavigate('previous-papers')}
               className="flex flex-col items-center group cursor-pointer"
             >
-              <div className="w-11 h-11 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center shadow-xs group-hover:bg-emerald-100 transition-colors">
+              <div className="w-11 h-11 md:w-12 md:h-12 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center shadow-xs group-hover:bg-emerald-100 transition-colors">
                 <FileText className="w-5 h-5" />
               </div>
-              <span className="text-[11px] font-bold text-stone-800 mt-1.5 leading-tight">
+              <span className="text-[11px] md:text-xs font-bold text-stone-800 mt-1.5 leading-tight">
                 Previous Papers
               </span>
             </button>
@@ -406,10 +435,10 @@ export const MobileHomeView: React.FC<MobileHomeViewProps> = ({
               onClick={() => onNavigate('browse', { tag: 'Important Questions' })}
               className="flex flex-col items-center group cursor-pointer"
             >
-              <div className="w-11 h-11 rounded-2xl bg-purple-50 text-purple-700 flex items-center justify-center shadow-xs group-hover:bg-purple-100 transition-colors">
+              <div className="w-11 h-11 md:w-12 md:h-12 rounded-2xl bg-purple-50 text-purple-700 flex items-center justify-center shadow-xs group-hover:bg-purple-100 transition-colors">
                 <HelpCircle className="w-5 h-5" />
               </div>
-              <span className="text-[11px] font-bold text-stone-800 mt-1.5 leading-tight">
+              <span className="text-[11px] md:text-xs font-bold text-stone-800 mt-1.5 leading-tight">
                 Important Qs
               </span>
             </button>
@@ -420,10 +449,10 @@ export const MobileHomeView: React.FC<MobileHomeViewProps> = ({
               onClick={() => onNavigate('purchases')}
               className="flex flex-col items-center group cursor-pointer"
             >
-              <div className="w-11 h-11 rounded-2xl bg-rose-50 text-rose-700 flex items-center justify-center shadow-xs group-hover:bg-rose-100 transition-colors">
+              <div className="w-11 h-11 md:w-12 md:h-12 rounded-2xl bg-rose-50 text-rose-700 flex items-center justify-center shadow-xs group-hover:bg-rose-100 transition-colors">
                 <Download className="w-5 h-5" />
               </div>
-              <span className="text-[11px] font-bold text-stone-800 mt-1.5 leading-tight">
+              <span className="text-[11px] md:text-xs font-bold text-stone-800 mt-1.5 leading-tight">
                 Downloads
               </span>
             </button>
@@ -437,10 +466,10 @@ export const MobileHomeView: React.FC<MobileHomeViewProps> = ({
               rel="noopener noreferrer"
               className="flex flex-col items-center group cursor-pointer"
             >
-              <div className="w-11 h-11 rounded-2xl bg-emerald-100 text-emerald-800 flex items-center justify-center shadow-xs group-hover:bg-emerald-200 transition-colors">
+              <div className="w-11 h-11 md:w-12 md:h-12 rounded-2xl bg-emerald-100 text-emerald-800 flex items-center justify-center shadow-xs group-hover:bg-emerald-200 transition-colors">
                 <MessageCircle className="w-5 h-5" />
               </div>
-              <span className="text-[11px] font-bold text-stone-800 mt-1.5 leading-tight">
+              <span className="text-[11px] md:text-xs font-bold text-stone-800 mt-1.5 leading-tight">
                 Doubt Support
               </span>
             </a>
@@ -451,10 +480,10 @@ export const MobileHomeView: React.FC<MobileHomeViewProps> = ({
               onClick={() => onNavigate('profile')}
               className="flex flex-col items-center group cursor-pointer"
             >
-              <div className="w-11 h-11 rounded-2xl bg-stone-100 text-stone-700 flex items-center justify-center shadow-xs group-hover:bg-stone-200 transition-colors">
+              <div className="w-11 h-11 md:w-12 md:h-12 rounded-2xl bg-stone-100 text-stone-700 flex items-center justify-center shadow-xs group-hover:bg-stone-200 transition-colors">
                 <MoreHorizontal className="w-5 h-5" />
               </div>
-              <span className="text-[11px] font-bold text-stone-800 mt-1.5 leading-tight">
+              <span className="text-[11px] md:text-xs font-bold text-stone-800 mt-1.5 leading-tight">
                 More
               </span>
             </button>
@@ -463,238 +492,189 @@ export const MobileHomeView: React.FC<MobileHomeViewProps> = ({
       </section>
 
       {/* ==============================================================
-          4. CONTINUE READING SECTION
+          3. CONTINUE READING SECTION (Mobile & Tablet Flow)
           ============================================================== */}
-      {lastReading && (
-        <section className="px-4 space-y-2">
-          <div className="flex items-center justify-between px-0.5">
-            <h2 className="text-xs font-extrabold uppercase tracking-wider text-stone-500">
-              Continue Reading
-            </h2>
-            <span className="text-[11px] text-red-700 font-bold flex items-center space-x-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-red-600 animate-ping"></span>
-              <span>Recent Note</span>
-            </span>
-          </div>
-
-          <div className="bg-white rounded-3xl p-3.5 border border-stone-200 shadow-xs flex items-center space-x-3.5">
-            {/* Thumbnail */}
-            <div className="w-16 h-16 rounded-2xl bg-stone-100 overflow-hidden shrink-0 border border-stone-200 shadow-inner relative">
-              <img
-                src={
-                  lastReading.coverImagePath ||
-                  'https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=200&q=80'
-                }
-                alt={lastReading.title}
-                className="w-full h-full object-cover"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-stone-900/60 to-transparent flex items-end p-1">
-                <span className="text-[8px] font-black text-white bg-red-700 px-1 py-0.2 rounded uppercase">
-                  PDF
-                </span>
-              </div>
-            </div>
-
-            {/* Title & Info */}
-            <div className="min-w-0 flex-1 space-y-0.5">
-              <span className="text-[10px] font-bold text-red-700 uppercase tracking-wider">
-                {lastReading.subject} {lastReading.classLevel ? `• ${lastReading.classLevel}` : ''}
-              </span>
-              <h3 className="text-xs font-bold text-stone-900 truncate">
-                {lastReading.title}
-              </h3>
-              <p className="text-[10px] text-stone-500">
-                Continue exam preparation right where you left off
-              </p>
-            </div>
-
-            {/* Action */}
-            <button
-              type="button"
-              onClick={() => {
-                const target = products.find((p) => p.id === lastReading.id) || freeNotes.find((n) => n.id === lastReading.id);
-                if (target) {
-                  onViewDetails(target);
-                } else {
-                  onNavigate('browse');
-                }
-              }}
-              className="px-3 py-2 bg-red-700 hover:bg-red-800 text-white rounded-xl text-xs font-bold shrink-0 shadow-xs active:scale-95 transition-transform cursor-pointer"
-            >
-              Continue
-            </button>
-          </div>
-        </section>
+      {continueReadingBlock && (
+        <section className="px-4 md:px-0 lg:hidden">{continueReadingBlock}</section>
       )}
 
       {/* ==============================================================
-          5. EXPLORE SUBJECTS
+          4. EXPLORE SUBJECTS + LATEST PDF UPDATES
+          Stacked on Mobile/Tablet, Two-Column on Desktop
           ============================================================== */}
-      <section className="px-4 space-y-2">
-        <div className="flex items-center justify-between px-0.5">
-          <h2 className="text-xs font-extrabold uppercase tracking-wider text-stone-500">
-            Explore Subjects
-          </h2>
-          <button
-            type="button"
-            onClick={() => onNavigate('browse')}
-            className="text-[11px] font-bold text-red-700 hover:text-red-800 flex items-center space-x-0.5 cursor-pointer"
-          >
-            <span>View All</span>
-            <ChevronRight className="w-3.5 h-3.5" />
-          </button>
-        </div>
-
-        <div className="grid grid-cols-2 gap-2.5">
-          {subjectList.map((subj, index) => {
-            const Icon = subj.icon;
-            // Span the 5th item across both columns for balanced aesthetic
-            const isLastOdd = index === 4;
-
-            return (
-              <button
-                key={subj.id}
-                type="button"
-                onClick={() => onNavigate('browse', { subject: subj.id })}
-                className={`${subj.bg} ${subj.border} ${isLastOdd ? 'col-span-2' : ''} border rounded-2xl p-3 text-left flex items-center space-x-3 shadow-xs active:scale-98 transition-transform cursor-pointer`}
-              >
-                <div className={`w-9 h-9 rounded-xl ${subj.iconBg} text-white flex items-center justify-center shrink-0 shadow-xs`}>
-                  <Icon className="w-4 h-4" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center space-x-1.5">
-                    <h3 className={`text-xs font-extrabold ${subj.textColor} truncate`}>
-                      {subj.name}
-                    </h3>
-                  </div>
-                  <p className="text-[10px] text-stone-500 font-medium">
-                    {subj.sub} • {subj.badge}
-                  </p>
-                </div>
-                <ChevronRight className={`w-4 h-4 text-stone-400 shrink-0 ${isLastOdd ? 'ml-auto' : ''}`} />
-              </button>
-            );
-          })}
-        </div>
-      </section>
-
-      {/* ==============================================================
-          6. LATEST PDF UPDATES (Dynamic Firebase Firestore Real-Time)
-          Automatically refreshes when an admin uploads, updates, or deletes.
-          ============================================================== */}
-      <section className="px-4 space-y-2.5">
-        <div className="flex items-center justify-between px-0.5">
-          <div className="flex items-center space-x-2">
-            <span className="w-2 h-2 rounded-full bg-red-600 animate-pulse"></span>
-            <h2 className="text-xs font-extrabold uppercase tracking-wider text-stone-900">
-              LATEST PDF UPDATES
+      <div className="lg:grid lg:grid-cols-12 lg:gap-6 lg:items-start space-y-5 lg:space-y-0">
+        {/* EXPLORE SUBJECTS */}
+        <section className="lg:col-span-5 px-4 md:px-0 space-y-2">
+          <div className="flex items-center justify-between px-0.5">
+            <h2 className="text-xs font-extrabold uppercase tracking-wider text-stone-500">
+              Explore Subjects
             </h2>
+            <button
+              type="button"
+              onClick={() => onNavigate('browse')}
+              className="text-[11px] font-bold text-red-700 hover:text-red-800 flex items-center space-x-0.5 cursor-pointer"
+            >
+              <span>View All</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={() => onNavigate('browse')}
-            className="text-[11px] font-bold text-red-700 hover:text-red-800 flex items-center space-x-0.5 cursor-pointer"
-          >
-            <span>View All</span>
-            <ChevronRight className="w-3.5 h-3.5" />
-          </button>
-        </div>
 
-        <div className="bg-white rounded-3xl border border-stone-200 shadow-xs overflow-hidden divide-y divide-stone-100">
-          {allLatestItems.length === 0 ? (
-            <div className="p-8 text-center space-y-2">
-              <FileText className="w-8 h-8 text-stone-300 mx-auto" />
-              <p className="text-xs text-stone-500">
-                New chapter notes will appear here automatically when uploaded.
-              </p>
-            </div>
-          ) : (
-            allLatestItems.map((pdf) => {
-              const isFreeNote = Boolean(pdf.isFree || Number(pdf.sellingPricePaise || 0) === 0);
-              const relativeTime = getRelativeTime(pdf.createdAt);
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-1 gap-2.5 md:gap-3">
+            {subjectList.map((subj, index) => {
+              const Icon = subj.icon;
+              // Span the 5th item cleanly on 2-col Mobile and 3-col Tablet; single row on 1-col Desktop stack
+              const isLastOdd = index === 4;
 
               return (
-                <div
-                  key={pdf.id}
-                  onClick={() => {
-                    // Record in continue reading
-                    try {
-                      localStorage.setItem(
-                        'mkr_last_reading',
-                        JSON.stringify({
-                          id: pdf.id,
-                          title: pdf.title,
-                          subject: pdf.subject,
-                          coverImagePath: pdf.coverImagePath,
-                          classLevel: pdf.classLevel,
-                          timestamp: Date.now()
-                        })
-                      );
-                    } catch {}
-                    onViewDetails(pdf);
-                  }}
-                  className="p-3.5 flex items-center space-x-3 hover:bg-stone-50 active:bg-stone-100 transition-colors cursor-pointer"
+                <button
+                  key={subj.id}
+                  type="button"
+                  onClick={() => onNavigate('browse', { subject: subj.id })}
+                  className={`${subj.bg} ${subj.border} ${
+                    isLastOdd ? 'col-span-2 md:col-span-2 lg:col-span-1' : ''
+                  } border rounded-2xl p-3 md:p-3.5 text-left flex items-center space-x-3 shadow-xs hover:shadow-sm active:scale-98 transition-all cursor-pointer`}
                 >
-                  {/* PDF Icon Badge */}
-                  <div className="w-10 h-10 rounded-xl bg-red-50 text-red-700 border border-red-100 flex items-center justify-center shrink-0">
-                    <FileText className="w-5 h-5" />
+                  <div
+                    className={`w-9 h-9 md:w-10 md:h-10 rounded-xl ${subj.iconBg} text-white flex items-center justify-center shrink-0 shadow-xs`}
+                  >
+                    <Icon className="w-4 h-4 md:w-5 md:h-5" />
                   </div>
-
-                  {/* Metadata */}
-                  <div className="min-w-0 flex-1 space-y-0.5">
-                    <div className="flex items-center space-x-1.5 flex-wrap">
-                      <span className="bg-red-700 text-white text-[9px] font-black px-1.5 py-0.2 rounded uppercase">
-                        NEW
-                      </span>
-                      <span className="text-[10px] font-bold text-stone-500">
-                        {pdf.subject} {pdf.classLevel ? `• ${pdf.classLevel}` : ''}
-                      </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center space-x-1.5">
+                      <h3 className={`text-xs md:text-sm font-extrabold ${subj.textColor} truncate`}>
+                        {subj.name}
+                      </h3>
                     </div>
-
-                    <h3 className="text-xs font-bold text-stone-900 leading-snug line-clamp-1">
-                      {pdf.title}
-                    </h3>
-
-                    <div className="flex items-center space-x-2 text-[10px] text-stone-400">
-                      <span>{relativeTime}</span>
-                      <span>•</span>
-                      {isFreeNote ? (
-                        <span className="text-emerald-700 font-bold">100% Free Note</span>
-                      ) : (
-                        <span className="text-stone-700 font-bold">
-                          ₹{pdf.sellingPricePaise / 100}
-                        </span>
-                      )}
-                    </div>
+                    <p className="text-[10px] md:text-[11px] text-stone-500 font-medium">
+                      {subj.sub} • {subj.badge}
+                    </p>
                   </div>
-
-                  {/* Right Arrow / Action */}
-                  <div className="shrink-0 flex items-center space-x-1">
-                    <span className="text-[11px] font-bold text-red-700 hidden sm:inline">
-                      View
-                    </span>
-                    <ChevronRight className="w-4 h-4 text-stone-400" />
-                  </div>
-                </div>
+                  <ChevronRight
+                    className={`w-4 h-4 text-stone-400 shrink-0 ${isLastOdd ? 'ml-auto' : ''}`}
+                  />
+                </button>
               );
-            })
-          )}
-        </div>
-      </section>
+            })}
+          </div>
+        </section>
+
+        {/* LATEST PDF UPDATES (Dynamic Firebase Firestore Real-Time) */}
+        <section className="lg:col-span-7 px-4 md:px-0 space-y-2.5">
+          <div className="flex items-center justify-between px-0.5">
+            <div className="flex items-center space-x-2">
+              <span className="w-2 h-2 rounded-full bg-red-600 animate-pulse"></span>
+              <h2 className="text-xs font-extrabold uppercase tracking-wider text-stone-900">
+                LATEST PDF UPDATES
+              </h2>
+            </div>
+            <button
+              type="button"
+              onClick={() => onNavigate('browse')}
+              className="text-[11px] font-bold text-red-700 hover:text-red-800 flex items-center space-x-0.5 cursor-pointer"
+            >
+              <span>View All</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          <div className="bg-white rounded-3xl border border-stone-200 shadow-xs overflow-hidden divide-y divide-stone-100">
+            {allLatestItems.length === 0 ? (
+              <div className="p-8 text-center space-y-2">
+                <FileText className="w-8 h-8 text-stone-300 mx-auto" />
+                <p className="text-xs text-stone-500">
+                  New chapter notes will appear here automatically when uploaded.
+                </p>
+              </div>
+            ) : (
+              allLatestItems.map((pdf) => {
+                const isFreeNote = Boolean(
+                  pdf.isFree || Number(pdf.sellingPricePaise || 0) === 0
+                );
+                const relativeTime = getRelativeTime(pdf.createdAt);
+
+                return (
+                  <div
+                    key={pdf.id}
+                    onClick={() => {
+                      // Record in continue reading
+                      try {
+                        localStorage.setItem(
+                          'mkr_last_reading',
+                          JSON.stringify({
+                            id: pdf.id,
+                            title: pdf.title,
+                            subject: pdf.subject,
+                            coverImagePath: pdf.coverImagePath,
+                            classLevel: pdf.classLevel,
+                            timestamp: Date.now()
+                          })
+                        );
+                      } catch {}
+                      onViewDetails(pdf);
+                    }}
+                    className="p-3.5 md:p-4 flex items-center space-x-3 md:space-x-4 hover:bg-stone-50 active:bg-stone-100 transition-colors cursor-pointer"
+                  >
+                    {/* PDF Icon Badge */}
+                    <div className="w-10 h-10 md:w-11 md:h-11 rounded-xl bg-red-50 text-red-700 border border-red-100 flex items-center justify-center shrink-0">
+                      <FileText className="w-5 h-5" />
+                    </div>
+
+                    {/* Metadata */}
+                    <div className="min-w-0 flex-1 space-y-0.5">
+                      <div className="flex items-center space-x-1.5 flex-wrap">
+                        <span className="bg-red-700 text-white text-[9px] font-black px-1.5 py-0.2 rounded uppercase">
+                          NEW
+                        </span>
+                        <span className="text-[10px] md:text-[11px] font-bold text-stone-500">
+                          {pdf.subject} {pdf.classLevel ? `• ${pdf.classLevel}` : ''}
+                        </span>
+                      </div>
+
+                      <h3 className="text-xs md:text-sm font-bold text-stone-900 leading-snug line-clamp-1">
+                        {pdf.title}
+                      </h3>
+
+                      <div className="flex items-center space-x-2 text-[10px] md:text-[11px] text-stone-400">
+                        <span>{relativeTime}</span>
+                        <span>•</span>
+                        {isFreeNote ? (
+                          <span className="text-emerald-700 font-bold">100% Free Note</span>
+                        ) : (
+                          <span className="text-stone-700 font-bold">
+                            ₹{pdf.sellingPricePaise / 100}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Right Arrow / Action */}
+                    <div className="shrink-0 flex items-center space-x-1">
+                      <span className="text-[11px] md:text-xs font-bold text-red-700 hidden sm:inline">
+                        View
+                      </span>
+                      <ChevronRight className="w-4 h-4 text-stone-400" />
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </section>
+      </div>
 
       {/* ==============================================================
-          7. WHATSAPP & SUPPORT HELPLINE BANNER (Mobile Footer Helper)
+          5. WHATSAPP & SUPPORT HELPLINE BANNER
           ============================================================== */}
-      <section className="px-4">
-        <div className="bg-gradient-to-r from-emerald-950 via-stone-900 to-emerald-950 text-white rounded-3xl p-4 border border-emerald-800/40 shadow-xs flex items-center justify-between gap-3">
+      <section className="px-4 md:px-0">
+        <div className="bg-gradient-to-r from-emerald-950 via-stone-900 to-emerald-950 text-white rounded-3xl p-4 md:p-6 border border-emerald-800/40 shadow-xs flex items-center justify-between gap-3">
           <div className="space-y-0.5 min-w-0">
-            <span className="text-[10px] uppercase font-bold text-emerald-400 tracking-wider">
+            <span className="text-[10px] md:text-[11px] uppercase font-bold text-emerald-400 tracking-wider">
               Student Help & Doubts
             </span>
-            <p className="text-xs font-bold text-white truncate">
+            <p className="text-xs md:text-base font-bold text-white truncate">
               WhatsApp Community & Helpline
             </p>
-            <p className="text-[10px] text-stone-300">
+            <p className="text-[10px] md:text-xs text-stone-300">
               Need assistance or study guidance? Reach out directly.
             </p>
           </div>
@@ -704,14 +684,13 @@ export const MobileHomeView: React.FC<MobileHomeViewProps> = ({
             )}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shrink-0 flex items-center space-x-1.5 shadow-sm active:scale-95 transition-transform"
+            className="px-3.5 py-2 md:px-5 md:py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs md:text-sm font-bold shrink-0 flex items-center space-x-1.5 shadow-sm active:scale-95 transition-transform"
           >
-            <MessageCircle className="w-3.5 h-3.5" />
+            <MessageCircle className="w-3.5 h-3.5 md:w-4 md:h-4" />
             <span>WhatsApp</span>
           </a>
         </div>
       </section>
-
     </div>
   );
 };

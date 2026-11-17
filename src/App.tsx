@@ -13,7 +13,7 @@ import {
   subscribeToFreeNotes
 } from './services/productService';
 import { getUserPurchases, subscribeToUserPurchases } from './services/orderService';
-import { getPublicSettings } from './services/settingsService';
+import { getPublicSettings, subscribeToPublicSettings } from './services/settingsService';
 import {
   getPendingDownload,
   clearPendingDownload,
@@ -36,10 +36,12 @@ import { PolicyView } from './components/common/PolicyView';
 import { PolicyType } from './components/common/PolicyModal';
 import { AdminDashboard } from './components/admin/AdminDashboard';
 import { PreviousPapersView } from './components/student/PreviousPapersView';
+import { SubjectsView } from './components/student/SubjectsView';
 
 export type AppView =
   | 'home'
   | 'browse'
+  | 'subjects'
   | 'free-pdfs'
   | 'purchases'
   | 'previous-papers'
@@ -77,7 +79,7 @@ export function getAuthModeFromUrl(): 'login' | 'register' {
 }
 
 export function getViewFromUrl(): AppView {
-  if (typeof window === 'undefined') return 'browse';
+  if (typeof window === 'undefined') return 'home';
 
   const pathname = window.location.pathname.toLowerCase();
   const searchParams = new URLSearchParams(window.location.search);
@@ -85,6 +87,7 @@ export function getViewFromUrl(): AppView {
 
   // 1. Explicit view parameter in search query
   if (viewParam === 'home') return 'home';
+  if (viewParam === 'subjects') return 'subjects';
   if (viewParam === 'notes' || viewParam === 'browse') return 'browse';
   if (viewParam === 'free-pdfs' || viewParam === 'free-notes') return 'free-pdfs';
   if (viewParam === 'purchases' || viewParam === 'my-purchases') return 'purchases';
@@ -98,6 +101,7 @@ export function getViewFromUrl(): AppView {
 
   // 2. Explicit pathname routing
   if (pathname.startsWith('/home')) return 'home';
+  if (pathname.startsWith('/subjects')) return 'subjects';
   if (pathname.startsWith('/notes') || pathname.startsWith('/browse')) return 'browse';
   if (pathname.startsWith('/free-pdfs') || pathname.startsWith('/free-notes')) return 'free-pdfs';
   if (pathname.startsWith('/purchases') || pathname.startsWith('/my-purchases')) return 'purchases';
@@ -121,8 +125,8 @@ export function getViewFromUrl(): AppView {
     return 'policy';
   }
 
-  // 3. Default for root URL ('/' or any other unmatched path) is Notes ('browse')
-  return 'browse';
+  // 3. Default for root URL ('/' or any other unmatched path) is App Home ('home')
+  return 'home';
 }
 
 export function getPathForView(
@@ -132,6 +136,8 @@ export function getPathForView(
   switch (view) {
     case 'home':
       return '/home';
+    case 'subjects':
+      return '/subjects';
     case 'browse':
       return '/notes';
     case 'free-pdfs':
@@ -147,20 +153,20 @@ export function getPathForView(
     case 'auth':
       return extra?.authMode === 'register' ? '/register' : '/login';
     case 'product-details':
-      return extra?.productId ? `/product/${extra.productId}` : '/notes';
+      return extra?.productId ? `/product/${extra.productId}` : '/home';
     case 'checkout':
-      return extra?.productId ? `/checkout/${extra.productId}` : '/notes';
+      return extra?.productId ? `/checkout/${extra.productId}` : '/home';
     case 'policy':
       return extra?.policyType ? `/policy/${extra.policyType}` : '/policy/privacy';
     default:
-      return '/notes';
+      return '/home';
   }
 }
 
 function AppContent() {
   const { user, isAdmin } = useAuth();
 
-  // Navigation State - Defaults to Notes ('browse') on main root URL
+  // Navigation State - Defaults to App Home ('home') on launch
   const [currentView, setCurrentView] = useState<AppView>(() => getViewFromUrl());
   const [browseFilters, setBrowseFilters] = useState<any>({});
 
@@ -269,9 +275,9 @@ function AppContent() {
           }, 2000);
         }
       } else {
-        // Fall back to browse catalog if popping out of a standalone page with no history
-        setCurrentView('browse');
-        window.history.replaceState({ step: 'browse', view: 'browse' }, '', '/notes');
+        // Fall back to App Home if popping out of a standalone page with no history
+        setCurrentView('home');
+        window.history.replaceState({ step: 'home', view: 'home' }, '', '/home');
         window.scrollTo({ top: 0, behavior: 'smooth' });
       }
     };
@@ -333,10 +339,16 @@ function AppContent() {
       }
     );
 
+    // Real-time synchronization for public settings (countdown, banners, logo, social)
+    const unsubscribeSettings = subscribeToPublicSettings((liveSettings) => {
+      if (isMounted) setSettings(liveSettings);
+    });
+
     return () => {
       isMounted = false;
       unsubscribeProducts();
       unsubscribeFreeNotes();
+      unsubscribeSettings();
     };
   }, []);
 
@@ -437,6 +449,8 @@ function AppContent() {
       document.title = 'My Profile & Account - MKR Academy';
     } else if (currentView === 'purchases') {
       document.title = 'My Purchased Notes - MKR Academy';
+    } else if (currentView === 'subjects') {
+      document.title = 'Subjects - MKR Academy';
     } else if (currentView === 'free-pdfs') {
       document.title = 'Free Notes & Question Papers - MKR Academy';
     } else if (currentView === 'policy') {
@@ -452,8 +466,9 @@ function AppContent() {
   const handleNavigate = (view: string, filterParam?: any) => {
     const targetView = view as AppView;
 
-    let targetPath = '/notes';
+    let targetPath = '/home';
     if (targetView === 'home') targetPath = '/home';
+    else if (targetView === 'subjects') targetPath = '/subjects';
     else if (targetView === 'browse') targetPath = '/notes';
     else if (targetView === 'free-pdfs') targetPath = '/free-pdfs';
     else if (targetView === 'purchases') targetPath = '/purchases';
@@ -618,7 +633,10 @@ function AppContent() {
   if (currentView === 'admin' && isAdmin) {
     return (
       <AdminDashboard
-        onBackToStore={() => handleNavigate('browse')}
+        onBackToStore={() => {
+          getPublicSettings().then((latestSettings) => setSettings(latestSettings)).catch(() => {});
+          handleNavigate('home');
+        }}
         onProductsChanged={() => {
           getPublishedProducts().then((latest) => {
             if (latest.length > 0) setProducts(latest);
@@ -626,6 +644,7 @@ function AppContent() {
           getFreeNotes().then((latestFree) => {
             if (latestFree.length > 0) setFreeNotes(latestFree);
           });
+          getPublicSettings().then((latestSettings) => setSettings(latestSettings)).catch(() => {});
         }}
       />
     );
@@ -670,6 +689,20 @@ function AppContent() {
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
             onExecuteSearch={handleExecuteSearch}
+          />
+        ) : currentView === 'subjects' ? (
+          <SubjectsView
+            products={products}
+            freeNotes={freeNotes}
+            onBack={() => {
+              if (window.history.length > 1) {
+                window.history.back();
+              } else {
+                handleNavigate('home');
+              }
+            }}
+            onSelectSubject={(subject) => handleNavigate('browse', { subject })}
+            onBrowseAllPdfs={() => handleNavigate('browse')}
           />
         ) : currentView === 'free-pdfs' ? (
           <FreePdfsView
@@ -725,7 +758,7 @@ function AppContent() {
               if (window.history.length > 1) {
                 window.history.back();
               } else {
-                handleNavigate('browse');
+                handleNavigate('home');
               }
             }}
             onBuyNow={handleBuyNow}
@@ -751,7 +784,7 @@ function AppContent() {
               } else if (window.history.length > 1) {
                 window.history.back();
               } else {
-                handleNavigate('browse');
+                handleNavigate('home');
               }
             }}
             onSuccess={handlePurchaseSuccess}
@@ -766,7 +799,7 @@ function AppContent() {
               if (window.history.length > 1) {
                 window.history.back();
               } else {
-                handleNavigate('browse');
+                handleNavigate('home');
               }
             }}
             onSuccess={() => {
@@ -775,7 +808,7 @@ function AppContent() {
               } else if (selectedProduct) {
                 setCurrentView('product-details');
               } else {
-                handleNavigate('browse');
+                handleNavigate('home');
               }
             }}
             onOpenPolicy={handleOpenPolicy}
@@ -786,7 +819,7 @@ function AppContent() {
               if (window.history.length > 1) {
                 window.history.back();
               } else {
-                handleNavigate('browse');
+                handleNavigate('home');
               }
             }}
             onNavigateToPurchases={() => handleNavigate('purchases')}
@@ -801,19 +834,25 @@ function AppContent() {
               if (window.history.length > 1) {
                 window.history.back();
               } else {
-                handleNavigate('browse');
+                handleNavigate('home');
               }
             }}
             socialLinks={settings?.social}
           />
         ) : (
-          <BrowseNotesView
+          <HomeView
             products={products}
+            freeNotes={freeNotes}
+            purchases={purchases}
+            settings={settings}
             purchasedProductIds={purchasedProductIds}
+            onNavigate={handleNavigate}
             onViewDetails={handleOpenProductDetails}
             onBuyNow={handleBuyNow}
             onDownloadNotes={handleDownloadNotes}
-            initialFilters={browseFilters}
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            onExecuteSearch={handleExecuteSearch}
           />
         )}
       </main>

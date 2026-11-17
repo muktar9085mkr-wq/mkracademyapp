@@ -260,10 +260,10 @@ export const UserDirectoryManager: React.FC<UserDirectoryManagerProps> = ({ sess
       </div>
 
       {/* User Directory Table */}
-      <div className="bg-white rounded-2xl border border-stone-200 shadow-xs overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-stone-50 border-b border-stone-200 text-stone-500 font-bold uppercase tracking-wider">
+      <div className="bg-white rounded-2xl border border-stone-200/90 shadow-xs overflow-hidden">
+        <div className="overflow-x-auto admin-table-scroll">
+          <table className="w-full min-w-[860px] text-left text-xs">
+            <thead className="bg-stone-50/90 border-b border-stone-200 text-stone-500 text-[10px] font-bold uppercase tracking-wider">
               <tr>
                 <th className="py-3 px-4">Student Name & Email</th>
                 <th className="py-3 px-4">Phone</th>
@@ -288,7 +288,7 @@ export const UserDirectoryManager: React.FC<UserDirectoryManagerProps> = ({ sess
                   const isSuspended = u.accountStatus === 'suspended';
 
                   return (
-                    <tr key={u.uid} className="hover:bg-stone-50/60 transition-colors">
+                    <tr key={u.uid} className="hover:bg-red-50/25 transition-colors">
                       <td className="py-3.5 px-4">
                         <div className="font-extrabold text-stone-900">{u.displayName || 'Student'}</div>
                         <div className="text-[11px] text-stone-500 font-mono">{u.email}</div>

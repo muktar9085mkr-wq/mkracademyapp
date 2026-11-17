@@ -11,6 +11,7 @@ import {
   ChevronDown
 } from 'lucide-react';
 import { Product, SubjectType, ClassLevel, MediumType, ProductCategory } from '../../types';
+import { isFreeNote } from '../../services/productService';
 import { ProductCard } from './ProductCard';
 
 interface BrowseNotesViewProps {
@@ -24,6 +25,7 @@ interface BrowseNotesViewProps {
     classLevel?: string;
     medium?: string;
     category?: string;
+    tag?: string;
     search?: string;
   };
 }
@@ -41,14 +43,39 @@ export const BrowseNotesView: React.FC<BrowseNotesViewProps> = ({
   const [selectedClass, setSelectedClass] = useState<string>(initialFilters?.classLevel || 'All');
   const [selectedMedium, setSelectedMedium] = useState<string>(initialFilters?.medium || 'All');
   const [selectedCategory, setSelectedCategory] = useState<string>(initialFilters?.category || 'All');
-  const [selectedTag, setSelectedTag] = useState<string>('All');
+  const [selectedTag, setSelectedTag] = useState<string>(initialFilters?.tag || 'All');
   const [sortBy, setSortBy] = useState<'latest' | 'price-low' | 'price-high' | 'title'>('latest');
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
+
+  React.useEffect(() => {
+    setSearch(initialFilters?.search || '');
+    setSelectedSubject(initialFilters?.subject || 'All');
+    setSelectedClass(initialFilters?.classLevel || 'All');
+    setSelectedMedium(initialFilters?.medium || 'All');
+    setSelectedCategory(initialFilters?.category || 'All');
+    setSelectedTag(initialFilters?.tag || 'All');
+  }, [initialFilters]);
+
+  const paidNotesOnly = useMemo(() => {
+    const map = new Map<string, Product>();
+    products.forEach((item) => {
+      if (
+        item &&
+        item.id &&
+        item.published !== false &&
+        !isFreeNote(item) &&
+        Number(item.sellingPricePaise || 0) > 0
+      ) {
+        map.set(item.id, item);
+      }
+    });
+    return Array.from(map.values());
+  }, [products]);
 
   const subjects = ['All', 'General Science', 'Mathematics', 'Social Science', 'English', 'Assamese', 'Other Subjects'];
   const classes = ['All', 'HSLC 2027', 'Class 10', 'Class 9'];
   const mediums = ['All', 'Assamese Medium', 'English Medium', 'Both Mediums'];
-  const categories = ['All', 'Free PDFs', 'Premium', 'Normal', 'Budget Friendly'];
+  const categories = ['All', 'Premium', 'Normal', 'Budget Friendly'];
   const tags = [
     'All',
     'Important Questions',
@@ -60,11 +87,13 @@ export const BrowseNotesView: React.FC<BrowseNotesViewProps> = ({
     'Previous Year Questions'
   ];
 
-  // Filtering & Sorting logic
+  // Filtering & Sorting logic (Notes section never includes Free PDFs)
   const filteredProducts = useMemo(() => {
-    return products
+    return paidNotesOnly
       .filter((p) => {
-        if (!p.published) return false;
+        if (p.published === false || isFreeNote(p) || Number(p.sellingPricePaise || 0) <= 0) {
+          return false;
+        }
 
         // Search match
         if (search.trim()) {
@@ -80,9 +109,16 @@ export const BrowseNotesView: React.FC<BrowseNotesViewProps> = ({
           }
         }
 
-        // Subject filter
-        if (selectedSubject !== 'All' && p.subject !== selectedSubject) {
-          return false;
+        // Subject filter (normalizes Science / General Science)
+        if (selectedSubject !== 'All') {
+          const subNormalized = (p.subject || '').trim().toLowerCase();
+          const selNormalized = selectedSubject.trim().toLowerCase();
+          const isScienceMatch =
+            selNormalized === 'general science' &&
+            (subNormalized === 'general science' || subNormalized === 'science');
+          if (!isScienceMatch && p.subject !== selectedSubject) {
+            return false;
+          }
         }
 
         // Class filter
@@ -96,11 +132,7 @@ export const BrowseNotesView: React.FC<BrowseNotesViewProps> = ({
         }
 
         // Category filter
-        if (selectedCategory === 'Free PDFs') {
-          if (!p.isFree && p.sellingPricePaise !== 0 && (p.category as any) !== 'Free') {
-            return false;
-          }
-        } else if (selectedCategory !== 'All' && p.category !== selectedCategory) {
+        if (selectedCategory !== 'All' && p.category !== selectedCategory) {
           return false;
         }
 
