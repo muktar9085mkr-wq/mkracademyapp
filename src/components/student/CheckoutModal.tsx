@@ -26,6 +26,7 @@ import {
   recordFailedOrder,
   fulfillVerifiedPurchase
 } from '../../services/orderService';
+import { isAndroidWebViewApp, openExternalDriveInAndroid } from '../../services/downloadService';
 
 declare global {
   interface Window {
@@ -638,30 +639,43 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
             {/* Actions */}
             <div className="space-y-2 pt-2">
-              {product.driveFileLink && (
-                <a
-                  href={product.driveFileLink}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full py-3.5 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-sm shadow-md flex items-center justify-center space-x-2 transition-all"
+              {isAndroidWebViewApp() ? (
+                <button
+                  type="button"
+                  onClick={() => openExternalDriveInAndroid(completedPurchase?.driveFileLink || product.driveFileLink)}
+                  className="w-full py-3.5 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-sm shadow-md flex items-center justify-center space-x-2 transition-all cursor-pointer"
                 >
                   <ExternalLink className="w-4 h-4" />
-                  <span>Open in Google Drive (Direct Access)</span>
-                </a>
-              )}
+                  <span>Open in Drive</span>
+                </button>
+              ) : (
+                <>
+                  {product.driveFileLink && (
+                    <a
+                      href={product.driveFileLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full py-3.5 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-sm shadow-md flex items-center justify-center space-x-2 transition-all"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                      <span>Open in Google Drive (Direct Access)</span>
+                    </a>
+                  )}
 
-              <a
-                href={`/api/notes/download/${completedPurchase?.id || 'sample'}`}
-                download={`MKR_Academy_${product.slug}.pdf`}
-                className={`w-full py-3 px-4 rounded-xl font-bold text-sm shadow-md flex items-center justify-center space-x-2 transition-all ${
-                  product.driveFileLink
-                    ? 'bg-stone-800 hover:bg-stone-900 text-white'
-                    : 'bg-red-700 hover:bg-red-800 text-white'
-                }`}
-              >
-                <Download className="w-4 h-4" />
-                <span>Download Notes (PDF)</span>
-              </a>
+                  <a
+                    href={`/api/notes/download/${completedPurchase?.id || 'sample'}`}
+                    download={`MKR_Academy_${product.slug}.pdf`}
+                    className={`w-full py-3 px-4 rounded-xl font-bold text-sm shadow-md flex items-center justify-center space-x-2 transition-all ${
+                      product.driveFileLink
+                        ? 'bg-stone-800 hover:bg-stone-900 text-white'
+                        : 'bg-red-700 hover:bg-red-800 text-white'
+                    }`}
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>Download Notes (PDF)</span>
+                  </a>
+                </>
+              )}
 
               <button
                 onClick={onClose}

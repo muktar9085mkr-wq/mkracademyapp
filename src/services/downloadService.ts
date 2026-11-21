@@ -7,6 +7,9 @@
 import { Product } from '../types';
 import { auth, db } from '../firebase/config';
 import { doc, setDoc } from 'firebase/firestore';
+import { isAndroidWebViewApp, openExternalDriveInAndroid } from './androidBridge';
+
+export { isAndroidWebViewApp, openExternalDriveInAndroid };
 
 export interface DownloadEventRecord {
   eventId: string;
@@ -259,7 +262,8 @@ export async function recordDownloadEvent(
 }
 
 /**
- * Triggers file download in browser or Android WebView
+ * Triggers file download on Website, or opens the original Google Drive URL
+ * externally via Android ACTION_VIEW Intent inside the MKR Academy Android App.
  */
 export function triggerFileDownload(
   urlOrProduct: string | Product,
@@ -283,6 +287,13 @@ export function triggerFileDownload(
     }
   }
 
+  // Android App: Preserve original Firebase Google Drive URL & open externally outside WebView
+  if (isAndroidWebViewApp()) {
+    openExternalDriveInAndroid(targetUrl);
+    return;
+  }
+
+  // Website (Desktop & Mobile Browsers): Preserve existing download behavior
   const cleanUrl = getDriveDirectDownloadUrl(targetUrl) || targetUrl;
   if (!cleanUrl) return;
 

@@ -52,6 +52,16 @@
         <package android:name="net.one97.paytm" />                         <!-- Paytm -->
         <package android:name="in.org.npci.upiapp" />                      <!-- BHIM -->
         <package android:name="com.whatsapp" />                            <!-- WhatsApp Pay -->
+
+        <!-- Google Drive & External Browsers for opening PDFs outside WebView -->
+        <package android:name="com.google.android.apps.docs" />              <!-- Google Drive -->
+        <package android:name="com.google.android.apps.docs.editors.docs" /> <!-- Google Docs -->
+        <package android:name="com.android.chrome" />                        <!-- Google Chrome -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" />
+        </intent>
     </queries>
 
     <application

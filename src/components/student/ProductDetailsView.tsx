@@ -28,7 +28,8 @@ import {
   storePendingDownload,
   triggerFileDownload,
   openPdfPreview,
-  recordDownloadEvent
+  recordDownloadEvent,
+  isAndroidWebViewApp
 } from '../../services/downloadService';
 
 interface ProductDetailsViewProps {
@@ -51,6 +52,7 @@ export const ProductDetailsView: React.FC<ProductDetailsViewProps> = ({
   onNavigate
 }) => {
   const { user } = useAuth();
+  const isAndroidApp = isAndroidWebViewApp();
   const [copied, setCopied] = useState<boolean>(false);
 
   if (!product) {
@@ -274,8 +276,17 @@ export const ProductDetailsView: React.FC<ProductDetailsViewProps> = ({
                                 onClick={() => handleDownloadPdf(pdf)}
                                 className="px-3 py-1.5 rounded-lg bg-red-700 hover:bg-red-800 text-white font-bold text-xs flex items-center space-x-1 shadow-xs transition-colors cursor-pointer"
                               >
-                                <Download className="w-3.5 h-3.5" />
-                                <span>Download</span>
+                                {isAndroidApp ? (
+                                  <>
+                                    <ExternalLink className="w-3.5 h-3.5" />
+                                    <span>Open in Drive</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Download className="w-3.5 h-3.5" />
+                                    <span>Download</span>
+                                  </>
+                                )}
                               </button>
                             </>
                           ) : (
@@ -364,8 +375,17 @@ export const ProductDetailsView: React.FC<ProductDetailsViewProps> = ({
                       onClick={() => handleDownloadPdf()}
                       className="w-full py-4 px-6 rounded-2xl bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-sm shadow-lg shadow-emerald-900/20 flex items-center justify-center space-x-2 transition-all cursor-pointer"
                     >
-                      <Download className="w-5 h-5" />
-                      <span>Download PDF Notes</span>
+                      {isAndroidApp ? (
+                        <>
+                          <ExternalLink className="w-5 h-5" />
+                          <span>Open in Drive</span>
+                        </>
+                      ) : (
+                        <>
+                          <Download className="w-5 h-5" />
+                          <span>Download PDF Notes</span>
+                        </>
+                      )}
                     </button>
                   ) : (
                     <button

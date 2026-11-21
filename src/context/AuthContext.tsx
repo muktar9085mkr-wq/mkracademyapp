@@ -10,12 +10,20 @@ import {
   signInWithRedirect,
   getRedirectResult,
   GoogleAuthProvider,
+  OAuthProvider,
+  signInWithCredential,
   updateProfile as updateFirebaseProfile
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { auth, db, ADMIN_EMAIL, testConnection } from '../firebase/config';
 import { UserProfile } from '../types';
 import { recordUserSession } from '../services/sessionService';
+import {
+  isAndroidWebViewApp,
+  hasNativeGoogleSignInBridge,
+  requestNativeAndroidGoogleSignIn,
+  clearNativeAndroidGoogleSession
+} from '../services/androidBridge';
 
 interface AuthContextType {
   user: User | null;
@@ -219,6 +227,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setLoading(true);
     setAuthError(null);
     try {
+      // MKR Academy Android APK: Use native Android Credential Manager Google Account Picker
+      if (isAndroidWebViewApp()) {
+        if (!hasNativeGoogleSignInBridge()) {
+          throw new Error(
+            'Native Google Account picker requires the updated MKR Academy Android App. Please update the app or sign in using email and password.'
+          );
+        }
+
+        const nativeResult = await requestNativeAndroidGoogleSignIn();
+        const credential = nativeResult.rawNonce
+          ? new OAuthProvider('google.com').credential({
+              idToken: nativeResult.idToken,
+              rawNonce: nativeResult.rawNonce
+            })
+          : GoogleAuthProvider.credential(nativeResult.idToken);
+
+        const res = await signInWithCredential(auth, credential);
+        if (res && res.user) {
+          setUser(res.user);
+          await syncProfile(res.user);
+        }
+        return;
+      }
+
+      // Website (Desktop & Mobile Browsers): Preserve standard Firebase Web Google Sign-In
       const provider = new GoogleAuthProvider();
       provider.addScope('email');
       provider.addScope('profile');
@@ -266,6 +299,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setLoading(true);
     try {
       await signOut(auth);
+      if (isAndroidWebViewApp()) {
+        clearNativeAndroidGoogleSession();
+      }
       setUser(null);
       setProfile(null);
       setIsAdmin(false);
@@ -363,6 +399,12 @@ function getFriendlyErrorMessage(code?: string, fallbackMessage?: string): strin
       return 'Google Sign-In is not enabled in Firebase Console. Please enable the Google provider in Firebase Console > Authentication > Sign-in method.';
     case 'auth/account-exists-with-different-credential':
       return 'An account already exists with the same email address using a different sign-in method.';
+    case 'CANCELLED':
+      return 'Google sign-in was cancelled. Please select a Google account to continue.';
+    case 'NO_CREDENTIAL':
+      return 'No Google account found on this device. Please add a Gmail account in Android Settings and try again.';
+    case 'NETWORK_ERROR':
+      return 'Network connection error. Please check your internet connection and try again.';
     case 'auth/network-request-failed':
       return 'Network connection error. Please check your internet connection and try again.';
     default:

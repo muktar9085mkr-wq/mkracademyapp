@@ -409,7 +409,8 @@ function AppContent() {
 
   // 4. Direct Product Deep-linking (/product/:id or /checkout/:id)
   useEffect(() => {
-    if (products.length === 0) return;
+    const allItems = [...products, ...freeNotes];
+    if (allItems.length === 0) return;
 
     const urlParams = new URLSearchParams(window.location.search);
     const queryProductId = urlParams.get('product') || urlParams.get('id');
@@ -421,23 +422,25 @@ function AppContent() {
     const targetProductId = queryProductId || (productMatch ? productMatch[1] : null);
 
     if (targetCheckoutId) {
-      const found = products.find((p) => p.id === targetCheckoutId);
+      const found = allItems.find((p) => p.id === targetCheckoutId);
       if (found) {
+        setUnavailableProductNotice(null);
         setCheckoutProduct(found);
         setCurrentView('checkout');
-      } else {
+      } else if (!loading) {
         setUnavailableProductNotice('The requested study material for checkout is currently unavailable.');
       }
     } else if (targetProductId) {
-      const found = products.find((p) => p.id === targetProductId);
+      const found = allItems.find((p) => p.id === targetProductId);
       if (found) {
+        setUnavailableProductNotice(null);
         setSelectedProduct(found);
         setCurrentView('product-details');
-      } else {
+      } else if (!loading) {
         setUnavailableProductNotice('The requested study material is currently unavailable or has been archived.');
       }
     }
-  }, [products]);
+  }, [products, freeNotes, loading]);
 
   // 5. Dynamic Page Title
   useEffect(() => {

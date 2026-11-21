@@ -27,6 +27,7 @@ import {
   sanitizeAmountPaise
 } from './sanitize';
 import { getLatestYouTubeFeed } from './youtubeMedia';
+import { renderProductPageHtml } from './ogMetadata';
 
 dotenv.config();
 
@@ -1199,8 +1200,33 @@ export function createApiApp() {
     }
   });
 
-  // Mount router at both /api and root /
+  /**
+   * Public Server-Rendered Product Page HTML with Dynamic Open Graph & Twitter Card Metadata
+   * Serves initial HTML with product title, description, cover thumbnail, URL, site_name, and price
+   * so WhatsApp, Facebook, Telegram, and X crawlers display rich link previews.
+   */
+  const handleProductOgPage = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const rawId =
+        req.params.id ||
+        (typeof req.query.product === 'string' ? req.query.product : '') ||
+        (typeof req.query.id === 'string' ? req.query.id : '');
+      const html = await renderProductPageHtml(rawId, req);
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.setHeader('Cache-Control', 'public, max-age=300, stale-while-revalidate=600');
+      res.status(200).send(html);
+    } catch (err) {
+      console.error('Error rendering product OG HTML:', err);
+      res.status(500).send('Unable to render product page');
+    }
+  };
+
+  router.get('/og/product/:id', handleProductOgPage);
+  router.get('/og/product', handleProductOgPage);
+
+  // Mount router at /api, Netlify function base path, and root /
   app.use('/api', router);
+  app.use('/.netlify/functions/api', router);
   app.use('/', router);
 
   // Global Production Error Handler (Requirement 10: Disable Debug Mode)

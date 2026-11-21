@@ -31,6 +31,7 @@ import {
   recordFailedOrder,
   fulfillVerifiedPurchase
 } from '../../services/orderService';
+import { isAndroidWebViewApp, openExternalDriveInAndroid } from '../../services/downloadService';
 
 declare global {
   interface Window {
@@ -385,15 +386,26 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2 max-w-md mx-auto">
               {completedPurchase.driveFileLink && (
-                <a
-                  href={completedPurchase.driveFileLink}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-red-700 hover:bg-red-800 text-white font-extrabold text-xs shadow-md flex items-center justify-center space-x-2 transition-all cursor-pointer"
-                >
-                  <Download className="w-4 h-4" />
-                  <span>Download Notes Now</span>
-                </a>
+                isAndroidWebViewApp() ? (
+                  <button
+                    type="button"
+                    onClick={() => openExternalDriveInAndroid(completedPurchase.driveFileLink)}
+                    className="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-red-700 hover:bg-red-800 text-white font-extrabold text-xs shadow-md flex items-center justify-center space-x-2 transition-all cursor-pointer"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                    <span>Open in Drive</span>
+                  </button>
+                ) : (
+                  <a
+                    href={completedPurchase.driveFileLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-red-700 hover:bg-red-800 text-white font-extrabold text-xs shadow-md flex items-center justify-center space-x-2 transition-all cursor-pointer"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>Download Notes Now</span>
+                  </a>
+                )
               )}
               <button
                 type="button"

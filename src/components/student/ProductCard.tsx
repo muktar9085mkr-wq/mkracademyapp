@@ -11,7 +11,7 @@ import {
   Check
 } from 'lucide-react';
 import { Product } from '../../types';
-import { shareOrCopyProduct } from '../../services/downloadService';
+import { shareOrCopyProduct, isAndroidWebViewApp } from '../../services/downloadService';
 
 interface ProductCardProps {
   product: Product;
@@ -29,6 +29,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   onDownloadNotes
 }) => {
   const [copied, setCopied] = useState(false);
+  const isAndroidApp = isAndroidWebViewApp();
 
   const originalPrice = (product.originalPricePaise || 0) / 100;
   const sellingPrice = (product.sellingPricePaise || 0) / 100;
@@ -217,19 +218,37 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             <button
               onClick={() => (onDownloadNotes ? onDownloadNotes(product) : onViewDetails(product))}
               className="w-full py-2.5 px-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center justify-center space-x-1.5 shadow-sm transition-colors cursor-pointer"
-              title="Download or open purchased note"
+              title={isAndroidApp ? 'Open in Drive' : 'Download or open purchased note'}
             >
-              <Download className="w-3.5 h-3.5" />
-              <span>Download</span>
+              {isAndroidApp ? (
+                <>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Open in Drive</span>
+                </>
+              ) : (
+                <>
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Download</span>
+                </>
+              )}
             </button>
           ) : isFree ? (
             <button
               onClick={() => (onDownloadNotes ? onDownloadNotes(product) : onViewDetails(product))}
               className="w-full py-2.5 px-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center justify-center space-x-1.5 shadow-md shadow-emerald-800/20 transition-all cursor-pointer"
-              title="Get free PDF note"
+              title={isAndroidApp ? 'Open in Drive' : 'Get free PDF note'}
             >
-              <Download className="w-3.5 h-3.5" />
-              <span>Get Free PDF</span>
+              {isAndroidApp ? (
+                <>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Open in Drive</span>
+                </>
+              ) : (
+                <>
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Get Free PDF</span>
+                </>
+              )}
             </button>
           ) : (
             <button

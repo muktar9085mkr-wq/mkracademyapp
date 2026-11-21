@@ -3,6 +3,9 @@
   publish = "dist"
   functions = "netlify/functions"
 
+[functions]
+  included_files = ["dist/index.html"]
+
 [build.environment]
   NODE_VERSION = "20"
   NETLIFY_FEEDBACK_DRAWER = "false"
@@ -13,6 +16,19 @@
   from = "/api/*"
   to = "/.netlify/functions/api/:splat"
   status = 200
+
+# Route product share links through Netlify Functions for initial HTML Open Graph & Twitter Cards
+[[redirects]]
+  from = "/product/*"
+  to = "/.netlify/functions/api/og/product/:splat"
+  status = 200
+
+[[redirects]]
+  from = "/"
+  query = { product = ":id" }
+  to = "/.netlify/functions/api/og/product/:id"
+  status = 200
+  force = true
 
 # Route all other URLs to index.html for SPA client-side routing
 [[redirects]]

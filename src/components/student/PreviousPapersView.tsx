@@ -21,11 +21,13 @@ import {
   MessageCircle,
   HelpCircle,
   Clock,
-  Layers
+  Layers,
+  ExternalLink
 } from 'lucide-react';
 import { Product, AppPublicSettings, Purchase } from '../../types';
 import { isPYQProduct, getPYQExamCategory, getPYQYear, PYQExamCategory } from '../../services/productService';
 import { useAuth } from '../../context/AuthContext';
+import { isAndroidWebViewApp } from '../../services/downloadService';
 
 interface PreviousPapersViewProps {
   products: Product[];
@@ -668,8 +670,17 @@ export const PreviousPapersView: React.FC<PreviousPapersViewProps> = ({
                             onClick={() => onDownloadNotes(paper)}
                             className="py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition-colors flex items-center justify-center space-x-1.5 cursor-pointer"
                           >
-                            <Download className="w-3.5 h-3.5" />
-                            <span>Download PDF</span>
+                            {isAndroidWebViewApp() ? (
+                              <>
+                                <ExternalLink className="w-3.5 h-3.5" />
+                                <span>Open in Drive</span>
+                              </>
+                            ) : (
+                              <>
+                                <Download className="w-3.5 h-3.5" />
+                                <span>Download PDF</span>
+                              </>
+                            )}
                           </button>
                         ) : (
                           <button

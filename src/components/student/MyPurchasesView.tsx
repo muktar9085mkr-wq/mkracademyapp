@@ -21,6 +21,7 @@ import { getUserPurchases, subscribeToUserPurchases } from '../../services/order
 import { getProductPdfList, subscribeToPublishedProducts } from '../../services/productService';
 import { formatSafeDate } from '../../services/settingsService';
 import { useAuth } from '../../context/AuthContext';
+import { isAndroidWebViewApp, openExternalDriveInAndroid } from '../../services/downloadService';
 
 interface MyPurchasesViewProps {
   onBrowseNotes: () => void;
@@ -54,6 +55,7 @@ export const MyPurchasesView: React.FC<MyPurchasesViewProps> = ({
   onSelectReaderPurchase
 }) => {
   const { user } = useAuth();
+  const isAndroidApp = isAndroidWebViewApp();
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [productsMap, setProductsMap] = useState<Map<string, Product>>(new Map());
   const [loading, setLoading] = useState<boolean>(true);
@@ -162,26 +164,39 @@ export const MyPurchasesView: React.FC<MyPurchasesViewProps> = ({
           </div>
 
           <div className="flex items-center space-x-2 shrink-0">
-            {targetDriveUrl && (
-              <a
-                href={targetDriveUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hidden sm:inline-flex px-3.5 py-1.5 bg-blue-700 hover:bg-blue-600 text-white rounded-xl text-xs font-semibold items-center space-x-1.5 transition-colors"
+            {isAndroidApp ? (
+              <button
+                type="button"
+                onClick={() => openExternalDriveInAndroid(targetDriveUrl)}
+                className="px-4 py-2 bg-red-700 hover:bg-red-800 text-white rounded-xl text-xs font-bold flex items-center space-x-1.5 shadow-xs transition-colors cursor-pointer"
               >
-                <ExternalLink className="w-3.5 h-3.5" />
-                <span>Google Drive</span>
-              </a>
+                <ExternalLink className="w-4 h-4" />
+                <span>Open in Drive</span>
+              </button>
+            ) : (
+              <>
+                {targetDriveUrl && (
+                  <a
+                    href={targetDriveUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="hidden sm:inline-flex px-3.5 py-1.5 bg-blue-700 hover:bg-blue-600 text-white rounded-xl text-xs font-semibold items-center space-x-1.5 transition-colors"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>Google Drive</span>
+                  </a>
+                )}
+                <a
+                  href={currentDownloadUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-4 py-2 bg-red-700 hover:bg-red-800 text-white rounded-xl text-xs font-bold flex items-center space-x-1.5 shadow-xs transition-colors"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Download PDF</span>
+                </a>
+              </>
             )}
-            <a
-              href={currentDownloadUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="px-4 py-2 bg-red-700 hover:bg-red-800 text-white rounded-xl text-xs font-bold flex items-center space-x-1.5 shadow-xs transition-colors"
-            >
-              <Download className="w-4 h-4" />
-              <span>Download PDF</span>
-            </a>
           </div>
         </div>
 
@@ -249,26 +264,39 @@ export const MyPurchasesView: React.FC<MyPurchasesViewProps> = ({
                 </p>
 
                 <div className="pt-2 flex flex-col sm:flex-row gap-3 justify-center">
-                  {targetDriveUrl && (
-                    <a
-                      href={targetDriveUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center justify-center space-x-2 px-6 py-3 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs shadow-md transition-all"
+                  {isAndroidApp ? (
+                    <button
+                      type="button"
+                      onClick={() => openExternalDriveInAndroid(targetDriveUrl)}
+                      className="inline-flex items-center justify-center space-x-2 px-6 py-3 rounded-xl bg-red-700 hover:bg-red-800 text-white font-bold text-xs shadow-md transition-all cursor-pointer"
                     >
                       <ExternalLink className="w-4 h-4" />
-                      <span>Open in Google Drive</span>
-                    </a>
+                      <span>Open in Drive</span>
+                    </button>
+                  ) : (
+                    <>
+                      {targetDriveUrl && (
+                        <a
+                          href={targetDriveUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center justify-center space-x-2 px-6 py-3 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs shadow-md transition-all"
+                        >
+                          <ExternalLink className="w-4 h-4" />
+                          <span>Open in Google Drive</span>
+                        </a>
+                      )}
+                      <a
+                        href={currentDownloadUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center justify-center space-x-2 px-6 py-3 rounded-xl bg-red-700 hover:bg-red-800 text-white font-bold text-xs shadow-md transition-all"
+                      >
+                        <Download className="w-4 h-4" />
+                        <span>Download PDF File</span>
+                      </a>
+                    </>
                   )}
-                  <a
-                    href={currentDownloadUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center justify-center space-x-2 px-6 py-3 rounded-xl bg-red-700 hover:bg-red-800 text-white font-bold text-xs shadow-md transition-all"
-                  >
-                    <Download className="w-4 h-4" />
-                    <span>Download PDF File</span>
-                  </a>
                 </div>
               </div>
             </div>
@@ -467,16 +495,28 @@ export const MyPurchasesView: React.FC<MyPurchasesViewProps> = ({
                                   >
                                     Read
                                   </button>
-                                  <a
-                                    href={downloadUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="px-2 py-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-[10px] font-bold flex items-center space-x-1"
-                                    title="Download PDF"
-                                  >
-                                    <Download className="w-3 h-3" />
-                                    <span>PDF</span>
-                                  </a>
+                                  {isAndroidApp ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => openExternalDriveInAndroid(pdf.driveUrl)}
+                                      className="px-2 py-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-[10px] font-bold flex items-center space-x-1 cursor-pointer"
+                                      title="Open in Drive"
+                                    >
+                                      <ExternalLink className="w-3 h-3" />
+                                      <span>Open in Drive</span>
+                                    </button>
+                                  ) : (
+                                    <a
+                                      href={downloadUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="px-2 py-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-[10px] font-bold flex items-center space-x-1"
+                                      title="Download PDF"
+                                    >
+                                      <Download className="w-3 h-3" />
+                                      <span>PDF</span>
+                                    </a>
+                                  )}
                                 </div>
                               </div>
                             );
@@ -489,7 +529,7 @@ export const MyPurchasesView: React.FC<MyPurchasesViewProps> = ({
 
                 {/* Primary Card Actions */}
                 <div className="p-4 sm:p-5 pt-0 border-t border-stone-100 space-y-2 mt-2">
-                  {primaryDriveLink ? (
+                  {!isAndroidApp && primaryDriveLink ? (
                     <a
                       href={primaryDriveLink}
                       target="_blank"
@@ -511,16 +551,27 @@ export const MyPurchasesView: React.FC<MyPurchasesViewProps> = ({
                       <span>Read Online</span>
                     </button>
 
-                    {/* PDF Download Direct */}
-                    <a
-                      href={primaryDriveLink ? (getGoogleDriveDownloadUrl(primaryDriveLink) || primaryDriveLink) : `https://drive.google.com`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="w-full py-2.5 px-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center justify-center space-x-1.5 shadow-md shadow-emerald-800/20 transition-all cursor-pointer text-center"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                      <span>Download Drive</span>
-                    </a>
+                    {/* PDF Download Direct (Web) or Open in Drive (Android APK) */}
+                    {isAndroidApp ? (
+                      <button
+                        type="button"
+                        onClick={() => openExternalDriveInAndroid(primaryDriveLink)}
+                        className="w-full py-2.5 px-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center justify-center space-x-1.5 shadow-md shadow-emerald-800/20 transition-all cursor-pointer text-center"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                        <span>Open in Drive</span>
+                      </button>
+                    ) : (
+                      <a
+                        href={primaryDriveLink ? (getGoogleDriveDownloadUrl(primaryDriveLink) || primaryDriveLink) : `https://drive.google.com`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full py-2.5 px-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center justify-center space-x-1.5 shadow-md shadow-emerald-800/20 transition-all cursor-pointer text-center"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        <span>Download Drive</span>
+                      </a>
+                    )}
                   </div>
                 </div>
               </div>

@@ -24,7 +24,8 @@ import {
   storePendingDownload,
   triggerFileDownload,
   openPdfPreview,
-  recordDownloadEvent
+  recordDownloadEvent,
+  isAndroidWebViewApp
 } from '../../services/downloadService';
 
 interface ProductDetailsModalProps {
@@ -45,6 +46,7 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
   onRequireAuth
 }) => {
   const { user } = useAuth();
+  const isAndroidApp = isAndroidWebViewApp();
   const [copied, setCopied] = useState<boolean>(false);
 
   if (!product) return null;
@@ -258,10 +260,19 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
                               type="button"
                               onClick={() => handleDownloadPdf(pdf)}
                               className="px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center space-x-1 shadow-xs transition-colors cursor-pointer"
-                              title="Download PDF directly"
+                              title={isAndroidApp ? 'Open in Drive' : 'Download PDF directly'}
                             >
-                              <Download className="w-3.5 h-3.5" />
-                              <span>Download PDF</span>
+                              {isAndroidApp ? (
+                                <>
+                                  <ExternalLink className="w-3.5 h-3.5" />
+                                  <span>Open in Drive</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Download className="w-3.5 h-3.5" />
+                                  <span>Download PDF</span>
+                                </>
+                              )}
                             </button>
                           </>
                         ) : (
@@ -389,8 +400,17 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
                 onClick={() => handleDownloadPdf()}
                 className="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-sm flex items-center justify-center space-x-2 shadow-md cursor-pointer transition-all"
               >
-                <Download className="w-4 h-4" />
-                <span>Download Note (Purchased)</span>
+                {isAndroidApp ? (
+                  <>
+                    <ExternalLink className="w-4 h-4" />
+                    <span>Open in Drive</span>
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-4 h-4" />
+                    <span>Download Note (Purchased)</span>
+                  </>
+                )}
               </button>
             ) : isFree ? (
               <button
@@ -398,8 +418,17 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
                 onClick={() => handleDownloadPdf()}
                 className="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-sm flex items-center justify-center space-x-2 shadow-lg shadow-emerald-800/20 hover:shadow-xl transition-all cursor-pointer"
               >
-                <Download className="w-4 h-4" />
-                <span>{user ? 'Download Free PDF' : 'Sign Up to Download Free PDF'}</span>
+                {isAndroidApp && user ? (
+                  <>
+                    <ExternalLink className="w-4 h-4" />
+                    <span>Open in Drive</span>
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-4 h-4" />
+                    <span>{user ? 'Download Free PDF' : 'Sign Up to Download Free PDF'}</span>
+                  </>
+                )}
               </button>
             ) : (
               <button

@@ -14,6 +14,7 @@ import {
   FlaskConical,
   Globe,
   PenTool,
+  ExternalLink,
   LucideIcon
 } from 'lucide-react';
 import { Product } from '../../types';
@@ -27,7 +28,8 @@ import {
   shareOrCopyProduct,
   storePendingDownload,
   triggerFileDownload,
-  recordDownloadEvent
+  recordDownloadEvent,
+  isAndroidWebViewApp
 } from '../../services/downloadService';
 
 interface FreePdfsViewProps {
@@ -61,6 +63,7 @@ export const FreePdfsView: React.FC<FreePdfsViewProps> = ({
   onRequireAuth
 }) => {
   const { user } = useAuth();
+  const isAndroidApp = isAndroidWebViewApp();
   const [authNotice, setAuthNotice] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
@@ -217,8 +220,17 @@ export const FreePdfsView: React.FC<FreePdfsViewProps> = ({
               onClick={() => handleDownload(previewPdf)}
               className="px-4 py-2 bg-red-700 hover:bg-red-800 text-white rounded-xl text-xs font-bold flex items-center space-x-1.5 shadow-xs transition-colors cursor-pointer shrink-0"
             >
-              <Download className="w-4 h-4" />
-              <span>Download</span>
+              {isAndroidApp ? (
+                <>
+                  <ExternalLink className="w-4 h-4" />
+                  <span>Open in Drive</span>
+                </>
+              ) : (
+                <>
+                  <Download className="w-4 h-4" />
+                  <span>Download</span>
+                </>
+              )}
             </button>
           )}
         </div>
@@ -495,10 +507,19 @@ export const FreePdfsView: React.FC<FreePdfsViewProps> = ({
                           type="button"
                           onClick={() => handleDownload(product)}
                           className="col-span-2 py-2.5 px-2 rounded-xl bg-red-700 hover:bg-red-800 text-white font-bold text-xs flex items-center justify-center space-x-1 shadow-xs transition-colors cursor-pointer"
-                          title="Download PDF"
+                          title={isAndroidApp ? 'Open in Drive' : 'Download PDF'}
                         >
-                          <Download className="w-3.5 h-3.5" />
-                          <span>Download</span>
+                          {isAndroidApp ? (
+                            <>
+                              <ExternalLink className="w-3.5 h-3.5" />
+                              <span>Open in Drive</span>
+                            </>
+                          ) : (
+                            <>
+                              <Download className="w-3.5 h-3.5" />
+                              <span>Download</span>
+                            </>
+                          )}
                         </button>
 
                         <button
