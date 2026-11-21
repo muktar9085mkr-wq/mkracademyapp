@@ -26,6 +26,7 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { Order } from '../../types';
 import { getUserOrders, subscribeToUserOrders } from '../../services/orderService';
+import { formatSafeDate } from '../../services/settingsService';
 import { PolicyType } from '../common/PolicyModal';
 
 interface StudentProfileViewProps {
@@ -431,13 +432,13 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
                         )}
                       </div>
                       <p className="text-[11px] text-stone-500 font-mono">
-                        Order #{ord.id} • {new Date(ord.createdAt).toLocaleDateString('en-IN', { dateStyle: 'medium' })}
+                        Order #{ord.id} • {formatSafeDate(ord.createdAt, { dateStyle: 'medium' }, 'Recent')}
                       </p>
                     </div>
 
                     <div className="flex items-center space-x-3 shrink-0">
                       <span className="font-black text-stone-900 font-sans text-sm">
-                        ₹{ord.amountPaise / 100}
+                        ₹{(ord.amountPaise || 0) / 100}
                       </span>
                       <button
                         type="button"

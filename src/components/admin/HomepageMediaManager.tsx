@@ -29,6 +29,7 @@ import {
   YouTubeFeedVideo,
   HomepageCarouselSlide
 } from '../../types';
+import { formatSafeDate } from '../../services/settingsService';
 import {
   subscribeToAllHomepageMediaAdmin,
   subscribeToYoutubeFeedCache,
@@ -693,7 +694,7 @@ export const HomepageMediaManager: React.FC = () => {
                       {v.title}
                     </p>
                     <p className="text-[10px] text-stone-500 mt-1">
-                      {new Date(v.publishedAt).toLocaleDateString('en-IN')}
+                      {formatSafeDate(v.publishedAt, undefined, 'Latest upload')}
                     </p>
                   </div>
                 </div>

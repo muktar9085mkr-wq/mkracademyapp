@@ -30,8 +30,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({
 }) => {
   const [copied, setCopied] = useState(false);
 
-  const originalPrice = product.originalPricePaise / 100;
-  const sellingPrice = product.sellingPricePaise / 100;
+  const originalPrice = (product.originalPricePaise || 0) / 100;
+  const sellingPrice = (product.sellingPricePaise || 0) / 100;
   
   // Real mathematical discount percentage calculation
   const discountPercent =

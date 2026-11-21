@@ -539,8 +539,8 @@ export const PreviousPapersView: React.FC<PreviousPapersViewProps> = ({
                 const isPurchased = purchasedProductIds.has(paper.id);
                 const year = getPYQYear(paper);
                 const category = getPYQExamCategory(paper);
-                const priceRs = Math.round((paper.sellingPricePaise || 4900) / 100);
-                const originalPriceRs = Math.round((paper.originalPricePaise || 9900) / 100);
+                const priceRs = Math.round((paper.sellingPricePaise ?? 4900) / 100);
+                const originalPriceRs = Math.round((paper.originalPricePaise ?? 9900) / 100);
                 const discount = originalPriceRs > priceRs ? Math.round(((originalPriceRs - priceRs) / originalPriceRs) * 100) : 0;
 
                 return (

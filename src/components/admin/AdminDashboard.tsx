@@ -92,7 +92,8 @@ import {
   getPublicSettings,
   updatePublicSettings,
   computeEffectiveDaysLeft,
-  DEFAULT_COUNTDOWN_TARGET_DATE
+  DEFAULT_COUNTDOWN_TARGET_DATE,
+  formatSafeDate
 } from '../../services/settingsService';
 import {
   getRecentAdminActivityLogs,
@@ -318,6 +319,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
   const [socialPhoneEnabled, setSocialPhoneEnabled] = useState(true);
   const [socialSaving, setSocialSaving] = useState(false);
   const [socialMessage, setSocialMessage] = useState<string | null>(null);
+
+  // Global Admin Toast & Confirmation Dialog (No browser alert/confirm)
+  const [adminFeedback, setAdminFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [adminConfirmModal, setAdminConfirmModal] = useState<{
+    title: string;
+    message: string;
+    confirmLabel?: string;
+    variant?: 'danger' | 'primary';
+    onConfirm: () => Promise<void> | void;
+  } | null>(null);
+  const [adminConfirmBusy, setAdminConfirmBusy] = useState(false);
+
+  const showAdminFeedback = (type: 'success' | 'error', message: string) => {
+    setAdminFeedback({ type, message });
+    setTimeout(() => {
+      setAdminFeedback((prev) => (prev?.message === message ? null : prev));
+    }, 5000);
+  };
 
   // Search in tables
   const [productSearch, setProductSearch] = useState('');
@@ -696,8 +715,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
   // Open Quick Price Editor (Paise & Rupees)
   const openQuickPriceEdit = (p: Product) => {
     setQuickPriceModalProduct(p);
-    setQuickSellingPrice(p.sellingPricePaise / 100);
-    setQuickOriginalPrice(p.originalPricePaise / 100);
+    setQuickSellingPrice((p.sellingPricePaise || 0) / 100);
+    setQuickOriginalPrice((p.originalPricePaise || 0) / 100);
     setQuickPriceMessage(null);
   };
 
@@ -770,13 +789,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
     }
   };
 
-  const handleUpdateOrderStatus = async (orderId: string, newStatus: any) => {
-    if (!window.confirm(`Are you sure you want to change order ${orderId} status to "${newStatus}"?`)) return;
-    try {
-      await updateOrderStatusAdmin(orderId, newStatus);
-    } catch (err: any) {
-      alert(`Could not update order status: ${err.message || err}`);
-    }
+  const handleUpdateOrderStatus = (orderId: string, newStatus: any) => {
+    setAdminConfirmModal({
+      title: 'Update Order Status',
+      message: `Are you sure you want to change order ${orderId} status to "${newStatus}"?`,
+      confirmLabel: `Mark as ${newStatus}`,
+      variant: newStatus === 'failed' || newStatus === 'refunded' ? 'danger' : 'primary',
+      onConfirm: async () => {
+        try {
+          await updateOrderStatusAdmin(orderId, newStatus);
+          showAdminFeedback('success', `Order ${orderId} status updated to "${newStatus}".`);
+        } catch (err: any) {
+          showAdminFeedback('error', `Could not update order status: ${err.message || err}`);
+        }
+      }
+    });
   };
 
   const handleOpenApproveModal = (order: Order) => {
@@ -839,9 +866,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
     setProdPdfFileName(p.pdfFileName || '');
     setProdFileType(p.fileType || 'PDF Document');
     setProdPageCount(p.pageCount || 100);
-    setProdOriginalPrice(p.originalPricePaise / 100);
-    setProdSellingPrice(p.sellingPricePaise / 100);
-    setProdIsFree(p.isFree || p.sellingPricePaise === 0);
+    setProdOriginalPrice((p.originalPricePaise || 0) / 100);
+    setProdSellingPrice((p.sellingPricePaise || 0) / 100);
+    setProdIsFree(Boolean(p.isFree || (p.sellingPricePaise || 0) === 0));
     setProdFeatured(p.featured || false);
     setProdPublished(p.published !== false);
     setFormMessage(null);
@@ -958,28 +985,60 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
     }
   };
 
-  const handleDeleteProduct = async (id: string, title: string) => {
-    if (window.confirm(`Are you sure you want to delete or archive "${title}"? Existing student purchases will remain safely preserved.`)) {
-      try {
-        await deleteProduct(id);
-        const refreshed = await getAllProductsAdmin();
-        setProducts(refreshed);
-        if (onProductsChanged) {
-          onProductsChanged();
+  const handleDeleteProduct = (id: string, title: string) => {
+    setAdminConfirmModal({
+      title: 'Delete / Archive Product',
+      message: `Are you sure you want to delete or archive "${title}"? Existing student purchases will remain safely preserved.`,
+      confirmLabel: 'Delete Product',
+      variant: 'danger',
+      onConfirm: async () => {
+        try {
+          await deleteProduct(id);
+          const refreshed = await getAllProductsAdmin();
+          setProducts(refreshed);
+          if (onProductsChanged) {
+            onProductsChanged();
+          }
+          showAdminFeedback('success', `Product "${title}" has been removed from the catalog.`);
+        } catch (err: any) {
+          showAdminFeedback('error', err.message || 'Failed to delete product');
         }
-      } catch (err: any) {
-        alert(err.message || 'Failed to delete product');
       }
-    }
+    });
   };
 
   const handleTogglePublish = async (p: Product) => {
     try {
       const nextStatus = !p.published;
       await updateProduct(p.id, { published: nextStatus });
-      setProducts(products.map((item) => (item.id === p.id ? { ...item, published: nextStatus } : item)));
+      setProducts((prev) => prev.map((item) => (item.id === p.id ? { ...item, published: nextStatus } : item)));
+      showAdminFeedback('success', `"${p.title}" is now ${nextStatus ? 'Published' : 'Draft / Unpublished'}.`);
     } catch (err: any) {
-      alert(err.message || 'Failed to update publication status');
+      showAdminFeedback('error', err.message || 'Failed to update publication status');
+    }
+  };
+
+  const handleToggleFreeNotePublish = async (note: Product) => {
+    try {
+      const nextStatus = note.published === false;
+      const existsInFreeNotes = note.id.startsWith('freenote_') || freeNotes.some((fn) => fn.id === note.id);
+      if (existsInFreeNotes) {
+        await updateFreeNote(note.id, { published: nextStatus });
+        setFreeNotes((prev) =>
+          prev.map((item) => (item.id === note.id ? { ...item, published: nextStatus } : item))
+        );
+      } else {
+        await updateProduct(note.id, { published: nextStatus });
+      }
+      setProducts((prev) =>
+        prev.map((item) => (item.id === note.id ? { ...item, published: nextStatus } : item))
+      );
+      if (onProductsChanged) {
+        onProductsChanged();
+      }
+      showAdminFeedback('success', `Free Note "${note.title}" set to ${nextStatus ? 'Active (Live)' : 'Inactive (Draft)'}.`);
+    } catch (err: any) {
+      showAdminFeedback('error', err.message || 'Failed to update free note status');
     }
   };
 
@@ -1001,6 +1060,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
 
   const handleOpenEditFreeNote = (note: Product) => {
     setEditingFreeNote(note);
+    setFreeNoteTitle(note.title || '');
     let sub = note.subject || 'Mathematics';
     if (sub === 'General Science') sub = 'Science';
     if (sub === 'Other Subjects') {
@@ -1103,27 +1163,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
     }
   };
 
-  const handleDeleteFreeNote = async (id: string, title: string) => {
-    if (
-      window.confirm(
-        `Are you sure you want to delete the Free Note record for "${title}"?\n\nImportant: The actual uploaded PDF file in Google Drive will remain safe and untouched.`
-      )
-    ) {
-      try {
-        await deleteFreeNote(id);
-        const [refreshed, refreshedFree] = await Promise.all([
-          getAllProductsAdmin(),
-          getFreeNotes()
-        ]);
-        setProducts(refreshed);
-        setFreeNotes(refreshedFree);
-        if (onProductsChanged) {
-          onProductsChanged();
+  const handleDeleteFreeNote = (id: string, title: string) => {
+    setAdminConfirmModal({
+      title: 'Delete Free Note Record',
+      message: `Are you sure you want to delete the Free Note record for "${title}"? The actual uploaded PDF file in Google Drive will remain safe and untouched.`,
+      confirmLabel: 'Delete Free Note',
+      variant: 'danger',
+      onConfirm: async () => {
+        try {
+          await deleteFreeNote(id);
+          const [refreshed, refreshedFree] = await Promise.all([
+            getAllProductsAdmin(),
+            getFreeNotes()
+          ]);
+          setProducts(refreshed);
+          setFreeNotes(refreshedFree);
+          if (onProductsChanged) {
+            onProductsChanged();
+          }
+          showAdminFeedback('success', `Free Note "${title}" deleted safely.`);
+        } catch (err: any) {
+          showAdminFeedback('error', err.message || 'Failed to delete free note');
         }
-      } catch (err: any) {
-        alert(err.message || 'Failed to delete free note');
       }
-    }
+    });
   };
 
   const handleSaveBanner = async (e: React.FormEvent) => {
@@ -1140,9 +1203,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
           destinationUrl: '#notes'
         }
       });
-      alert('Promotional banner updated in real-time for all students!');
+      showAdminFeedback('success', 'Promotional banner updated in real time for all students!');
     } catch (err: any) {
-      alert(err.message || 'Failed to update banner');
+      showAdminFeedback('error', err.message || 'Failed to update banner');
     } finally {
       setBannerSaving(false);
     }
@@ -1239,7 +1302,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
     }
   };
 
-  const freeNotesCount = products.filter((p) => isFreeNote(p)).length;
+  const mergedFreeNotes = React.useMemo(() => {
+    const map = new Map<string, Product>();
+    for (const p of products) {
+      if (isFreeNote(p)) {
+        map.set(p.id, p);
+      }
+    }
+    for (const fn of freeNotes) {
+      map.set(fn.id, fn);
+    }
+    return Array.from(map.values());
+  }, [freeNotes, products]);
+
+  const freeNotesCount = mergedFreeNotes.length;
   const pyqCount = products.filter((p) => isPYQProduct(p)).length;
 
   const TAB_TITLES: Record<AdminTab, string> = {
@@ -1614,6 +1690,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
 
         {/* Main Workspace Container */}
         <main className="flex-1 w-full max-w-[1440px] mx-auto px-3.5 py-4 sm:px-6 sm:py-6 lg:px-8 lg:py-7 min-w-0 space-y-6">
+          {adminFeedback && (
+            <div
+              className={`p-3.5 rounded-2xl border text-xs font-bold flex items-center justify-between gap-3 animate-in fade-in shadow-xs ${
+                adminFeedback.type === 'error'
+                  ? 'bg-rose-50 border-rose-200 text-rose-800'
+                  : 'bg-emerald-50 border-emerald-200 text-emerald-800'
+              }`}
+            >
+              <div className="flex items-center space-x-2">
+                {adminFeedback.type === 'error' ? (
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                ) : (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                )}
+                <span>{adminFeedback.message}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAdminFeedback(null)}
+                className="p-1 rounded-lg hover:bg-black/5 cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
           {/* TAB: REAL-TIME ANALYTICS DASHBOARD */}
           {currentTab === 'dashboard' && (
             <AnalyticsDashboard
@@ -2089,7 +2191,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
                             <p className="text-[10px] text-stone-400 font-mono">+91 {ord.studentPhone}</p>
                           </td>
                           <td className="py-2.5 px-3 max-w-[200px] truncate">{ord.productTitleSnapshot}</td>
-                          <td className="py-2.5 px-3 font-bold text-stone-900">₹{ord.amountPaise / 100}</td>
+                          <td className="py-2.5 px-3 font-bold text-stone-900">₹{(ord.amountPaise || 0) / 100}</td>
                           <td className="py-2.5 px-3">
                             <span
                               className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
@@ -2127,13 +2229,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
 
                 <div className="flex items-center space-x-2">
                   <button
-                    onClick={async () => {
-                      if (window.confirm('Do you want to clean up and remove any remaining example or test products from the database?')) {
-                        const removed = await deleteLegacySampleProductsAdmin();
-                        const refreshed = await getAllProductsAdmin();
-                        setProducts(refreshed);
-                        alert(`Cleaned up ${removed} sample product(s). Catalog is now clean.`);
-                      }
+                    onClick={() => {
+                      setAdminConfirmModal({
+                        title: 'Clear Sample Products',
+                        message: 'Do you want to clean up and remove any remaining example or test products from the database?',
+                        confirmLabel: 'Clear Sample Data',
+                        variant: 'danger',
+                        onConfirm: async () => {
+                          try {
+                            const removed = await deleteLegacySampleProductsAdmin();
+                            const refreshed = await getAllProductsAdmin();
+                            setProducts(refreshed);
+                            if (onProductsChanged) onProductsChanged();
+                            showAdminFeedback('success', `Cleaned up ${removed} sample product(s). Catalog is now clean.`);
+                          } catch (err: any) {
+                            showAdminFeedback('error', err?.message || 'Failed to clean sample products');
+                          }
+                        }
+                      });
                     }}
                     className="px-3 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 font-semibold text-xs rounded-xl flex items-center space-x-1 transition-colors cursor-pointer"
                     title="Remove any sample or example products"
@@ -2278,7 +2391,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
                                   </span>
                                 ) : (
                                   <span className="font-extrabold text-stone-900 text-sm">
-                                    ₹{p.sellingPricePaise / 100}
+                                    ₹{(p.sellingPricePaise || 0) / 100}
                                   </span>
                                 )}
                                 <button
@@ -2291,10 +2404,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
                                 </button>
                               </div>
                               <div className="text-[10px] text-stone-400 font-mono">
-                                <span>{p.sellingPricePaise.toLocaleString()} paise</span>
-                                {p.originalPricePaise > p.sellingPricePaise && (
+                                <span>{(p.sellingPricePaise || 0).toLocaleString()} paise</span>
+                                {(p.originalPricePaise || 0) > (p.sellingPricePaise || 0) && (
                                   <span className="ml-1 text-stone-400 line-through">
-                                    ₹{p.originalPricePaise / 100}
+                                    ₹{(p.originalPricePaise || 0) / 100}
                                   </span>
                                 )}
                               </div>
@@ -3007,7 +3120,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
 
               {/* 5 Subjects Summary Cards */}
               {(() => {
-                const freeSource = freeNotes.length > 0 ? freeNotes : products.filter((p) => isFreeNote(p));
+                const freeSource = mergedFreeNotes;
                 return (
                   <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
                     <button
@@ -3068,7 +3181,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
 
               {/* Free Notes Table */}
               {(() => {
-                const freeSource = freeNotes.length > 0 ? freeNotes : products.filter((p) => isFreeNote(p));
+                const freeSource = mergedFreeNotes;
                 const freeList = freeSource.filter((p) => {
                   if (freeNotesSubjectFilter !== 'all' && !matchFreeNoteSubject(p, freeNotesSubjectFilter)) {
                     return false;
@@ -3180,7 +3293,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
                             <td className="py-3 px-4">
                               <button
                                 type="button"
-                                onClick={() => handleTogglePublish(note)}
+                                onClick={() => handleToggleFreeNotePublish(note)}
                                 className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold cursor-pointer transition-colors ${
                                   note.published !== false
                                     ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
@@ -3250,12 +3363,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
                       </button>
                     </div>
 
-                    {freeNoteMessage && (
-                      <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 font-semibold flex items-center space-x-2">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                        <span>{freeNoteMessage}</span>
-                      </div>
-                    )}
+                    {freeNoteMessage && (() => {
+                      const isErr = /required|failed|error/i.test(freeNoteMessage);
+                      return (
+                        <div
+                          className={`p-3 border rounded-xl text-xs font-semibold flex items-center space-x-2 ${
+                            isErr
+                              ? 'bg-rose-50 border-rose-200 text-rose-800'
+                              : 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                          }`}
+                        >
+                          {isErr ? (
+                            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                          ) : (
+                            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                          )}
+                          <span>{freeNoteMessage}</span>
+                        </div>
+                      );
+                    })()}
 
                     <form onSubmit={handleSaveFreeNote} className="space-y-4 text-xs">
                       {/* Subject Selection (The 5 Core Subjects) */}
@@ -3742,8 +3868,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
                             </button>
                           </div>
                           <p className="text-[10px] text-stone-400">
-                            {new Date(o.createdAt).toLocaleDateString()} at{' '}
-                            {new Date(o.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            {formatSafeDate(o.createdAt, { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }, 'Recent', true)}
                           </p>
                         </div>
 
@@ -3830,8 +3955,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
                           </p>
                           {o.approvedAt && (
                             <p className="text-[10px] text-stone-500 font-mono">
-                              {new Date(o.approvedAt).toLocaleDateString()} at{' '}
-                              {new Date(o.approvedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              {formatSafeDate(o.approvedAt, { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }, 'N/A', true)}
                             </p>
                           )}
                           {o.approvalRemark && (
@@ -4008,7 +4132,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
                                     </p>
                                     {o.approvedAt && (
                                       <p className="text-stone-400 font-mono text-[9px]">
-                                        {new Date(o.approvedAt).toLocaleDateString()} {new Date(o.approvedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                        {formatSafeDate(o.approvedAt, { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }, 'N/A', true)}
                                       </p>
                                     )}
                                     {o.approvalRemark && (
@@ -4045,7 +4169,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
                                   )}
                                   {o.failedAt && (
                                     <p className="text-[9px] text-stone-400 font-mono">
-                                      Failed: {new Date(o.failedAt).toLocaleDateString()}
+                                      Failed: {formatSafeDate(o.failedAt, undefined, 'N/A')}
                                     </p>
                                   )}
                                 </div>
@@ -4057,8 +4181,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
                               )}
                             </td>
                             <td className="py-3 px-4 text-stone-500 text-[11px]">
-                              <p>{new Date(o.createdAt).toLocaleDateString()}</p>
-                              <p className="text-[10px] text-stone-400">{new Date(o.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                              <p>{formatSafeDate(o.createdAt, undefined, 'Recent')}</p>
+                              <p className="text-[10px] text-stone-400">
+                                {formatSafeDate(o.createdAt, { hour: '2-digit', minute: '2-digit' }, '', true)}
+                              </p>
                             </td>
                             <td className="py-3 px-4 text-right">
                               <div className="flex items-center justify-end space-x-1.5">
@@ -4230,12 +4356,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
                                 )}
                                 {ao.failedAt && (
                                   <p className="text-[9px] text-stone-400 font-mono mt-0.5">
-                                    {new Date(ao.failedAt).toLocaleDateString()}
+                                    {formatSafeDate(ao.failedAt, undefined, 'N/A')}
                                   </p>
                                 )}
                               </td>
                               <td className="py-3 px-4 text-stone-500 text-[11px]">
-                                <p>{ao.archivedAt ? new Date(ao.archivedAt).toLocaleDateString() : '30-day policy'}</p>
+                                <p>{formatSafeDate(ao.archivedAt, undefined, '30-day policy')}</p>
                                 <p className="text-[10px] text-stone-400">{ao.archiveReason || 'Cleared after 30 days'}</p>
                               </td>
                               <td className="py-3 px-4 text-right">
@@ -4327,7 +4453,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
                             </span>
                           </td>
                           <td className="py-3 px-4 text-stone-500 text-[11px]">
-                            {s.createdAt ? new Date(s.createdAt).toLocaleDateString() : 'Active'}
+                            {formatSafeDate(s.createdAt, undefined, 'Active')}
                           </td>
                         </tr>
                       ))}
@@ -5655,7 +5781,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
                 <div>
                   <span className="text-stone-500 block">Approval Timestamp:</span>
                   <span className="font-medium text-stone-800 font-mono">
-                    {approvalAuditOrder.approvedAt ? new Date(approvalAuditOrder.approvedAt).toLocaleString() : 'N/A'}
+                    {formatSafeDate(approvalAuditOrder.approvedAt, undefined, 'N/A', true)}
                   </span>
                 </div>
                 <div>
@@ -5682,6 +5808,70 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
                 className="px-4 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
               >
                 Close Audit View
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* In-App Admin Confirmation Modal */}
+      {adminConfirmModal && (
+        <div className="fixed inset-0 z-50 bg-stone-950/70 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-stone-200 space-y-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center space-x-2.5">
+                <div
+                  className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                    adminConfirmModal.variant === 'danger'
+                      ? 'bg-rose-100 text-rose-700'
+                      : 'bg-red-100 text-red-700'
+                  }`}
+                >
+                  <AlertCircle className="w-5 h-5" />
+                </div>
+                <h3 className="font-extrabold text-sm sm:text-base text-stone-900">
+                  {adminConfirmModal.title}
+                </h3>
+              </div>
+              <button
+                type="button"
+                disabled={adminConfirmBusy}
+                onClick={() => setAdminConfirmModal(null)}
+                className="w-7 h-7 rounded-lg text-stone-400 hover:text-stone-700 hover:bg-stone-100 flex items-center justify-center cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+            <p className="text-xs text-stone-600 leading-relaxed">{adminConfirmModal.message}</p>
+            <div className="flex items-center justify-end space-x-2 pt-2 border-t border-stone-100">
+              <button
+                type="button"
+                disabled={adminConfirmBusy}
+                onClick={() => setAdminConfirmModal(null)}
+                className="px-4 py-2 rounded-xl border border-stone-300 text-stone-700 hover:bg-stone-50 text-xs font-bold cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={adminConfirmBusy}
+                onClick={async () => {
+                  setAdminConfirmBusy(true);
+                  try {
+                    await adminConfirmModal.onConfirm();
+                  } finally {
+                    setAdminConfirmBusy(false);
+                    setAdminConfirmModal(null);
+                  }
+                }}
+                className={`px-4 py-2 rounded-xl text-white text-xs font-bold flex items-center space-x-1.5 shadow-sm cursor-pointer ${
+                  adminConfirmModal.variant === 'danger'
+                    ? 'bg-rose-700 hover:bg-rose-800'
+                    : 'bg-red-700 hover:bg-red-800'
+                } disabled:opacity-60`}
+              >
+                {adminConfirmBusy && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                <span>{adminConfirmModal.confirmLabel || 'Confirm'}</span>
               </button>
             </div>
           </div>

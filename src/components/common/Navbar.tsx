@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { AppPublicSettings } from '../../types';
+import { formatWhatsAppDigits } from '../../services/settingsService';
 import { BrandLogo } from './BrandLogo';
 import { PolicyType } from './PolicyModal';
 
@@ -37,6 +38,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   currentView,
   onNavigate,
   onOpenAuth,
+  onOpenPolicy,
   purchaseCount,
   searchQuery,
   onSearchChange,
@@ -49,8 +51,9 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [notificationsOpen, setNotificationsOpen] = useState(false);
 
   const displayMobileNumber =
-    settings?.social?.supportPhone || settings?.social?.whatsapp || '+91 98640 12345';
+    settings?.social?.supportPhone || settings?.social?.whatsapp || '+91 70029 58511';
   const contactNumberClean = displayMobileNumber.replace(/\s+/g, '');
+  const whatsappDigits = formatWhatsAppDigits(settings?.social?.whatsapp || settings?.social?.supportPhone);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -98,7 +101,18 @@ export const Navbar: React.FC<NavbarProps> = ({
         <div className="hidden sm:flex items-center space-x-4 text-[11px] text-stone-300 shrink-0 ml-2">
           <span>Assamese & English Medium</span>
           <span className="text-stone-600">|</span>
-          <a href="#contact" onClick={() => onNavigate('contact')} className="hover:text-white transition-colors">
+          <a
+            href="#contact"
+            onClick={(e) => {
+              e.preventDefault();
+              if (onOpenPolicy) {
+                onOpenPolicy('contact');
+              } else {
+                onNavigate('policy');
+              }
+            }}
+            className="hover:text-white transition-colors"
+          >
             Help & Support
           </a>
         </div>
@@ -562,7 +576,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <span>Call {displayMobileNumber}</span>
                 </a>
                 <a
-                  href={`https://wa.me/${contactNumberClean.replace(/\+/g, '')}`}
+                  href={`https://wa.me/${whatsappDigits}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center space-x-3 px-3 py-2 rounded-lg text-stone-700 hover:bg-stone-100 text-xs font-semibold"

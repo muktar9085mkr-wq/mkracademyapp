@@ -127,7 +127,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           </div>
           <div className="p-2.5 bg-stone-50 rounded-xl border border-stone-200 text-left text-xs space-y-0.5">
             <p className="font-semibold text-stone-900 line-clamp-1">{product.title}</p>
-            <p className="text-stone-500 text-[11px]">Payable: ₹{product.sellingPricePaise / 100}</p>
+            <p className="text-stone-500 text-[11px]">Payable: ₹{(product.sellingPricePaise || 0) / 100}</p>
           </div>
           <div className="grid grid-cols-2 gap-2 pt-1">
             <button
@@ -153,8 +153,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     );
   }
 
-  const originalPrice = product.originalPricePaise / 100;
-  const sellingPrice = product.sellingPricePaise / 100;
+  const originalPrice = (product.originalPricePaise || 0) / 100;
+  const sellingPrice = (product.sellingPricePaise || 0) / 100;
   const discountAmount = originalPrice > sellingPrice ? originalPrice - sellingPrice : 0;
 
   // Step 3: Validate Indian phone number (10-digits compulsory)

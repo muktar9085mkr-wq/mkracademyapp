@@ -46,10 +46,10 @@ export function securityHeadersMiddleware(req: Request, res: Response, next: Nex
   // - AI Studio preview iframe containers
   const cspDirectives = [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://checkout.razorpay.com https://api.razorpay.com https://apis.google.com https://*.firebaseio.com",
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://checkout.razorpay.com https://api.razorpay.com https://apis.google.com https://*.firebaseio.com https://*.firebaseapp.com https://www.gstatic.com https://www.google.com",
     "connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://*.cloudfunctions.net https://api.razorpay.com https://lumberjack.razorpay.com https://identitytoolkit.googleapis.com wss://*.firebaseio.com",
     "img-src 'self' data: blob: https://* http://*",
-    "frame-src 'self' https://api.razorpay.com https://checkout.razorpay.com https://accounts.google.com https://drive.google.com https://*.run.app https://*.aistudio.google.com https://aistudio.google.com",
+    "frame-src 'self' https://api.razorpay.com https://checkout.razorpay.com https://accounts.google.com https://drive.google.com https://docs.google.com https://www.youtube.com https://www.youtube-nocookie.com https://www.google.com https://*.firebaseapp.com https://*.run.app https://*.aistudio.google.com https://aistudio.google.com",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com data:",
     "media-src 'self' data: blob: https://*",

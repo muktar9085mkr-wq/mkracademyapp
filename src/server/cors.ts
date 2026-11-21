@@ -13,6 +13,10 @@ const ALLOWED_ORIGIN_PATTERNS = [
   /^https:\/\/[a-z0-9-]+\.run\.app$/,
   /^https:\/\/[a-z0-9-]+\.aistudio\.google\.com$/,
   /^https:\/\/aistudio\.google\.com$/,
+  // Netlify & Firebase Hosting deployment domains
+  /^https:\/\/[a-z0-9-]+\.netlify\.app$/,
+  /^https:\/\/[a-z0-9-]+\.web\.app$/,
+  /^https:\/\/[a-z0-9-]+\.firebaseapp\.com$/,
   // Local development hosts
   /^http:\/\/localhost(:[0-9]+)?$/,
   /^http:\/\/127\.0\.0\.1(:[0-9]+)?$/,

@@ -19,6 +19,7 @@ import {
 import { Purchase, Product, ProductPdfEntry } from '../../types';
 import { getUserPurchases, subscribeToUserPurchases } from '../../services/orderService';
 import { getProductPdfList, subscribeToPublishedProducts } from '../../services/productService';
+import { formatSafeDate } from '../../services/settingsService';
 import { useAuth } from '../../context/AuthContext';
 
 interface MyPurchasesViewProps {
@@ -345,11 +346,11 @@ export const MyPurchasesView: React.FC<MyPurchasesViewProps> = ({
         /* Purchased Notes Grid (Original clean MKR Academy layout) */
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredPurchases.map((purchase) => {
-            const purchaseDateFormatted = new Date(purchase.purchasedAt).toLocaleDateString('en-IN', {
-              year: 'numeric',
-              month: 'short',
-              day: 'numeric'
-            });
+            const purchaseDateFormatted = formatSafeDate(
+              purchase.purchasedAt,
+              { year: 'numeric', month: 'short', day: 'numeric' },
+              'Recently'
+            );
 
             // Live product data synchronization
             const liveProduct = productsMap.get(purchase.productId);

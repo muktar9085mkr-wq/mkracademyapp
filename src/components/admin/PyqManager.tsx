@@ -187,8 +187,8 @@ export const PyqManager: React.FC<PyqManagerProps> = ({
     setFormTitle(p.title || '');
     setFormShortDesc(p.shortDescription || '');
     setFormDesc(p.description || '');
-    setFormSellingPriceRs(Math.round((p.sellingPricePaise || 4900) / 100));
-    setFormOriginalPriceRs(Math.round((p.originalPricePaise || 9900) / 100));
+    setFormSellingPriceRs(Math.round((p.sellingPricePaise ?? 4900) / 100));
+    setFormOriginalPriceRs(Math.round((p.originalPricePaise ?? 9900) / 100));
     setFormDriveUrl(p.driveFileLink || '');
     setFormCoverImage(p.coverImagePath || DEFAULT_COVER_BY_SUBJECT[p.subject as string] || '');
     setFormPublished(p.published !== false);
@@ -795,8 +795,8 @@ export const PyqManager: React.FC<PyqManagerProps> = ({
             {filteredPyqs.map((paper) => {
               const cat = getPYQExamCategory(paper);
               const yr = getPYQYear(paper);
-              const priceRs = Math.round((paper.sellingPricePaise || 4900) / 100);
-              const originalRs = Math.round((paper.originalPricePaise || 9900) / 100);
+              const priceRs = Math.round((paper.sellingPricePaise ?? 4900) / 100);
+              const originalRs = Math.round((paper.originalPricePaise ?? 9900) / 100);
 
               return (
                 <div

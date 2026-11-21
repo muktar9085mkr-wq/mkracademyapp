@@ -20,6 +20,7 @@ import {
   GraduationCap
 } from 'lucide-react';
 import { SocialLinks } from '../../types';
+import { formatWhatsAppDigits, formatIndianPhoneDisplay } from '../../services/settingsService';
 
 export type PolicyType = 'privacy' | 'terms' | 'refund' | 'copyright' | 'grievance' | 'contact' | 'tax-certin' | 'about' | null;
 
@@ -56,7 +57,8 @@ export const PolicyModal: React.FC<PolicyModalProps> = ({
 
   if (!type) return null;
 
-  const whatsapp = socialLinks?.whatsapp || '919864012345';
+  const whatsapp = formatWhatsAppDigits(socialLinks?.whatsapp);
+  const whatsappDisplay = formatIndianPhoneDisplay(socialLinks?.whatsapp);
   const email = socialLinks?.email || 'muktar9085mkr@gmail.com';
   const telegram = socialLinks?.telegram || 'https://t.me/mkr_academy_official';
 
@@ -557,7 +559,7 @@ export const PolicyModal: React.FC<PolicyModalProps> = ({
                   </div>
                   <div>
                     <span className="text-stone-500 block text-[11px]">Grievance Officer Name:</span>
-                    <strong className="text-stone-900">[Grievance Officer Name / Muktar Hussain, MKR Academy]</strong>
+                    <strong className="text-stone-900">Muktar Hussain, MKR Academy</strong>
                   </div>
                   <div>
                     <span className="text-stone-500 block text-[11px]">Official Grievance Email:</span>
@@ -565,11 +567,11 @@ export const PolicyModal: React.FC<PolicyModalProps> = ({
                   </div>
                   <div>
                     <span className="text-stone-500 block text-[11px]">Phone / WhatsApp Support:</span>
-                    <strong className="text-stone-900">+91 {whatsapp}</strong>
+                    <strong className="text-stone-900">{whatsappDisplay}</strong>
                   </div>
                   <div className="sm:col-span-2">
                     <span className="text-stone-500 block text-[11px]">Official Business & Operating Address:</span>
-                    <strong className="text-stone-800">[Official Business Address: Nagaon / Guwahati, Assam, India • PIN: 781001]</strong>
+                    <strong className="text-stone-800">Nagaon / Guwahati, Assam, India • PIN: 781001</strong>
                   </div>
                   <div>
                     <span className="text-stone-500 block text-[11px]">Statutory Acknowledgment Time:</span>
@@ -789,7 +791,7 @@ export const PolicyModal: React.FC<PolicyModalProps> = ({
                   <MessageCircle className="w-6 h-6 text-emerald-600 shrink-0" />
                   <div>
                     <p className="font-bold text-xs uppercase tracking-wider text-emerald-800">WhatsApp Support</p>
-                    <p className="font-semibold text-sm">+91 {whatsapp}</p>
+                    <p className="font-semibold text-sm">{whatsappDisplay}</p>
                     <p className="text-[11px] text-emerald-700">Instant Chat & Query Response</p>
                   </div>
                 </a>
@@ -823,7 +825,7 @@ export const PolicyModal: React.FC<PolicyModalProps> = ({
 
               <div className="bg-stone-100 p-4 rounded-2xl text-xs text-stone-600 space-y-1">
                 <p className="font-bold text-stone-800">MKR Academy Office & Support Hours:</p>
-                <p>[Official Business Operating Address: Nagaon / Guwahati, Assam, India • PIN: 781001]</p>
+                <p>Nagaon / Guwahati, Assam, India • PIN: 781001</p>
                 <p>Support Hours: 8:00 AM – 9:00 PM (Monday to Sunday, All Days)</p>
               </div>
             </div>

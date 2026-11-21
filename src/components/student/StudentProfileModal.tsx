@@ -23,6 +23,7 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { Order } from '../../types';
 import { getUserOrders, subscribeToUserOrders } from '../../services/orderService';
+import { formatSafeDate } from '../../services/settingsService';
 import { PolicyType } from '../common/PolicyModal';
 
 interface StudentProfileModalProps {
@@ -306,12 +307,12 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
                           {ord.productTitleSnapshot}
                         </p>
                         <p className="text-[10px] text-stone-500 font-mono">
-                          #{ord.id} • {new Date(ord.createdAt).toLocaleDateString()}
+                          #{ord.id} • {formatSafeDate(ord.createdAt, undefined, 'Recent')}
                         </p>
                       </div>
 
                       <div className="text-right shrink-0">
-                        <p className="font-extrabold text-stone-900 text-xs">₹{ord.amountPaise / 100}</p>
+                        <p className="font-extrabold text-stone-900 text-xs">₹{(ord.amountPaise || 0) / 100}</p>
                         {ord.status === 'manually_approved' ? (
                           <span className="inline-flex items-center space-x-1 text-[9px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 uppercase shadow-2xs">
                             <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />

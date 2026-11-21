@@ -13,6 +13,7 @@ import {
   ArrowRight
 } from 'lucide-react';
 import { SocialLinks, AppPublicSettings } from '../../types';
+import { formatWhatsAppDigits } from '../../services/settingsService';
 import { BrandLogo } from './BrandLogo';
 import { PolicyType } from './PolicyModal';
 
@@ -34,7 +35,7 @@ export const Footer: React.FC<FooterProps> = ({
   const currentYear = new Date().getFullYear();
 
   const effectiveSocial = socialLinks || settings?.social;
-  const whatsappNumber = effectiveSocial?.whatsapp || '919864012345';
+  const whatsappNumber = formatWhatsAppDigits(effectiveSocial?.whatsapp);
   const telegramUrl = effectiveSocial?.telegram || 'https://t.me/mkr_academy_official';
   const youtubeUrl = effectiveSocial?.youtube || 'https://youtube.com/@mkr_academy';
   const instagramUrl = effectiveSocial?.instagram || 'https://instagram.com/mkr_academy';

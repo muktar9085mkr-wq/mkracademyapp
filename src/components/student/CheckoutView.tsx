@@ -135,8 +135,8 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
     );
   }
 
-  const sellingPrice = product.sellingPricePaise / 100;
-  const originalPrice = product.originalPricePaise / 100;
+  const sellingPrice = (product.sellingPricePaise || 0) / 100;
+  const originalPrice = (product.originalPricePaise || 0) / 100;
 
   const validatePhone = (p: string) => {
     const cleaned = p.replace(/\D/g, '');
@@ -375,7 +375,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
               </div>
               <div className="flex justify-between">
                 <span className="text-stone-500">Amount Paid:</span>
-                <span className="font-bold text-emerald-700 font-sans text-sm">₹{product.sellingPricePaise / 100}</span>
+                <span className="font-bold text-emerald-700 font-sans text-sm">₹{(product.sellingPricePaise || 0) / 100}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-stone-500">Licensed User:</span>
@@ -487,7 +487,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                     </div>
                     <div className="p-3 bg-white rounded-xl border border-emerald-200 space-y-1">
                       <span className="text-[10px] uppercase font-bold text-stone-500">Amount & Reference</span>
-                      <p className="font-extrabold text-sm text-emerald-800 font-mono">₹{product.sellingPricePaise / 100}</p>
+                      <p className="font-extrabold text-sm text-emerald-800 font-mono">₹{(product.sellingPricePaise || 0) / 100}</p>
                       <p className="text-[10px] text-stone-500 font-mono truncate">Ref: {failedOrderId || 'Pending'}</p>
                     </div>
                   </div>
@@ -495,7 +495,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                   <div className="pt-1">
                     <a
                       href={`https://wa.me/919864012345?text=${encodeURIComponent(
-                        `Hello MKR Academy, I would like to get "${product.title}" (Amount: ₹${product.sellingPricePaise / 100}). My Order ID is ${failedOrderId || 'MKR-' + product.id.slice(0, 8)}. Please assist with activation.`
+                        `Hello MKR Academy, I would like to get "${product.title}" (Amount: ₹${(product.sellingPricePaise || 0) / 100}). My Order ID is ${failedOrderId || 'MKR-' + product.id.slice(0, 8)}. Please assist with activation.`
                       )}`}
                       target="_blank"
                       rel="noopener noreferrer"

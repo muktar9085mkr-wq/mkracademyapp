@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { auth, db } from '../../firebase/config';
 import { collection, getDocs } from 'firebase/firestore';
+import { formatSafeDate } from '../../services/settingsService';
 
 interface PdfItemStat {
   id: string;
@@ -98,14 +99,16 @@ export const PdfDownloadAnalytics: React.FC = () => {
 
       // Strategy 1: Direct client-side Firestore query using the admin's active authenticated session
       try {
-        const [prodSnap, usersSnap, eventsSnap] = await Promise.all([
+        const [prodSnap, freeSnap, usersSnap, eventsSnap] = await Promise.all([
           getDocs(collection(db, 'products')),
+          getDocs(collection(db, 'freeNotes')).catch(() => ({ forEach: () => {} } as any)),
           getDocs(collection(db, 'users')).catch(() => ({ size: 0, forEach: () => {} } as any)),
           getDocs(collection(db, 'download_events')).catch(() => ({ size: 0, forEach: () => {} } as any))
         ]);
 
         const productsMap = new Map<string, any>();
         prodSnap.forEach((d) => productsMap.set(d.id, { id: d.id, ...d.data() }));
+        freeSnap.forEach((d: any) => productsMap.set(d.id, { id: d.id, ...d.data(), isFree: true, sellingPricePaise: 0 }));
 
         const totalRegisteredStudents = usersSnap?.size || 0;
         const events: any[] = [];
@@ -652,12 +655,16 @@ export const PdfDownloadAnalytics: React.FC = () => {
               <tbody className="divide-y divide-stone-100 font-medium text-stone-700">
                 {filteredProducts.map((p) => {
                   const lastDownFormatted = p.lastDownloadedAt
-                    ? new Date(p.lastDownloadedAt).toLocaleDateString('en-IN', {
-                        month: 'short',
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })
+                    ? formatSafeDate(
+                        p.lastDownloadedAt,
+                        {
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        },
+                        'Never'
+                      )
                     : 'Never';
 
                   return (
@@ -767,12 +774,17 @@ export const PdfDownloadAnalytics: React.FC = () => {
                       <span>{ev.device || 'Web'}</span>
                     </td>
                     <td className="py-2 px-4 text-right text-stone-500 text-[11px] whitespace-nowrap">
-                      {new Date(ev.downloadedAt).toLocaleString('en-IN', {
-                        month: 'short',
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })}
+                      {formatSafeDate(
+                        ev.downloadedAt,
+                        {
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        },
+                        'N/A',
+                        true
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -879,7 +891,7 @@ export const PdfDownloadAnalytics: React.FC = () => {
                           <div className="text-[10px] text-stone-500">{ev.pdfName}</div>
                         </div>
                         <div className="text-right text-[10px] text-stone-400">
-                          <div>{new Date(ev.downloadedAt).toLocaleString('en-IN')}</div>
+                          <div>{formatSafeDate(ev.downloadedAt, undefined, 'N/A', true)}</div>
                           <span className="font-semibold text-stone-600">{ev.device}</span>
                         </div>
                       </div>

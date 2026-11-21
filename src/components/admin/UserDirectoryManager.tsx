@@ -59,6 +59,7 @@ export const UserDirectoryManager: React.FC<UserDirectoryManagerProps> = ({ sess
   const [statusReason, setStatusReason] = useState('');
   const [statusUpdating, setStatusUpdating] = useState(false);
   const [statusFeedback, setStatusFeedback] = useState<string | null>(null);
+  const [statusError, setStatusError] = useState<string | null>(null);
 
   const adminEmail = user?.email || 'muktar9085mkr@gmail.com';
 
@@ -80,6 +81,7 @@ export const UserDirectoryManager: React.FC<UserDirectoryManagerProps> = ({ sess
 
   // Handle Verify / Unverify toggle
   const handleToggleVerify = async (u: UserManagementItem) => {
+    setStatusError(null);
     const nextVal = !u.isAccountVerified;
     try {
       await toggleUserVerificationAdmin(u.uid, nextVal, adminEmail);
@@ -94,7 +96,8 @@ export const UserDirectoryManager: React.FC<UserDirectoryManagerProps> = ({ sess
       setStatusFeedback(`Account verification set to: ${nextVal ? 'Verified' : 'Unverified'}`);
       setTimeout(() => setStatusFeedback(null), 4000);
     } catch (err: any) {
-      alert(`Could not toggle verification: ${err.message || err}`);
+      setStatusError(`Could not toggle verification: ${err.message || err}`);
+      setTimeout(() => setStatusError(null), 6000);
     }
   };
 
@@ -132,7 +135,8 @@ export const UserDirectoryManager: React.FC<UserDirectoryManagerProps> = ({ sess
       setStatusReason('');
       setTimeout(() => setStatusFeedback(null), 5000);
     } catch (err: any) {
-      alert(`Failed to update user status: ${err.message || err}`);
+      setStatusError(`Failed to update user status: ${err.message || err}`);
+      setTimeout(() => setStatusError(null), 6000);
     } finally {
       setStatusUpdating(false);
     }
@@ -229,6 +233,13 @@ export const UserDirectoryManager: React.FC<UserDirectoryManagerProps> = ({ sess
         <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold flex items-center space-x-2">
           <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
           <span>{statusFeedback}</span>
+        </div>
+      )}
+
+      {statusError && (
+        <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold flex items-center space-x-2">
+          <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+          <span>{statusError}</span>
         </div>
       )}
 

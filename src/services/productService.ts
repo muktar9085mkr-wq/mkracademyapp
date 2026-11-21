@@ -960,6 +960,7 @@ export async function updateFreeNote(id: string, updates: Partial<Product>): Pro
  * Delete Free Note from 'freeNotes' collection (Admin only)
  */
 export async function deleteFreeNote(id: string): Promise<void> {
+  markProductAsDeletedLocally(id);
   try {
     const docRef = doc(db, FREE_NOTES_COLLECTION, id);
     await setDoc(docRef, { _deleted: true, published: false, updatedAt: new Date().toISOString() }, { merge: true });

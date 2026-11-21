@@ -20,6 +20,7 @@ import {
   GraduationCap
 } from 'lucide-react';
 import { SocialLinks } from '../../types';
+import { formatWhatsAppDigits, formatIndianPhoneDisplay } from '../../services/settingsService';
 import { PolicyType } from './PolicyModal';
 
 interface PolicyViewProps {
@@ -52,7 +53,8 @@ export const PolicyView: React.FC<PolicyViewProps> = ({
     }
   }, [type]);
 
-  const whatsapp = socialLinks?.whatsapp || '919864012345';
+  const whatsapp = formatWhatsAppDigits(socialLinks?.whatsapp);
+  const whatsappDisplay = formatIndianPhoneDisplay(socialLinks?.whatsapp);
   const email = socialLinks?.email || 'muktar9085mkr@gmail.com';
   const telegram = socialLinks?.telegram || 'https://t.me/mkr_academy_official';
 
@@ -323,7 +325,7 @@ export const PolicyView: React.FC<PolicyViewProps> = ({
               <div className="space-y-6">
                 <div className="bg-stone-50 border border-stone-200 p-4 rounded-2xl space-y-1">
                   <h3 className="font-bold text-stone-900 text-sm">Designated Grievance Officer</h3>
-                  <p className="text-xs text-stone-600">Name: Muktar Ali • Email: {email} • Helpline: +91 {whatsapp}</p>
+                  <p className="text-xs text-stone-600">Name: Muktar Ali • Email: {email} • Helpline: {whatsappDisplay}</p>
                   <p className="text-xs text-stone-500">Official Jurisdiction: Guwahati / Nagaon, Assam, India</p>
                 </div>
 
@@ -426,7 +428,7 @@ export const PolicyView: React.FC<PolicyViewProps> = ({
                     <MessageCircle className="w-8 h-8 text-emerald-600 shrink-0" />
                     <div>
                       <p className="font-bold text-xs uppercase tracking-wider text-emerald-800">WhatsApp Community & Helpline</p>
-                      <p className="font-extrabold text-base">+91 {whatsapp}</p>
+                      <p className="font-extrabold text-base">{whatsappDisplay}</p>
                       <p className="text-xs text-emerald-700">Quick response • Chat with us</p>
                     </div>
                   </a>

@@ -305,5 +305,16 @@ export function triggerFileDownload(
  */
 export function openPdfPreview(urlOrProduct?: string | Product): void {
   const previewUrl = getDrivePreviewUrl(urlOrProduct);
-  window.open(previewUrl, '_blank', 'noopener,noreferrer');
+  if (!previewUrl) return;
+  const a = document.createElement('a');
+  a.href = previewUrl;
+  a.target = '_blank';
+  a.rel = 'noopener noreferrer';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => {
+    try {
+      document.body.removeChild(a);
+    } catch {}
+  }, 400);
 }

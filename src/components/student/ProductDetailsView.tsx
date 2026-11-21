@@ -70,8 +70,8 @@ export const ProductDetailsView: React.FC<ProductDetailsViewProps> = ({
     );
   }
 
-  const originalPrice = product.originalPricePaise / 100;
-  const sellingPrice = product.sellingPricePaise / 100;
+  const originalPrice = (product.originalPricePaise || 0) / 100;
+  const sellingPrice = (product.sellingPricePaise || 0) / 100;
   const discountPercent =
     originalPrice > sellingPrice
       ? Math.round(((originalPrice - sellingPrice) / originalPrice) * 100)

@@ -789,9 +789,8 @@ export function createApiApp() {
         }
 
         const isOwner = purchase.uid === req.user.uid;
-        const isAdminUser = (
-          (req.user.email && req.user.email.toLowerCase() === getAdminEmail()) ||
-          req.user.uid === purchase.uid
+        const isAdminUser = Boolean(
+          req.user.email && req.user.email.toLowerCase() === getAdminEmail()
         );
 
         // IDOR CHECK: Prevent students from accessing other students' notes
@@ -886,17 +885,52 @@ export function createApiApp() {
         return;
       }
 
-      // Fetch Product to verify existence and entitlement
+      // Fetch Product or Free Note to verify existence and entitlement
       const prodRef = doc(db, 'products', sanitizedProductId);
-      const prodSnap = await getDoc(prodRef).catch(() => null);
-      if (!prodSnap || !prodSnap.exists()) {
-        res.status(404).json({ error: 'Product not found' });
-        return;
+      const freeNoteRef = doc(db, 'freeNotes', sanitizedProductId);
+      let existingDocRef: any = null;
+      let prodData: any = null;
+
+      if (sanitizedProductId.startsWith('freenote_')) {
+        const freeSnap = await getDoc(freeNoteRef).catch(() => null);
+        if (freeSnap && freeSnap.exists()) {
+          existingDocRef = freeNoteRef;
+          prodData = { ...freeSnap.data(), isFree: true, sellingPricePaise: 0 };
+        }
       }
-      const prodData = prodSnap.data() as any;
+
+      if (!prodData) {
+        const prodSnap = await getDoc(prodRef).catch(() => null);
+        if (prodSnap && prodSnap.exists()) {
+          existingDocRef = prodRef;
+          prodData = prodSnap.data() as any;
+        }
+      }
+
+      if (!prodData && !sanitizedProductId.startsWith('freenote_')) {
+        const freeSnap = await getDoc(freeNoteRef).catch(() => null);
+        if (freeSnap && freeSnap.exists()) {
+          existingDocRef = freeNoteRef;
+          prodData = { ...freeSnap.data(), isFree: true, sellingPricePaise: 0 };
+        }
+      }
+
+      if (!prodData) {
+        if (Boolean(isFree)) {
+          // Baseline free note not yet synced physically to Firestore
+          prodData = {
+            title: sanitizeText(pdfName || 'Free Study Note'),
+            isFree: true,
+            sellingPricePaise: 0
+          };
+        } else {
+          res.status(404).json({ error: 'Product not found' });
+          return;
+        }
+      }
 
       // If paid product, verify that user holds an active purchase or is admin
-      const isPaid = !isFree && Number(prodData.sellingPricePaise || 0) > 0;
+      const isPaid = !isFree && !prodData.isFree && Number(prodData.sellingPricePaise || 0) > 0;
       if (isPaid) {
         const isAdminUser = user.email?.toLowerCase() === getAdminEmail();
         if (!isAdminUser) {
@@ -943,18 +977,20 @@ export function createApiApp() {
       try {
         const eventDocRef = doc(db, 'download_events', sanitizedEventId);
         await setDoc(eventDocRef, eventData);
-      } catch (fsErr) {
+      } catch {
         // Non-fatal for download response
       }
 
-      // Best-effort increment download counts on product
-      try {
-        await updateDoc(prodRef, {
-          downloadCount: increment(1),
-          lastDownloadedAt: timestamp
-        });
-      } catch (cntErr) {
-        // Non-fatal
+      // Best-effort increment download counts on the resolved collection document
+      if (existingDocRef) {
+        try {
+          await updateDoc(existingDocRef, {
+            downloadCount: increment(1),
+            lastDownloadedAt: timestamp
+          });
+        } catch {
+          // Non-fatal
+        }
       }
 
       res.json({
@@ -974,10 +1010,14 @@ export function createApiApp() {
    */
   router.get('/admin/download-analytics', requireAdmin, async (_req: Request, res: Response): Promise<void> => {
     try {
-      // 1. Fetch products
-      const prodSnap = await getDocs(collection(db, 'products')).catch(() => ({ forEach: () => {} } as any));
+      // 1. Fetch products & freeNotes
+      const [prodSnap, freeSnap] = await Promise.all([
+        getDocs(collection(db, 'products')).catch(() => ({ forEach: () => {} } as any)),
+        getDocs(collection(db, 'freeNotes')).catch(() => ({ forEach: () => {} } as any))
+      ]);
       const productsMap = new Map<string, any>();
       prodSnap.forEach((d: any) => productsMap.set(d.id, { id: d.id, ...d.data() }));
+      freeSnap.forEach((d: any) => productsMap.set(d.id, { id: d.id, ...d.data(), isFree: true, sellingPricePaise: 0 }));
 
       // 2. Fetch users count
       const usersSnap = await getDocs(collection(db, 'users')).catch(() => ({ size: 0 } as any));
@@ -1073,7 +1113,7 @@ export function createApiApp() {
         pStats.pdfBreakdown[pdfKey].count++;
       });
 
-      const totalDownloads = eventsSnap.size;
+      const totalDownloads = events.length;
       const productBreakdown = Array.from(productCountMap.values());
 
       // Sort by total downloads descending

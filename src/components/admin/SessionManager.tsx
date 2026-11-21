@@ -16,6 +16,7 @@ import {
   UserX
 } from 'lucide-react';
 import { UserSession, revokeSessionAdmin, revokeAllUserSessionsAdmin, subscribeToSessionsAdmin } from '../../services/sessionService';
+import { formatSafeDate } from '../../services/settingsService';
 import { useAuth } from '../../context/AuthContext';
 
 interface SessionManagerProps {
@@ -38,6 +39,7 @@ export const SessionManager: React.FC<SessionManagerProps> = ({ initialSessions,
     userEmail?: string;
   } | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
     // Real-time listener for sessions
@@ -52,12 +54,14 @@ export const SessionManager: React.FC<SessionManagerProps> = ({ initialSessions,
   const handleRevokeSingle = async (sessionId: string) => {
     setActionLoading(sessionId);
     setActionMessage(null);
+    setActionError(null);
     try {
       await revokeSessionAdmin(sessionId, adminEmail);
       setActionMessage(`Session successfully terminated and revoked.`);
       setTimeout(() => setActionMessage(null), 5000);
     } catch (err: any) {
-      alert(`Could not revoke session: ${err.message || err}`);
+      setActionError(`Could not revoke session: ${err.message || err}`);
+      setTimeout(() => setActionError(null), 6000);
     } finally {
       setActionLoading(null);
       setConfirmModal(null);
@@ -67,12 +71,14 @@ export const SessionManager: React.FC<SessionManagerProps> = ({ initialSessions,
   const handleForceLogoutUser = async (uid: string) => {
     setActionLoading(uid);
     setActionMessage(null);
+    setActionError(null);
     try {
       const count = await revokeAllUserSessionsAdmin(uid, adminEmail);
       setActionMessage(`Force logged out user: ${count} active session(s) terminated.`);
       setTimeout(() => setActionMessage(null), 5000);
     } catch (err: any) {
-      alert(`Could not force logout user: ${err.message || err}`);
+      setActionError(`Could not force logout user: ${err.message || err}`);
+      setTimeout(() => setActionError(null), 6000);
     } finally {
       setActionLoading(null);
       setConfirmModal(null);
@@ -213,6 +219,13 @@ export const SessionManager: React.FC<SessionManagerProps> = ({ initialSessions,
         </div>
       )}
 
+      {actionError && (
+        <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold flex items-center space-x-2">
+          <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+          <span>{actionError}</span>
+        </div>
+      )}
+
       {/* Filter and Search Bar */}
       <div className="flex flex-col sm:flex-row gap-3 bg-white p-4 rounded-2xl border border-stone-200 shadow-xs">
         <div className="relative flex-1">
@@ -303,12 +316,17 @@ export const SessionManager: React.FC<SessionManagerProps> = ({ initialSessions,
                       </td>
 
                       <td className="py-3.5 px-4 text-stone-600">
-                        {new Date(s.loginAt).toLocaleDateString('en-IN', {
-                          day: '2-digit',
-                          month: 'short',
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })}
+                        {formatSafeDate(
+                          s.loginAt,
+                          {
+                            day: '2-digit',
+                            month: 'short',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          },
+                          'N/A',
+                          true
+                        )}
                       </td>
 
                       <td className="py-3.5 px-4">

@@ -22,6 +22,7 @@ import {
   exportTableToCsv,
   exportTableToExcel
 } from '../../services/reportService';
+import { formatSafeDate } from '../../services/settingsService';
 
 interface ReportsManagerProps {
   orders: Order[];
@@ -473,7 +474,7 @@ export const ReportsManager: React.FC<ReportsManagerProps> = ({
                         </span>
                       </td>
                       <td className="py-2.5 px-4 text-stone-500">
-                        {s.createdAt ? new Date(s.createdAt).toLocaleDateString('en-IN') : 'N/A'}
+                        {formatSafeDate(s.createdAt, undefined, 'N/A')}
                       </td>
                     </tr>
                   ))}
@@ -520,12 +521,17 @@ export const ReportsManager: React.FC<ReportsManagerProps> = ({
                         <td className="py-2.5 px-4 text-stone-600">{sess.os}</td>
                         <td className="py-2.5 px-4 text-stone-600">{sess.browser}</td>
                         <td className="py-2.5 px-4 text-stone-500">
-                          {new Date(sess.loginAt).toLocaleDateString('en-IN', {
-                            day: '2-digit',
-                            month: 'short',
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          })}
+                          {formatSafeDate(
+                            sess.loginAt,
+                            {
+                              day: '2-digit',
+                              month: 'short',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            },
+                            'N/A',
+                            true
+                          )}
                         </td>
                       </tr>
                     ))

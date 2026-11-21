@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { Product, AppPublicSettings, Purchase } from '../../types';
 import { useAuth } from '../../context/AuthContext';
-import { computeEffectiveDaysLeft } from '../../services/settingsService';
+import { computeEffectiveDaysLeft, formatWhatsAppDigits } from '../../services/settingsService';
 import { MobileMediaCarousel } from './MobileMediaCarousel';
 
 interface MobileHomeViewProps {
@@ -134,6 +134,7 @@ export const MobileHomeView: React.FC<MobileHomeViewProps> = ({
   const getRelativeTime = (isoDate?: string) => {
     if (!isoDate) return 'Recently added';
     const past = new Date(isoDate).getTime();
+    if (!Number.isFinite(past)) return 'Recently added';
     const current = Date.now();
     const diffHours = Math.floor((current - past) / (1000 * 60 * 60));
     if (diffHours < 1) return 'Just now';
@@ -459,7 +460,7 @@ export const MobileHomeView: React.FC<MobileHomeViewProps> = ({
 
             {/* 7. Doubt Support (Direct WhatsApp) */}
             <a
-              href={`https://wa.me/${settings?.social?.whatsapp || '919864012345'}?text=${encodeURIComponent(
+              href={`https://wa.me/${formatWhatsAppDigits(settings?.social?.whatsapp)}?text=${encodeURIComponent(
                 'Hello MKR Academy, I have a doubt regarding HSLC / Class 10 study materials.'
               )}`}
               target="_blank"
@@ -641,7 +642,7 @@ export const MobileHomeView: React.FC<MobileHomeViewProps> = ({
                           <span className="text-emerald-700 font-bold">100% Free Note</span>
                         ) : (
                           <span className="text-stone-700 font-bold">
-                            ₹{pdf.sellingPricePaise / 100}
+                            ₹{(pdf.sellingPricePaise || 0) / 100}
                           </span>
                         )}
                       </div>
@@ -679,7 +680,7 @@ export const MobileHomeView: React.FC<MobileHomeViewProps> = ({
             </p>
           </div>
           <a
-            href={`https://wa.me/${settings?.social?.whatsapp || '919864012345'}?text=${encodeURIComponent(
+            href={`https://wa.me/${formatWhatsAppDigits(settings?.social?.whatsapp)}?text=${encodeURIComponent(
               'Hello MKR Academy, I would like to join the student group and have a question.'
             )}`}
             target="_blank"

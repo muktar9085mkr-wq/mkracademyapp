@@ -49,6 +49,45 @@ export const DEFAULT_SETTINGS: AppPublicSettings = {
   brandTagline: 'Quality Notes. Better Preparation. Better Results.'
 };
 
+export const DEFAULT_WHATSAPP_DIGITS = '917002958511';
+
+/**
+ * Normalize a phone/WhatsApp string to country-prefixed digits for https://wa.me/<digits>
+ */
+export function formatWhatsAppDigits(raw?: string | null): string {
+  const digits = String(raw || '').replace(/\D/g, '');
+  if (!digits) return DEFAULT_WHATSAPP_DIGITS;
+  if (digits.length === 10) return `91${digits}`;
+  if (digits.startsWith('0') && digits.length === 11) return `91${digits.slice(1)}`;
+  return digits;
+}
+
+/**
+ * Format phone number cleanly for display as +91 XXXXXXXXXX without double +91 91...
+ */
+export function formatIndianPhoneDisplay(raw?: string | null): string {
+  const digits = formatWhatsAppDigits(raw);
+  if (digits.startsWith('91') && digits.length === 12) {
+    return `+91 ${digits.slice(2)}`;
+  }
+  return `+${digits}`;
+}
+
+/**
+ * Safely format an ISO date or timestamp without ever rendering "Invalid Date"
+ */
+export function formatSafeDate(
+  val?: string | number | Date | null,
+  options?: Intl.DateTimeFormatOptions,
+  fallback: string = 'N/A',
+  includeTime: boolean = false
+): string {
+  if (val === undefined || val === null || val === '') return fallback;
+  const d = val instanceof Date ? val : new Date(val);
+  if (isNaN(d.getTime())) return fallback;
+  return includeTime ? d.toLocaleString('en-IN', options) : d.toLocaleDateString('en-IN', options);
+}
+
 /**
  * Compute displayed days left from public countdown settings
  */
