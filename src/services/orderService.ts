@@ -19,6 +19,31 @@ export const ARCHIVED_ORDERS_COLLECTION = 'archived_orders';
 export const PURCHASES_COLLECTION = 'purchases';
 export const USERS_COLLECTION = 'users';
 
+function buildApiUrl(endpoint: string): string {
+  const base =
+    typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_API_BASE_URL
+      ? String((import.meta as any).env.VITE_API_BASE_URL).trim().replace(/\/+$/, '')
+      : '';
+  return `${base}${endpoint}`;
+}
+
+async function parseApiJsonResponse(response: Response, endpointLabel: string): Promise<any> {
+  const contentType = response.headers.get('content-type') || '';
+  const rawText = await response.text();
+
+  if (rawText.trim().startsWith('<') || contentType.includes('text/html')) {
+    throw new Error(
+      `Payment backend (${endpointLabel}) returned HTML instead of JSON. If hosted on Hostinger Shared Hosting (public_html), deploy the Node.js server (server.js) or configure VITE_API_BASE_URL.`
+    );
+  }
+
+  try {
+    return rawText ? JSON.parse(rawText) : {};
+  } catch {
+    throw new Error(`Invalid JSON response from ${endpointLabel} (HTTP ${response.status}).`);
+  }
+}
+
 /**
  * Retrieve authorization headers with the current user's Firebase ID token
  */
@@ -51,18 +76,18 @@ export async function createBackendPaymentOrder(params: {
   };
 }) {
   const headers = await getAuthHeaders();
-  const response = await fetch('/api/payment/create-order', {
+  const response = await fetch(buildApiUrl('/api/payment/create-order'), {
     method: 'POST',
     headers,
     body: JSON.stringify(params)
   });
 
+  const data = await parseApiJsonResponse(response, '/api/payment/create-order');
   if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(errorData.error || 'Failed to initialize order on server');
+    throw new Error(data.error || 'Failed to initialize order on server');
   }
 
-  return response.json();
+  return data;
 }
 
 /**
@@ -77,18 +102,23 @@ export async function verifyBackendPayment(params: {
   studentId: string;
 }) {
   const headers = await getAuthHeaders();
-  const response = await fetch('/api/payment/verify', {
+  const response = await fetch(buildApiUrl('/api/payment/verify'), {
     method: 'POST',
     headers,
-    body: JSON.stringify(params)
+    body: JSON.stringify({
+      ...params,
+      razorpay_order_id: params.razorpayOrderId,
+      razorpay_payment_id: params.razorpayPaymentId,
+      razorpay_signature: params.razorpaySignature
+    })
   });
 
-  if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(errorData.error || 'Server signature verification failed');
+  const data = await parseApiJsonResponse(response, '/api/payment/verify');
+  if (!response.ok || data.verified !== true) {
+    throw new Error(data.error || 'Payment signature verification failed.');
   }
 
-  return response.json();
+  return data;
 }
 
 /**
@@ -113,7 +143,7 @@ export async function recordPendingOrder(orderData: Omit<Order, 'createdAt' | 's
 }
 
 /**
- * Record a failed/cancelled order in Firestore
+ * Record a failed/cancelled order in Firestore (strictly aligned with firestore.rules affectedKeys)
  */
 export async function recordFailedOrder(orderId: string, reason?: string): Promise<void> {
   const now = new Date().toISOString();
@@ -125,7 +155,6 @@ export async function recordFailedOrder(orderId: string, reason?: string): Promi
         status: 'failed',
         failedAt: now,
         failureReason: reason || 'Payment cancelled or failed',
-        refundStatus: reason || 'Payment cancelled or failed',
         updatedAt: now
       },
       { merge: true }
@@ -137,7 +166,7 @@ export async function recordFailedOrder(orderId: string, reason?: string): Promi
 
 /**
  * Complete order and create verified purchase entitlement
- * Updates order to 'paid' and creates deterministic purchase record
+ * Updates order to 'paid' and creates deterministic purchase record idempotently
  */
 export async function fulfillVerifiedPurchase(params: {
   orderId: string;
@@ -153,6 +182,31 @@ export async function fulfillVerifiedPurchase(params: {
 }): Promise<Purchase> {
   const now = new Date().toISOString();
   const purchaseId = `pur_${params.uid}_${params.productId}`.replace(/[^a-zA-Z0-9_-]/g, '_');
+  const purchaseRef = doc(db, PURCHASES_COLLECTION, purchaseId);
+  const orderRef = doc(db, ORDERS_COLLECTION, params.orderId);
+
+  // 1. Update order status to 'paid' in Firestore BEFORE creating purchase (enforced by firestore.rules)
+  await setDoc(
+    orderRef,
+    {
+      status: 'paid',
+      razorpayPaymentId: params.razorpayPaymentId,
+      razorpayOrderId: params.razorpayOrderId || '',
+      verifiedAt: now,
+      updatedAt: now
+    },
+    { merge: true }
+  );
+
+  // 2. Idempotent check: avoid duplicate purchase creation if already granted for this user & product
+  const existingPurchaseSnap = await getDoc(purchaseRef);
+  if (existingPurchaseSnap.exists()) {
+    const existingData = existingPurchaseSnap.data() as Purchase;
+    if (existingData.entitlementStatus === 'active') {
+      return existingData;
+    }
+  }
+
   const purchaseData: Purchase = {
     id: purchaseId,
     uid: params.uid,
@@ -168,32 +222,7 @@ export async function fulfillVerifiedPurchase(params: {
     createdAt: now
   };
 
-  // 1. Update order status to 'paid' in Firestore (using setDoc with merge: true)
-  try {
-    const orderRef = doc(db, ORDERS_COLLECTION, params.orderId);
-    await setDoc(
-      orderRef,
-      {
-        status: 'paid',
-        razorpayPaymentId: params.razorpayPaymentId,
-        razorpayOrderId: params.razorpayOrderId || '',
-        verifiedAt: now,
-        updatedAt: now
-      },
-      { merge: true }
-    );
-  } catch (err) {
-    console.warn('Order status update in Firestore warning:', err);
-  }
-
-  // 2. Deterministic purchase ID prevents duplicate purchases for the same product
-  try {
-    const purchaseRef = doc(db, PURCHASES_COLLECTION, purchaseId);
-    await setDoc(purchaseRef, purchaseData);
-  } catch (err) {
-    console.warn('Purchase write in Firestore warning:', err);
-  }
-
+  await setDoc(purchaseRef, purchaseData);
   return purchaseData;
 }
 
@@ -454,7 +483,7 @@ export async function manualApproveOrderAdmin(params: {
   // 5. Fire background backend call for server-side audit logging
   try {
     getAuthHeaders().then((headers) => {
-      fetch('/api/admin/approve-payment', {
+      fetch(buildApiUrl('/api/admin/approve-payment'), {
         method: 'POST',
         headers,
         body: JSON.stringify({
@@ -599,15 +628,16 @@ export async function checkPaymentStatusWithRazorpay(params: {
   error?: string;
 }> {
   try {
-    const res = await fetch('/api/payment/check-status', {
+    const headers = await getAuthHeaders();
+    const res = await fetch(buildApiUrl('/api/payment/check-status'), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(params)
     });
     if (!res.ok) {
       return { status: 'uncertain', error: `Server status error ${res.status}` };
     }
-    return await res.json();
+    return await parseApiJsonResponse(res, '/api/payment/check-status');
   } catch (err: any) {
     console.warn('checkPaymentStatusWithRazorpay fetch failed:', err);
     return { status: 'uncertain', error: err?.message || 'Network error verifying with server' };

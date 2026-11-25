@@ -31,7 +31,7 @@ import {
   recordFailedOrder,
   fulfillVerifiedPurchase
 } from '../../services/orderService';
-import { isAndroidWebViewApp, openExternalDriveInAndroid } from '../../services/downloadService';
+import { isAndroidWebViewApp, openExternalDriveInAndroid, triggerFileDownload } from '../../services/downloadService';
 
 declare global {
   interface Window {
@@ -190,9 +190,13 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
 
       const orderId = backendOrderResponse.receipt || orderSummaryId;
       const razorpayOrderId = backendOrderResponse.orderId;
-      const keyId = backendOrderResponse.keyId || 'rzp_test_MKRAcademy2027';
+      const keyId = backendOrderResponse.keyId;
 
-      // 2. Record pending order locally
+      if (!razorpayOrderId || !keyId) {
+        throw new Error('Payment server returned an incomplete Razorpay order configuration.');
+      }
+
+      // 2. Record pending order in Firestore
       await recordPendingOrder({
         id: orderId,
         uid: user.uid,
@@ -201,7 +205,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
         studentPhone: cleanedPhone,
         productId: product.id,
         productTitleSnapshot: product.title,
-        amountPaise: product.sellingPricePaise,
+        amountPaise: backendOrderResponse.amount || product.sellingPricePaise,
         currency: 'INR',
         razorpayOrderId
       });
@@ -209,7 +213,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
       // 3. Initialize Razorpay Checkout
       const options: any = {
         key: keyId,
-        amount: product.sellingPricePaise,
+        amount: backendOrderResponse.amount || product.sellingPricePaise,
         currency: 'INR',
         name: 'MKR Academy',
         description: `Access to ${product.title}`.substring(0, 40),
@@ -236,12 +240,20 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
           try {
             setStep('processing');
 
-            // 4. Verify payment signature on backend
+            const rzpPaymentId = response?.razorpay_payment_id;
+            const rzpOrderId = response?.razorpay_order_id || razorpayOrderId;
+            const rzpSignature = response?.razorpay_signature;
+
+            if (!rzpPaymentId || !rzpOrderId || !rzpSignature) {
+              throw new Error('Payment verification failed: Missing Razorpay signature details.');
+            }
+
+            // 4. Verify payment signature on backend BEFORE granting purchase access
             const verifyResult = await verifyBackendPayment({
               orderId,
-              razorpayOrderId: response.razorpay_order_id || razorpayOrderId,
-              razorpayPaymentId: response.razorpay_payment_id,
-              razorpaySignature: response.razorpay_signature,
+              razorpayOrderId: rzpOrderId,
+              razorpayPaymentId: rzpPaymentId,
+              razorpaySignature: rzpSignature,
               productId: product.id,
               studentId: user.uid
             });
@@ -385,26 +397,36 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
             </div>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2 max-w-md mx-auto">
-              {completedPurchase.driveFileLink && (
+              {(completedPurchase.driveFileLink || (completedPurchase.pdfList && completedPurchase.pdfList.length > 0)) && (
                 isAndroidWebViewApp() ? (
                   <button
                     type="button"
-                    onClick={() => openExternalDriveInAndroid(completedPurchase.driveFileLink)}
+                    onClick={() =>
+                      openExternalDriveInAndroid(
+                        completedPurchase.driveFileLink || completedPurchase.pdfList?.[0]?.driveUrl
+                      )
+                    }
                     className="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-red-700 hover:bg-red-800 text-white font-extrabold text-xs shadow-md flex items-center justify-center space-x-2 transition-all cursor-pointer"
                   >
                     <ExternalLink className="w-4 h-4" />
                     <span>Open in Drive</span>
                   </button>
                 ) : (
-                  <a
-                    href={completedPurchase.driveFileLink}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <button
+                    type="button"
+                    onClick={() =>
+                      triggerFileDownload(
+                        product,
+                        !completedPurchase.driveFileLink && completedPurchase.pdfList?.[0]
+                          ? completedPurchase.pdfList[0]
+                          : undefined
+                      )
+                    }
                     className="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-red-700 hover:bg-red-800 text-white font-extrabold text-xs shadow-md flex items-center justify-center space-x-2 transition-all cursor-pointer"
                   >
                     <Download className="w-4 h-4" />
                     <span>Download Notes Now</span>
-                  </a>
+                  </button>
                 )
               )}
               <button

@@ -26,7 +26,7 @@ import {
   recordFailedOrder,
   fulfillVerifiedPurchase
 } from '../../services/orderService';
-import { isAndroidWebViewApp, openExternalDriveInAndroid } from '../../services/downloadService';
+import { isAndroidWebViewApp, openExternalDriveInAndroid, triggerFileDownload } from '../../services/downloadService';
 
 declare global {
   interface Window {
@@ -218,7 +218,11 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
       const orderId = backendOrderResponse.receipt || orderSummaryId;
       const razorpayOrderId = backendOrderResponse.orderId;
-      const keyId = backendOrderResponse.keyId || 'rzp_test_MKRAcademy2027';
+      const keyId = backendOrderResponse.keyId;
+
+      if (!razorpayOrderId || !keyId) {
+        throw new Error('Payment server returned an incomplete Razorpay order configuration.');
+      }
 
       // Record pending order in Firestore
       await recordPendingOrder({
@@ -229,7 +233,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         studentPhone: cleanedPhone,
         productId: product.id,
         productTitleSnapshot: product.title,
-        amountPaise: product.sellingPricePaise,
+        amountPaise: backendOrderResponse.amount || product.sellingPricePaise,
         currency: 'INR',
         razorpayOrderId
       });
@@ -246,11 +250,11 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
       const options: any = {
         key: keyId,
-        amount: product.sellingPricePaise,
+        amount: backendOrderResponse.amount || product.sellingPricePaise,
         currency: 'INR',
         name: 'MKR Academy',
         description: product.title.substring(0, 40),
-        image: 'https://images.unsplash.com/photo-1532094349884-543bc11b234d?auto=format&fit=crop&w=128&q=80',
+        image: '/icon-192.png',
         order_id: razorpayOrderId,
         prefill: {
           name: studentName.trim(),
@@ -270,8 +274,10 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         },
         timeout: 900,
         handler: async function (response: any) {
-          if (!response.razorpay_payment_id || !response.razorpay_signature) {
-            console.error('Missing payment signature in Razorpay response:', response);
+          const finalRazorpayOrderId = response?.razorpay_order_id || razorpayOrderId;
+          if (!finalRazorpayOrderId || !response?.razorpay_payment_id || !response?.razorpay_signature) {
+            console.error('Missing payment verification fields in Razorpay response:', response);
+            recordFailedOrder(orderId, 'Missing payment verification fields from Razorpay').catch(() => {});
             setErrorMessage('Payment completion error: Missing signature from Razorpay. You have not been charged.');
             setStep('failed');
             setIsSubmitting(false);
@@ -279,7 +285,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           }
           await handleVerificationAndCompletion({
             orderId,
-            razorpayOrderId: response.razorpay_order_id || razorpayOrderId,
+            razorpayOrderId: finalRazorpayOrderId,
             razorpayPaymentId: response.razorpay_payment_id,
             razorpaySignature: response.razorpay_signature
           });
@@ -341,7 +347,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       });
 
       if (!verifyRes.verified) {
-        throw new Error(verifyRes.error || 'Server signature verification failed');
+        throw new Error(verifyRes.error || 'Payment signature verification failed.');
       }
 
       // Step 10: Mark order paid & create persistent purchase entitlement in Firestore
@@ -372,7 +378,11 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       onSuccess(purchaseRecord);
     } catch (err: any) {
       console.error('Verification error:', err);
-      setErrorMessage('Payment verification could not be completed. Please contact support with Order ID ' + params.orderId);
+      recordFailedOrder(params.orderId, err?.message || 'Payment verification failed').catch(() => {});
+      setErrorMessage(
+        (err?.message || 'Payment signature verification failed.') +
+          ` (Order ID: ${params.orderId})`
+      );
       setStep('failed');
       setIsSubmitting(false);
     }
@@ -642,7 +652,14 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               {isAndroidWebViewApp() ? (
                 <button
                   type="button"
-                  onClick={() => openExternalDriveInAndroid(completedPurchase?.driveFileLink || product.driveFileLink)}
+                  onClick={() =>
+                    openExternalDriveInAndroid(
+                      completedPurchase?.driveFileLink ||
+                        product.driveFileLink ||
+                        completedPurchase?.pdfList?.[0]?.driveUrl ||
+                        product.pdfList?.[0]?.driveUrl
+                    )
+                  }
                   className="w-full py-3.5 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-sm shadow-md flex items-center justify-center space-x-2 transition-all cursor-pointer"
                 >
                   <ExternalLink className="w-4 h-4" />
@@ -650,30 +667,21 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 </button>
               ) : (
                 <>
-                  {product.driveFileLink && (
-                    <a
-                      href={product.driveFileLink}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="w-full py-3.5 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-sm shadow-md flex items-center justify-center space-x-2 transition-all"
+                  {(completedPurchase?.driveFileLink || product.driveFileLink || product.pdfList?.[0]?.driveUrl) && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        triggerFileDownload(
+                          product,
+                          !product.driveFileLink && product.pdfList?.[0] ? product.pdfList[0] : undefined
+                        )
+                      }
+                      className="w-full py-3.5 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-sm shadow-md flex items-center justify-center space-x-2 transition-all cursor-pointer"
                     >
-                      <ExternalLink className="w-4 h-4" />
-                      <span>Open in Google Drive (Direct Access)</span>
-                    </a>
+                      <Download className="w-4 h-4" />
+                      <span>Download Notes (PDF)</span>
+                    </button>
                   )}
-
-                  <a
-                    href={`/api/notes/download/${completedPurchase?.id || 'sample'}`}
-                    download={`MKR_Academy_${product.slug}.pdf`}
-                    className={`w-full py-3 px-4 rounded-xl font-bold text-sm shadow-md flex items-center justify-center space-x-2 transition-all ${
-                      product.driveFileLink
-                        ? 'bg-stone-800 hover:bg-stone-900 text-white'
-                        : 'bg-red-700 hover:bg-red-800 text-white'
-                    }`}
-                  >
-                    <Download className="w-4 h-4" />
-                    <span>Download Notes (PDF)</span>
-                  </a>
                 </>
               )}
 

@@ -31,8 +31,16 @@ import { renderProductPageHtml } from './ogMetadata';
 
 dotenv.config();
 
-// In-memory verification cache for idempotency
-const processedPayments = new Set<string>();
+// In-memory idempotency & order ownership caches
+const webhookProcessedPayments = new Set<string>();
+const verifiedCheckoutPayments = new Map<
+  string,
+  { orderId: string; razorpayOrderId: string; studentUid: string; purchaseId: string; verifiedAt: string }
+>();
+const razorpayOrderOwners = new Map<
+  string,
+  { studentUid: string; productId: string; amountPaise: number; receipt: string }
+>();
 const serverRecordedDownloads = new Map<string, any>();
 
 export function createApiApp() {
@@ -63,10 +71,13 @@ export function createApiApp() {
   // 4. Global Rate Limiter on all API routes (Requirement 4)
   router.use(globalApiLimiter);
 
-  const getRazorpayKeyId = () => process.env.RAZORPAY_KEY_ID || 'rzp_live_TqPdwQmi6yOprh';
-  const getRazorpayKeySecret = () => process.env.RAZORPAY_KEY_SECRET || 'eIJMyjZbJkBgLgWB59HYX7hn';
-  const getRazorpayWebhookSecret = () => process.env.RAZORPAY_WEBHOOK_SECRET || '';
-  const getAdminEmail = () => (process.env.ADMIN_EMAIL || 'muktar9085mkr@gmail.com').toLowerCase();
+  const normalizeEnvValue = (val?: string) =>
+    typeof val === 'string' ? val.trim().replace(/^["']|["']$/g, '').trim() : '';
+
+  const getRazorpayKeyId = () => normalizeEnvValue(process.env.RAZORPAY_KEY_ID);
+  const getRazorpayKeySecret = () => normalizeEnvValue(process.env.RAZORPAY_KEY_SECRET);
+  const getRazorpayWebhookSecret = () => normalizeEnvValue(process.env.RAZORPAY_WEBHOOK_SECRET);
+  const getAdminEmail = () => (normalizeEnvValue(process.env.ADMIN_EMAIL) || 'muktar9085mkr@gmail.com').toLowerCase();
   const isProduction = () => process.env.NODE_ENV === 'production';
 
   /**
@@ -182,7 +193,13 @@ export function createApiApp() {
         const keySecret = getRazorpayKeySecret();
 
         if (!keyId || !keySecret) {
-          res.status(500).json({ error: 'Razorpay payment gateway credentials are not configured on server' });
+          console.error('[RAZORPAY CREATE ORDER ERROR] Missing server credentials:', {
+            hasKeyId: Boolean(keyId),
+            hasKeySecret: Boolean(keySecret),
+            productId,
+            studentUid: req.user!.uid
+          });
+          res.status(500).json({ error: 'Razorpay payment gateway credentials (RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET) are not configured on server' });
           return;
         }
 
@@ -219,6 +236,15 @@ export function createApiApp() {
         }
 
         const rzpOrder = await rzpResponse.json();
+        if (rzpOrder?.id) {
+          razorpayOrderOwners.set(rzpOrder.id, {
+            studentUid: req.user!.uid,
+            productId,
+            amountPaise: authoritativePricePaise,
+            receipt: orderReceipt
+          });
+        }
+
         res.json({
           success: true,
           orderId: rzpOrder.id,
@@ -250,103 +276,223 @@ export function createApiApp() {
     requireAuth,
     async (req: Request, res: Response): Promise<void> => {
       try {
-        const rawRazorpayOrderId = req.body.razorpayOrderId;
-        const rawRazorpayPaymentId = req.body.razorpayPaymentId;
-        const rawRazorpaySignature = req.body.razorpaySignature;
-        const rawOrderId = req.body.orderId;
-        const rawProductId = req.body.productId;
-        const rawStudentId = req.body.studentId;
+        const rawRazorpayOrderId = req.body.razorpay_order_id ?? req.body.razorpayOrderId;
+        const rawRazorpayPaymentId = req.body.razorpay_payment_id ?? req.body.razorpayPaymentId;
+        const rawRazorpaySignature = req.body.razorpay_signature ?? req.body.razorpaySignature;
+        const rawOrderId = req.body.orderId ?? req.body.order_id;
+        const rawProductId = req.body.productId ?? req.body.product_id;
+        const rawStudentId = req.body.studentId ?? req.body.student_id;
 
         const razorpayOrderId = sanitizeId(rawRazorpayOrderId);
         const razorpayPaymentId = sanitizeId(rawRazorpayPaymentId);
-        const razorpaySignature = sanitizeText(rawRazorpaySignature, 128);
+        const razorpaySignature = sanitizeText(rawRazorpaySignature, 128).toLowerCase();
         const orderId = sanitizeId(rawOrderId);
         const productId = sanitizeId(rawProductId);
         const studentId = sanitizeId(rawStudentId);
 
         if (!razorpayOrderId || !razorpayPaymentId) {
-          res.status(400).json({ error: 'Missing or malformed payment identifiers' });
+          console.error('[RAZORPAY VERIFY FAILED] Missing or invalid order/payment IDs:', {
+            hasOrderId: Boolean(rawRazorpayOrderId),
+            hasPaymentId: Boolean(rawRazorpayPaymentId),
+            hasSignature: Boolean(rawRazorpaySignature),
+            studentUid: req.user!.uid
+          });
+          res.status(400).json({
+            success: false,
+            verified: false,
+            code: 'MISSING_PAYMENT_FIELDS',
+            error: 'Missing or malformed Razorpay order_id / payment_id.'
+          });
+          return;
+        }
+
+        if (!/^[a-f0-9]{64}$/.test(razorpaySignature)) {
+          console.error('[RAZORPAY VERIFY FAILED] Missing or malformed razorpay_signature:', {
+            orderId,
+            razorpayOrderId,
+            razorpayPaymentId,
+            studentUid: req.user!.uid,
+            receivedSignatureLength: razorpaySignature.length
+          });
+          res.status(400).json({
+            success: false,
+            verified: false,
+            code: 'INVALID_SIGNATURE_FORMAT',
+            error: 'Payment signature verification failed. Invalid signature format returned from checkout.'
+          });
           return;
         }
 
         // Prevent IDOR: Student can only verify payment for their own student account
         if (studentId && studentId !== req.user!.uid && req.user!.email !== getAdminEmail()) {
-          res.status(403).json({ error: 'Unauthorized: Cannot verify payment for another user account' });
+          console.warn('[RAZORPAY VERIFY BLOCKED] Cross-account verification attempt:', {
+            requesterUid: req.user!.uid,
+            targetStudentId: studentId,
+            razorpayOrderId,
+            razorpayPaymentId
+          });
+          res.status(403).json({
+            success: false,
+            verified: false,
+            code: 'FORBIDDEN',
+            error: 'Unauthorized: Cannot verify payment for another user account'
+          });
           return;
         }
 
-        // Idempotency check: prevent duplicate purchase records for same payment
-        if (processedPayments.has(razorpayPaymentId)) {
+        const trackedOrder = razorpayOrderOwners.get(razorpayOrderId);
+        if (trackedOrder && trackedOrder.studentUid !== req.user!.uid && req.user!.email !== getAdminEmail()) {
+          console.warn('[RAZORPAY VERIFY BLOCKED] Order ownership mismatch:', {
+            requesterUid: req.user!.uid,
+            orderOwnerUid: trackedOrder.studentUid,
+            razorpayOrderId
+          });
+          res.status(403).json({
+            success: false,
+            verified: false,
+            code: 'ORDER_OWNERSHIP_MISMATCH',
+            error: 'Unauthorized: Payment order does not belong to the signed-in student account.'
+          });
+          return;
+        }
+
+        const keyId = getRazorpayKeyId();
+        const keySecret = getRazorpayKeySecret();
+        const webhookSecret = getRazorpayWebhookSecret();
+
+        if (!keySecret) {
+          console.error('[RAZORPAY VERIFY FAILED] RAZORPAY_KEY_SECRET is not configured on backend server:', {
+            hasKeyId: Boolean(keyId),
+            razorpayOrderId,
+            razorpayPaymentId
+          });
+          res.status(500).json({
+            success: false,
+            verified: false,
+            code: 'SERVER_SECRET_MISSING',
+            error: 'Server payment secret is not configured. Please contact administrator.'
+          });
+          return;
+        }
+
+        // Strict HMAC-SHA256 verification using Razorpay API Key Secret: HMAC_SHA256(order_id + "|" + payment_id, key_secret)
+        const signaturePayload = `${razorpayOrderId}|${razorpayPaymentId}`;
+        const generatedSignature = crypto
+          .createHmac('sha256', keySecret)
+          .update(signaturePayload)
+          .digest('hex');
+
+        const expectedBuf = Buffer.from(generatedSignature, 'utf8');
+        const receivedBuf = Buffer.from(razorpaySignature, 'utf8');
+        const isSignatureValid =
+          expectedBuf.length === receivedBuf.length &&
+          crypto.timingSafeEqual(expectedBuf, receivedBuf);
+
+        if (!isSignatureValid) {
+          let matchedWebhookSecretInstead = false;
+          if (webhookSecret) {
+            const webhookCheckSig = crypto
+              .createHmac('sha256', webhookSecret)
+              .update(signaturePayload)
+              .digest('hex');
+            matchedWebhookSecretInstead = webhookCheckSig === razorpaySignature;
+          }
+
+          console.error('[RAZORPAY VERIFY FAILED] HMAC SHA256 Signature Mismatch:', {
+            reason: matchedWebhookSecretInstead
+              ? 'Signature matched RAZORPAY_WEBHOOK_SECRET instead of RAZORPAY_KEY_SECRET — swap/configure API Key Secret properly'
+              : 'HMAC SHA256 mismatch — verify RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET belong to the same Razorpay key pair and mode (Live/Test)',
+            orderId,
+            razorpayOrderId,
+            razorpayPaymentId,
+            studentUid: req.user!.uid,
+            keyIdPrefix: keyId ? keyId.slice(0, 12) : 'MISSING',
+            keyMode: keyId.startsWith('rzp_live_') ? 'live' : keyId.startsWith('rzp_test_') ? 'test' : 'unknown',
+            secretMatchesWebhookSecret: Boolean(webhookSecret && keySecret === webhookSecret),
+            matchedWebhookSecretInstead,
+            receivedSigPrefix: razorpaySignature.slice(0, 8),
+            expectedSigPrefix: generatedSignature.slice(0, 8)
+          });
+
+          res.status(400).json({
+            success: false,
+            verified: false,
+            code: 'SIGNATURE_MISMATCH',
+            error: 'Payment signature verification failed.'
+          });
+          return;
+        }
+
+        const effectiveStudentId = studentId || req.user!.uid;
+        const effectiveProductId = productId || trackedOrder?.productId || 'prod';
+        const purchaseId = `pur_${effectiveStudentId}_${effectiveProductId}`.replace(/[^a-zA-Z0-9_-]/g, '_');
+
+        // Idempotency check AFTER cryptographic verification: prevent duplicate processing or cross-account replay
+        const existingVerified = verifiedCheckoutPayments.get(razorpayPaymentId);
+        if (existingVerified) {
+          if (
+            existingVerified.studentUid !== effectiveStudentId ||
+            existingVerified.razorpayOrderId !== razorpayOrderId
+          ) {
+            console.warn('[RAZORPAY VERIFY BLOCKED] Duplicate payment replay attempt:', {
+              razorpayPaymentId,
+              existingOrder: existingVerified.razorpayOrderId,
+              attemptedOrder: razorpayOrderId,
+              attemptedUid: effectiveStudentId
+            });
+            res.status(409).json({
+              success: false,
+              verified: false,
+              code: 'DUPLICATE_PAYMENT_REPLAY',
+              error: 'This payment ID has already been verified for another order.'
+            });
+            return;
+          }
+
           res.json({
             success: true,
+            verified: true,
             alreadyProcessed: true,
+            orderId: existingVerified.orderId || orderId,
+            razorpayOrderId,
+            razorpayPaymentId,
+            purchaseId: existingVerified.purchaseId,
+            verifiedAt: existingVerified.verifiedAt,
             message: 'Payment has already been verified and processed.'
           });
           return;
         }
 
-        let isValid = false;
-        const keySecret = getRazorpayKeySecret();
-        const keyId = getRazorpayKeyId();
-
-        // 1. Strict HMAC SHA256 signature check with timing-safe comparison
-        if (razorpaySignature && keySecret) {
-          const generatedSignature = crypto
-            .createHmac('sha256', keySecret)
-            .update(`${razorpayOrderId}|${razorpayPaymentId}`)
-            .digest('hex');
-
-          const expectedBuf = Buffer.from(generatedSignature, 'utf8');
-          const receivedBuf = Buffer.from(razorpaySignature, 'utf8');
-
-          if (expectedBuf.length === receivedBuf.length && crypto.timingSafeEqual(expectedBuf, receivedBuf)) {
-            isValid = true;
-          }
-        }
-
-        // 2. Double-check live capture directly with Razorpay API
-        if (!isValid && razorpayPaymentId.startsWith('pay_') && keyId && keySecret) {
-          try {
-            const authHeader = 'Basic ' + Buffer.from(`${keyId}:${keySecret}`).toString('base64');
-            const pRes = await fetch(`https://api.razorpay.com/v1/payments/${razorpayPaymentId}`, {
-              headers: { 'Authorization': authHeader }
-            });
-            if (pRes.ok) {
-              const pData = await pRes.json();
-              if (pData.status === 'captured') {
-                isValid = true;
-              }
-            }
-          } catch (captureErr) {
-            console.warn('Direct Razorpay capture check error:', captureErr);
-          }
-        }
-
-        if (!isValid) {
-          res.status(400).json({
-            success: false,
-            error: 'Invalid payment signature. Payment verification failed.'
-          });
-          return;
-        }
-
-        processedPayments.add(razorpayPaymentId);
-
         const verifiedAt = new Date().toISOString();
-        const effectiveStudentId = studentId || req.user!.uid;
-        const purchaseId = `pur_${effectiveStudentId}_${productId || 'prod'}`.replace(/[^a-zA-Z0-9_-]/g, '_');
+        verifiedCheckoutPayments.set(razorpayPaymentId, {
+          orderId: orderId || razorpayOrderId,
+          razorpayOrderId,
+          studentUid: effectiveStudentId,
+          purchaseId,
+          verifiedAt
+        });
+
+        console.log(
+          `✅ [RAZORPAY VERIFY SUCCESS] Order=${orderId || razorpayOrderId} Payment=${razorpayPaymentId} Student=${effectiveStudentId}`
+        );
 
         res.json({
           success: true,
           verified: true,
           orderId,
+          razorpayOrderId,
+          razorpayPaymentId,
           purchaseId,
           verifiedAt,
           message: 'Payment successfully verified by server'
         });
       } catch (error: any) {
-        console.error('Error verifying payment:', error);
-        res.status(500).json({ error: isProduction() ? 'Server error verifying payment' : error?.message });
+        console.error('[RAZORPAY VERIFY ERROR] Unexpected exception:', error);
+        res.status(500).json({
+          success: false,
+          verified: false,
+          error: isProduction() ? 'Server error verifying payment' : error?.message
+        });
       }
     }
   );
@@ -731,12 +877,12 @@ export function createApiApp() {
         const paymentEntity = req.body?.payload?.payment?.entity;
         const paymentId = paymentEntity?.id;
         if (paymentId) {
-          // Idempotency: avoid redundant database writes
-          if (processedPayments.has(paymentId)) {
+          // Idempotency: avoid redundant webhook processing logs without interfering with /payment/verify
+          if (webhookProcessedPayments.has(paymentId)) {
             res.json({ status: 'ok', alreadyProcessed: true });
             return;
           }
-          processedPayments.add(paymentId);
+          webhookProcessedPayments.add(paymentId);
           console.log(`✅ Webhook verified payment captured: ${paymentId}`);
         }
       } else if (event === 'payment.failed') {

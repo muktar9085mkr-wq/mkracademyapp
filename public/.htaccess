@@ -6,6 +6,9 @@
   # Allow existing index.html directly
   RewriteRule ^index\.html$ - [L]
 
+  # Do not rewrite /api/* backend calls to index.html
+  RewriteCond %{REQUEST_URI} !^/api(/|$)
+
   # Do not rewrite requests for existing files, directories, or .well-known assets
   RewriteCond %{REQUEST_FILENAME} !-f
   RewriteCond %{REQUEST_FILENAME} !-d

@@ -15,6 +15,11 @@ export interface RazorpayVerificationResult {
  * Server-side verification of payment status directly with Razorpay API.
  * Uses live basic auth credentials (Key ID and Key Secret).
  */
+function normalizeSecretEnv(val?: string): string {
+  if (!val || typeof val !== 'string') return '';
+  return val.trim().replace(/^["']|["']$/g, '').trim();
+}
+
 export async function queryRazorpayPaymentStatus(params: {
   razorpayOrderId?: string;
   razorpayPaymentId?: string;
@@ -22,8 +27,15 @@ export async function queryRazorpayPaymentStatus(params: {
   keyId?: string;
   keySecret?: string;
 }): Promise<RazorpayVerificationResult> {
-  const keyId = params.keyId || process.env.RAZORPAY_KEY_ID || 'rzp_live_TqPdwQmi6yOprh';
-  const keySecret = params.keySecret || process.env.RAZORPAY_KEY_SECRET || 'eIJMyjZbJkBgLgWB59HYX7hn';
+  const keyId = normalizeSecretEnv(params.keyId || process.env.RAZORPAY_KEY_ID);
+  const keySecret = normalizeSecretEnv(params.keySecret || process.env.RAZORPAY_KEY_SECRET);
+
+  if (!keyId || !keySecret) {
+    return {
+      status: 'uncertain',
+      error: 'RAZORPAY_KEY_ID or RAZORPAY_KEY_SECRET is not configured on the server.'
+    };
+  }
 
   const authHeader = 'Basic ' + Buffer.from(`${keyId}:${keySecret}`).toString('base64');
   const headers = {
