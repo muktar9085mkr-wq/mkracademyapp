@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, Suspense, lazy } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Product, Purchase, AppPublicSettings } from './types';
 import {
@@ -25,18 +25,52 @@ import {
 import { Navbar } from './components/common/Navbar';
 import { Footer } from './components/common/Footer';
 import { HomeView } from './components/student/HomeView';
-import { BrowseNotesView } from './components/student/BrowseNotesView';
-import { FreePdfsView } from './components/student/FreePdfsView';
-import { MyPurchasesView } from './components/student/MyPurchasesView';
-import { ProductDetailsView } from './components/student/ProductDetailsView';
-import { CheckoutView } from './components/student/CheckoutView';
-import { AuthView } from './components/student/AuthView';
-import { StudentProfileView } from './components/student/StudentProfileView';
-import { PolicyView } from './components/common/PolicyView';
-import { PolicyType } from './components/common/PolicyModal';
-import { AdminDashboard } from './components/admin/AdminDashboard';
-import { PreviousPapersView } from './components/student/PreviousPapersView';
-import { SubjectsView } from './components/student/SubjectsView';
+import type { PolicyType } from './components/common/PolicyModal';
+
+const BrowseNotesView = lazy(() =>
+  import('./components/student/BrowseNotesView').then((m) => ({ default: m.BrowseNotesView }))
+);
+const FreePdfsView = lazy(() =>
+  import('./components/student/FreePdfsView').then((m) => ({ default: m.FreePdfsView }))
+);
+const MyPurchasesView = lazy(() =>
+  import('./components/student/MyPurchasesView').then((m) => ({ default: m.MyPurchasesView }))
+);
+const ProductDetailsView = lazy(() =>
+  import('./components/student/ProductDetailsView').then((m) => ({ default: m.ProductDetailsView }))
+);
+const CheckoutView = lazy(() =>
+  import('./components/student/CheckoutView').then((m) => ({ default: m.CheckoutView }))
+);
+const AuthView = lazy(() =>
+  import('./components/student/AuthView').then((m) => ({ default: m.AuthView }))
+);
+const StudentProfileView = lazy(() =>
+  import('./components/student/StudentProfileView').then((m) => ({ default: m.StudentProfileView }))
+);
+const PolicyView = lazy(() =>
+  import('./components/common/PolicyView').then((m) => ({ default: m.PolicyView }))
+);
+const AdminDashboard = lazy(() =>
+  import('./components/admin/AdminDashboard').then((m) => ({ default: m.AdminDashboard }))
+);
+const PreviousPapersView = lazy(() =>
+  import('./components/student/PreviousPapersView').then((m) => ({ default: m.PreviousPapersView }))
+);
+const SubjectsView = lazy(() =>
+  import('./components/student/SubjectsView').then((m) => ({ default: m.SubjectsView }))
+);
+
+function RouteLoadingFallback() {
+  return (
+    <div className="py-24 text-center space-y-4">
+      <div className="w-10 h-10 border-3 border-red-700 border-t-transparent rounded-full animate-spin mx-auto"></div>
+      <p className="text-sm font-semibold text-stone-600">
+        Loading MKR Academy notes & study materials...
+      </p>
+    </div>
+  );
+}
 
 export type AppView =
   | 'home'
@@ -635,21 +669,23 @@ function AppContent() {
   // If in Admin Panel View
   if (currentView === 'admin' && isAdmin) {
     return (
-      <AdminDashboard
-        onBackToStore={() => {
-          getPublicSettings().then((latestSettings) => setSettings(latestSettings)).catch(() => {});
-          handleNavigate('home');
-        }}
-        onProductsChanged={() => {
-          getPublishedProducts().then((latest) => {
-            if (latest.length > 0) setProducts(latest);
-          });
-          getFreeNotes().then((latestFree) => {
-            if (latestFree.length > 0) setFreeNotes(latestFree);
-          });
-          getPublicSettings().then((latestSettings) => setSettings(latestSettings)).catch(() => {});
-        }}
-      />
+      <Suspense fallback={<RouteLoadingFallback />}>
+        <AdminDashboard
+          onBackToStore={() => {
+            getPublicSettings().then((latestSettings) => setSettings(latestSettings)).catch(() => {});
+            handleNavigate('home');
+          }}
+          onProductsChanged={() => {
+            getPublishedProducts().then((latest) => {
+              if (latest.length > 0) setProducts(latest);
+            });
+            getFreeNotes().then((latestFree) => {
+              if (latestFree.length > 0) setFreeNotes(latestFree);
+            });
+            getPublicSettings().then((latestSettings) => setSettings(latestSettings)).catch(() => {});
+          }}
+        />
+      </Suspense>
     );
   }
 
@@ -671,13 +707,9 @@ function AppContent() {
 
       {/* Main Content View (All Features Render Full-Page, No Modal Overlays) */}
       <main className="flex-1 w-full max-w-full min-w-0 pb-20 md:pb-0">
+        <Suspense fallback={<RouteLoadingFallback />}>
         {loading ? (
-          <div className="py-24 text-center space-y-4">
-            <div className="w-10 h-10 border-3 border-red-700 border-t-transparent rounded-full animate-spin mx-auto"></div>
-            <p className="text-sm font-semibold text-stone-600">
-              Loading MKR Academy notes & study materials...
-            </p>
-          </div>
+          <RouteLoadingFallback />
         ) : currentView === 'home' ? (
           <HomeView
             products={products}
@@ -858,6 +890,7 @@ function AppContent() {
             onExecuteSearch={handleExecuteSearch}
           />
         )}
+        </Suspense>
       </main>
 
       {/* Footer */}

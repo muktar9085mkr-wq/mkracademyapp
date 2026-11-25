@@ -24,8 +24,12 @@ function extractQueryProductId(req: Request): string {
 
 // Setup Vite middleware in dev or static files in production
 async function startServer() {
-  if (process.env.NODE_ENV === 'production') {
-    const distHtmlPath = path.join(__dirname, 'dist', 'index.html');
+  const distHtmlPath = path.join(__dirname, 'dist', 'index.html');
+  const isRunningTsSource = process.argv.some((arg) => arg.endsWith('server.ts'));
+  const isProdRuntime =
+    process.env.NODE_ENV === 'production' || (!isRunningTsSource && fs.existsSync(distHtmlPath));
+
+  if (isProdRuntime) {
     const getProdTemplate = () =>
       fs.existsSync(distHtmlPath) ? fs.readFileSync(distHtmlPath, 'utf-8') : undefined;
 

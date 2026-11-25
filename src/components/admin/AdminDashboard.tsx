@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
 import {
   LayoutDashboard,
   Package,
@@ -99,13 +99,27 @@ import {
   getRecentAdminActivityLogs,
   AdminActivityLog
 } from '../../services/auditService';
-import { AnalyticsDashboard } from './AnalyticsDashboard';
-import { SessionManager } from './SessionManager';
-import { ReportsManager } from './ReportsManager';
-import { UserDirectoryManager } from './UserDirectoryManager';
-import { PdfDownloadAnalytics } from './PdfDownloadAnalytics';
-import { PyqManager } from './PyqManager';
-import { HomepageMediaManager } from './HomepageMediaManager';
+const AnalyticsDashboard = lazy(() =>
+  import('./AnalyticsDashboard').then((m) => ({ default: m.AnalyticsDashboard }))
+);
+const SessionManager = lazy(() =>
+  import('./SessionManager').then((m) => ({ default: m.SessionManager }))
+);
+const ReportsManager = lazy(() =>
+  import('./ReportsManager').then((m) => ({ default: m.ReportsManager }))
+);
+const UserDirectoryManager = lazy(() =>
+  import('./UserDirectoryManager').then((m) => ({ default: m.UserDirectoryManager }))
+);
+const PdfDownloadAnalytics = lazy(() =>
+  import('./PdfDownloadAnalytics').then((m) => ({ default: m.PdfDownloadAnalytics }))
+);
+const PyqManager = lazy(() =>
+  import('./PyqManager').then((m) => ({ default: m.PyqManager }))
+);
+const HomepageMediaManager = lazy(() =>
+  import('./HomepageMediaManager').then((m) => ({ default: m.HomepageMediaManager }))
+);
 import { getAllSessionsAdmin, UserSession } from '../../services/sessionService';
 
 interface AdminDashboardProps {
@@ -1718,38 +1732,46 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
 
           {/* TAB: REAL-TIME ANALYTICS DASHBOARD */}
           {currentTab === 'dashboard' && (
-            <AnalyticsDashboard
-              orders={orders}
-              products={products}
-              students={students}
-              sessions={sessions}
-              onNavigateToTab={(t) => setCurrentTab(t)}
-              onRefreshData={loadAllAdminData}
-              refreshing={loading}
-            />
+            <Suspense fallback={<div className="py-16 text-center text-xs font-semibold text-stone-500">Loading analytics...</div>}>
+              <AnalyticsDashboard
+                orders={orders}
+                products={products}
+                students={students}
+                sessions={sessions}
+                onNavigateToTab={(t) => setCurrentTab(t)}
+                onRefreshData={loadAllAdminData}
+                refreshing={loading}
+              />
+            </Suspense>
           )}
 
           {/* TAB: ACTIVE SESSIONS & DEVICE MANAGEMENT */}
           {currentTab === 'sessions' && (
-            <SessionManager
-              initialSessions={sessions}
-              onRefresh={loadAllAdminData}
-            />
+            <Suspense fallback={<div className="py-16 text-center text-xs font-semibold text-stone-500">Loading sessions...</div>}>
+              <SessionManager
+                initialSessions={sessions}
+                onRefresh={loadAllAdminData}
+              />
+            </Suspense>
           )}
 
           {/* TAB: EXPORTABLE REPORTS SYSTEM */}
           {currentTab === 'reports' && (
-            <ReportsManager
-              orders={orders}
-              students={students}
-              products={products}
-              sessions={sessions}
-            />
+            <Suspense fallback={<div className="py-16 text-center text-xs font-semibold text-stone-500">Loading reports...</div>}>
+              <ReportsManager
+                orders={orders}
+                students={students}
+                products={products}
+                sessions={sessions}
+              />
+            </Suspense>
           )}
 
           {/* TAB: DEDICATED PDF DOWNLOAD ANALYTICS */}
           {currentTab === 'download-analytics' && (
-            <PdfDownloadAnalytics />
+            <Suspense fallback={<div className="py-16 text-center text-xs font-semibold text-stone-500">Loading download analytics...</div>}>
+              <PdfDownloadAnalytics />
+            </Suspense>
           )}
 
           {/* TAB: LEGACY DASHBOARD OVERVIEW */}
@@ -3541,14 +3563,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
           {/* TAB: PYQ PAPERS MANAGER (Year-Wise Locked Question Papers) */}
           {currentTab === 'pyq' && (
             <div className="space-y-6 animate-in fade-in">
-              <PyqManager
-                products={products}
-                onRefreshProducts={refreshProductsList}
-                onViewProduct={(p) => {
-                  handleEditClick(p);
-                  setCurrentTab('add-product');
-                }}
-              />
+              <Suspense fallback={<div className="py-16 text-center text-xs font-semibold text-stone-500">Loading PYQ manager...</div>}>
+                <PyqManager
+                  products={products}
+                  onRefreshProducts={refreshProductsList}
+                  onViewProduct={(p) => {
+                    handleEditClick(p);
+                    setCurrentTab('add-product');
+                  }}
+                />
+              </Suspense>
             </div>
           )}
 
@@ -4383,10 +4407,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
 
           {/* TAB: ADVANCED USER DIRECTORY & MANAGEMENT */}
           {currentTab === 'students' && (
-            <UserDirectoryManager
-              sessions={sessions}
-              onRefreshAll={loadAllAdminData}
-            />
+            <Suspense fallback={<div className="py-16 text-center text-xs font-semibold text-stone-500">Loading students directory...</div>}>
+              <UserDirectoryManager
+                sessions={sessions}
+                onRefreshAll={loadAllAdminData}
+              />
+            </Suspense>
           )}
 
           {/* TAB: LEGACY REGISTERED STUDENTS ROSTER */}
@@ -5365,7 +5391,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore, o
 
           {/* TAB: HOMEPAGE MEDIA MANAGER (Mobile Carousel) */}
           {currentTab === 'homepage-media' && (
-            <HomepageMediaManager />
+            <Suspense fallback={<div className="py-16 text-center text-xs font-semibold text-stone-500">Loading media manager...</div>}>
+              <HomepageMediaManager />
+            </Suspense>
           )}
 
           {/* TAB: AUDIT ACTIVITY LOGS (Improvement 12) */}
