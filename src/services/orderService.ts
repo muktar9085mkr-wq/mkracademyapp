@@ -125,21 +125,21 @@ export async function verifyBackendPayment(params: {
  * Record a pending order in Firestore
  */
 export async function recordPendingOrder(orderData: Omit<Order, 'createdAt' | 'status'>): Promise<string> {
-  const now = new Date().toISOString();
-  try {
-    const orderRef = doc(db, ORDERS_COLLECTION, orderData.id);
-    const orderDoc: Order = {
-      ...orderData,
-      status: 'pending',
-      createdAt: now,
-      updatedAt: (orderData as any).updatedAt || now
-    };
-    await setDoc(orderRef, orderDoc);
-    return orderData.id;
-  } catch (error) {
-    console.warn('Error recording pending order in Firestore:', error);
-    return orderData.id;
+  const currentUser = auth.currentUser;
+  if (!currentUser || currentUser.uid !== orderData.uid) {
+    throw new Error('Authentication mismatch: Please sign in again before starting payment.');
   }
+
+  const now = new Date().toISOString();
+  const orderRef = doc(db, ORDERS_COLLECTION, orderData.id);
+  const orderDoc: Order = {
+    ...orderData,
+    status: 'pending',
+    createdAt: now,
+    updatedAt: (orderData as any).updatedAt || now
+  };
+  await setDoc(orderRef, orderDoc);
+  return orderData.id;
 }
 
 /**
@@ -176,32 +176,75 @@ export async function fulfillVerifiedPurchase(params: {
   coverImagePath: string;
   razorpayPaymentId: string;
   razorpayOrderId?: string;
+  razorpaySignature?: string;
+  amountPaise?: number;
   driveFileLink?: string;
   pdfStoragePath?: string;
   pdfList?: ProductPdfEntry[];
+  verifiedPurchaseFromServer?: Purchase;
 }): Promise<Purchase> {
   const now = new Date().toISOString();
   const purchaseId = `pur_${params.uid}_${params.productId}`.replace(/[^a-zA-Z0-9_-]/g, '_');
   const purchaseRef = doc(db, PURCHASES_COLLECTION, purchaseId);
   const orderRef = doc(db, ORDERS_COLLECTION, params.orderId);
 
-  // 1. Update order status to 'paid' in Firestore BEFORE creating purchase (enforced by firestore.rules)
-  await setDoc(
-    orderRef,
-    {
-      status: 'paid',
-      razorpayPaymentId: params.razorpayPaymentId,
-      razorpayOrderId: params.razorpayOrderId || '',
-      verifiedAt: now,
-      updatedAt: now
-    },
-    { merge: true }
-  );
+  // 1. Check if backend already created the active purchase record (prevents duplicate writes)
+  try {
+    const existingPurchaseSnap = await getDoc(purchaseRef);
+    if (existingPurchaseSnap.exists()) {
+      const existingData = existingPurchaseSnap.data() as Purchase;
+      if (existingData.entitlementStatus === 'active') {
+        return existingData;
+      }
+    }
+  } catch (readErr: any) {
+    // Surface genuine permission errors clearly if rules fail
+    console.warn('Purchase existence check warning:', readErr);
+  }
 
-  // 2. Idempotent check: avoid duplicate purchase creation if already granted for this user & product
-  const existingPurchaseSnap = await getDoc(purchaseRef);
-  if (existingPurchaseSnap.exists()) {
-    const existingData = existingPurchaseSnap.data() as Purchase;
+  // 2. Ensure order document exists and is updated to 'paid' BEFORE creating purchase (enforced by firestore.rules)
+  const orderSnap = await getDoc(orderRef);
+  if (!orderSnap.exists()) {
+    const currentUser = auth.currentUser;
+    const pendingOrder: Order = {
+      id: params.orderId,
+      uid: params.uid,
+      studentName: currentUser?.displayName || 'MKR Student',
+      studentEmail: currentUser?.email || '',
+      studentPhone: '0000000000',
+      productId: params.productId,
+      productTitleSnapshot: params.productTitle,
+      amountPaise: Math.max(100, Number(params.amountPaise) || 100),
+      currency: 'INR',
+      razorpayOrderId: params.razorpayOrderId || '',
+      status: 'pending',
+      createdAt: now,
+      updatedAt: now
+    };
+    await setDoc(orderRef, pendingOrder);
+  }
+
+  const orderData = orderSnap.exists() ? (orderSnap.data() as Order) : null;
+  if (!orderData || (orderData.status !== 'paid' && orderData.status !== 'manually_approved')) {
+    await setDoc(
+      orderRef,
+      {
+        status: 'paid',
+        razorpayPaymentId: params.razorpayPaymentId,
+        razorpayOrderId: params.razorpayOrderId || '',
+        ...(params.razorpaySignature ? { razorpaySignature: params.razorpaySignature } : {}),
+        approvalMethod: 'razorpay_automatic',
+        verifiedAt: now,
+        updatedAt: now
+      },
+      { merge: true }
+    );
+  }
+
+  // 3. Re-check idempotently in case server sync completed concurrently
+  const recheckPurchaseSnap = await getDoc(purchaseRef);
+  if (recheckPurchaseSnap.exists()) {
+    const existingData = recheckPurchaseSnap.data() as Purchase;
     if (existingData.entitlementStatus === 'active') {
       return existingData;
     }
@@ -212,12 +255,16 @@ export async function fulfillVerifiedPurchase(params: {
     uid: params.uid,
     productId: params.productId,
     orderId: params.orderId,
+    razorpayOrderId: params.razorpayOrderId || '',
+    razorpayPaymentId: params.razorpayPaymentId,
+    paymentStatus: 'PAID',
     productTitle: params.productTitle,
     coverImagePath: params.coverImagePath,
     driveFileLink: params.driveFileLink || '',
     pdfStoragePath: params.pdfStoragePath || '',
     pdfList: params.pdfList || [],
     entitlementStatus: 'active',
+    approvalMethod: 'razorpay_automatic',
     purchasedAt: now,
     createdAt: now
   };
@@ -449,6 +496,9 @@ export async function manualApproveOrderAdmin(params: {
     uid: order.uid,
     productId: order.productId,
     orderId: order.id,
+    razorpayOrderId: order.razorpayOrderId || '',
+    razorpayPaymentId: paymentIdentifier,
+    paymentStatus: 'PAID',
     productTitle,
     coverImagePath: productCover,
     driveFileLink: productDriveLink,

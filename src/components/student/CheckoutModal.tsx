@@ -335,6 +335,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     razorpayPaymentId: string;
     razorpaySignature: string;
   }) => {
+    let backendVerified = false;
     try {
       // Step 8 & 9: Server-side verification
       const verifyRes = await verifyBackendPayment({
@@ -350,9 +351,11 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         throw new Error(verifyRes.error || 'Payment signature verification failed.');
       }
 
+      backendVerified = true;
+
       // Step 10: Mark order paid & create persistent purchase entitlement in Firestore
       const purchaseRecord = await fulfillVerifiedPurchase({
-        orderId: params.orderId,
+        orderId: verifyRes.orderId || params.orderId,
         uid: user.uid,
         productId: product.id,
         productTitle: product.title,
@@ -361,7 +364,10 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         pdfStoragePath: product.pdfStoragePath || '',
         pdfList: product.pdfList || [],
         razorpayPaymentId: params.razorpayPaymentId,
-        razorpayOrderId: params.razorpayOrderId
+        razorpayOrderId: params.razorpayOrderId,
+        razorpaySignature: params.razorpaySignature,
+        amountPaise: product.sellingPricePaise,
+        verifiedPurchaseFromServer: verifyRes.purchase
       });
 
       setCompletedPurchase(purchaseRecord);
@@ -378,7 +384,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       onSuccess(purchaseRecord);
     } catch (err: any) {
       console.error('Verification error:', err);
-      recordFailedOrder(params.orderId, err?.message || 'Payment verification failed').catch(() => {});
+      if (!backendVerified) {
+        recordFailedOrder(params.orderId, err?.message || 'Payment verification failed').catch(() => {});
+      }
       setErrorMessage(
         (err?.message || 'Payment signature verification failed.') +
           ` (Order ID: ${params.orderId})`

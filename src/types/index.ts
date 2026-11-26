@@ -125,6 +125,7 @@ export interface Order {
   currency: string;
   razorpayOrderId?: string;
   razorpayPaymentId?: string;
+  razorpaySignature?: string;
   status: OrderStatus;
   createdAt: string;
   updatedAt?: string;
@@ -159,6 +160,9 @@ export interface Purchase {
   uid: string;
   productId: string;
   orderId: string;
+  razorpayOrderId?: string;
+  razorpayPaymentId?: string;
+  paymentStatus?: 'PAID' | 'PENDING' | 'FAILED';
   productTitle: string;
   coverImagePath: string;
   driveFileLink?: string;

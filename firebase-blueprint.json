@@ -71,6 +71,7 @@
         "currency": { "type": "string", "maxLength": 10 },
         "razorpayOrderId": { "type": "string", "maxLength": 128 },
         "razorpayPaymentId": { "type": "string", "maxLength": 128 },
+        "razorpaySignature": { "type": "string", "maxLength": 128 },
         "status": { "type": "string", "enum": ["pending", "paid", "failed", "refunded", "manually_approved"] },
         "createdAt": { "type": "string" },
         "verifiedAt": { "type": "string" },
@@ -98,11 +99,16 @@
         "uid": { "type": "string", "maxLength": 128 },
         "productId": { "type": "string", "maxLength": 128 },
         "orderId": { "type": "string", "maxLength": 128 },
+        "razorpayOrderId": { "type": "string", "maxLength": 128 },
+        "razorpayPaymentId": { "type": "string", "maxLength": 128 },
+        "paymentStatus": { "type": "string", "enum": ["PAID", "PENDING", "FAILED"] },
         "productTitle": { "type": "string", "maxLength": 250 },
         "coverImagePath": { "type": "string", "maxLength": 1000 },
         "driveFileLink": { "type": "string", "maxLength": 1000 },
+        "pdfStoragePath": { "type": "string", "maxLength": 1000 },
         "pdfList": { "type": "array" },
         "entitlementStatus": { "type": "string", "enum": ["active", "revoked"] },
+        "approvalMethod": { "type": "string", "enum": ["razorpay_automatic", "admin_manual"] },
         "purchasedAt": { "type": "string" },
         "createdAt": { "type": "string" }
       },
@@ -248,6 +254,47 @@
         "device": { "type": "string", "maxLength": 50 }
       },
       "required": ["eventId", "productId", "userId", "downloadedAt"]
+    },
+    "RazorpayVerificationLog": {
+      "title": "RazorpayVerificationLog",
+      "description": "Server-side diagnostic log of every Razorpay signature verification attempt including raw input string, generated signature, and received signature",
+      "type": "object",
+      "properties": {
+        "logId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "uid": { "type": "string", "maxLength": 128 },
+        "userEmail": { "type": "string", "maxLength": 150 },
+        "attemptType": { "type": "string", "enum": ["checkout_verify", "webhook_verify"] },
+        "status": { "type": "string", "enum": ["verified", "failed"] },
+        "failureCode": { "type": "string", "maxLength": 80 },
+        "failureReason": { "type": "string", "maxLength": 500 },
+        "orderId": { "type": "string", "maxLength": 128 },
+        "productId": { "type": "string", "maxLength": 128 },
+        "razorpayOrderId": { "type": "string", "maxLength": 128 },
+        "razorpayPaymentId": { "type": "string", "maxLength": 128 },
+        "rawInputString": { "type": "string", "maxLength": 300 },
+        "generatedSignature": { "type": "string", "maxLength": 256 },
+        "receivedSignature": { "type": "string", "maxLength": 256 },
+        "signaturesMatch": { "type": "boolean" },
+        "matchedWebhookSecretInstead": { "type": "boolean" },
+        "keyIdConfigured": { "type": "boolean" },
+        "keyIdPrefix": { "type": "string", "maxLength": 32 },
+        "keyMode": { "type": "string", "enum": ["live", "test", "missing", "unknown"] },
+        "keySecretLength": { "type": "number" },
+        "payloadFormat": { "type": "string", "enum": ["snake_case", "camelCase", "mixed", "missing"] },
+        "alreadyProcessed": { "type": "boolean" },
+        "createdAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": [
+        "logId",
+        "uid",
+        "attemptType",
+        "status",
+        "rawInputString",
+        "generatedSignature",
+        "receivedSignature",
+        "signaturesMatch",
+        "createdAt"
+      ]
     }
   },
   "firestore": {
@@ -306,6 +353,10 @@
     "/youtube_feed_cache/{cacheId}": {
       "schema": "YoutubeFeedCache",
       "description": "Cached latest 10 YouTube uploads synced from official MKR Academy channel"
+    },
+    "/razorpay_verification_logs/{logId}": {
+      "schema": "RazorpayVerificationLog",
+      "description": "Immutable server-side diagnostic logs of Razorpay signature verification attempts, readable only by administrators"
     }
   }
 }

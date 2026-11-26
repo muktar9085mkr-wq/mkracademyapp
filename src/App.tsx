@@ -663,7 +663,10 @@ function AppContent() {
   };
 
   const handlePurchaseSuccess = (newPurchase: Purchase) => {
-    setPurchases((prev) => [newPurchase, ...prev]);
+    setPurchases((prev) => [
+      newPurchase,
+      ...prev.filter((p) => p.id !== newPurchase.id && p.productId !== newPurchase.productId)
+    ]);
   };
 
   // If in Admin Panel View

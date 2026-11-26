@@ -28,6 +28,15 @@ import {
 } from './sanitize';
 import { getLatestYouTubeFeed } from './youtubeMedia';
 import { renderProductPageHtml } from './ogMetadata';
+import {
+  buildRawSignatureInputString,
+  computeRazorpayHmacSignature,
+  detectRazorpayPayloadFormat,
+  fetchRazorpaySignatureVerificationLogs,
+  logRazorpaySignatureVerificationAttempt,
+  RazorpayKeyMode
+} from './razorpaySignatureLogger';
+import { persistVerifiedOrderAndPurchase } from './purchasePersistence';
 
 dotenv.config();
 
@@ -275,27 +284,90 @@ export function createApiApp() {
     verifyPaymentLimiter,
     requireAuth,
     async (req: Request, res: Response): Promise<void> => {
+      const authHeader = req.headers.authorization || '';
+      const callerAuthToken = authHeader.startsWith('Bearer ') ? authHeader.substring(7).trim() : '';
+
+      const rawRazorpayOrderId = req.body.razorpay_order_id ?? req.body.razorpayOrderId;
+      const rawRazorpayPaymentId = req.body.razorpay_payment_id ?? req.body.razorpayPaymentId;
+      const rawRazorpaySignature = req.body.razorpay_signature ?? req.body.razorpaySignature;
+      const rawOrderId = req.body.orderId ?? req.body.order_id;
+      const rawProductId = req.body.productId ?? req.body.product_id;
+      const rawStudentId = req.body.studentId ?? req.body.student_id;
+
+      const exactOrderStr = typeof rawRazorpayOrderId === 'string' ? rawRazorpayOrderId : String(rawRazorpayOrderId ?? '');
+      const exactPaymentStr = typeof rawRazorpayPaymentId === 'string' ? rawRazorpayPaymentId : String(rawRazorpayPaymentId ?? '');
+      const exactReceivedSig = typeof rawRazorpaySignature === 'string' ? rawRazorpaySignature : String(rawRazorpaySignature ?? '');
+
+      const razorpayOrderId = sanitizeId(rawRazorpayOrderId);
+      const razorpayPaymentId = sanitizeId(rawRazorpayPaymentId);
+      const razorpaySignature = sanitizeText(rawRazorpaySignature, 128).toLowerCase();
+      const orderId = sanitizeId(rawOrderId);
+      const productId = sanitizeId(rawProductId);
+      const studentId = sanitizeId(rawStudentId);
+
+      const keyId = getRazorpayKeyId();
+      const keySecret = getRazorpayKeySecret();
+      const webhookSecret = getRazorpayWebhookSecret();
+      const keyMode: RazorpayKeyMode = !keyId
+        ? 'missing'
+        : keyId.startsWith('rzp_live_')
+          ? 'live'
+          : keyId.startsWith('rzp_test_')
+            ? 'test'
+            : 'unknown';
+      const keyIdPrefix = keyId ? keyId.slice(0, 14) : '';
+      const payloadFormat = detectRazorpayPayloadFormat(req.body);
+      const rawInputString = buildRawSignatureInputString(
+        razorpayOrderId || exactOrderStr,
+        razorpayPaymentId || exactPaymentStr
+      );
+      const generatedSignature = computeRazorpayHmacSignature(rawInputString, keySecret);
+
+      const writeVerificationLog = (params: {
+        status: 'verified' | 'failed';
+        failureCode: string;
+        failureReason: string;
+        signaturesMatch: boolean;
+        matchedWebhookSecretInstead?: boolean;
+        alreadyProcessed?: boolean;
+      }) =>
+        logRazorpaySignatureVerificationAttempt({
+          uid: req.user!.uid,
+          userEmail: req.user?.email || '',
+          attemptType: 'checkout_verify',
+          status: params.status,
+          failureCode: params.failureCode,
+          failureReason: params.failureReason,
+          orderId: orderId || (typeof rawOrderId === 'string' ? rawOrderId : ''),
+          productId: productId || (typeof rawProductId === 'string' ? rawProductId : ''),
+          razorpayOrderId: razorpayOrderId || exactOrderStr,
+          razorpayPaymentId: razorpayPaymentId || exactPaymentStr,
+          rawInputString,
+          generatedSignature,
+          receivedSignature: exactReceivedSig,
+          signaturesMatch: params.signaturesMatch,
+          matchedWebhookSecretInstead: Boolean(params.matchedWebhookSecretInstead),
+          keyIdPrefix,
+          keyMode,
+          keySecretLength: keySecret.length,
+          payloadFormat,
+          alreadyProcessed: Boolean(params.alreadyProcessed),
+          authToken: callerAuthToken
+        });
+
       try {
-        const rawRazorpayOrderId = req.body.razorpay_order_id ?? req.body.razorpayOrderId;
-        const rawRazorpayPaymentId = req.body.razorpay_payment_id ?? req.body.razorpayPaymentId;
-        const rawRazorpaySignature = req.body.razorpay_signature ?? req.body.razorpaySignature;
-        const rawOrderId = req.body.orderId ?? req.body.order_id;
-        const rawProductId = req.body.productId ?? req.body.product_id;
-        const rawStudentId = req.body.studentId ?? req.body.student_id;
-
-        const razorpayOrderId = sanitizeId(rawRazorpayOrderId);
-        const razorpayPaymentId = sanitizeId(rawRazorpayPaymentId);
-        const razorpaySignature = sanitizeText(rawRazorpaySignature, 128).toLowerCase();
-        const orderId = sanitizeId(rawOrderId);
-        const productId = sanitizeId(rawProductId);
-        const studentId = sanitizeId(rawStudentId);
-
         if (!razorpayOrderId || !razorpayPaymentId) {
           console.error('[RAZORPAY VERIFY FAILED] Missing or invalid order/payment IDs:', {
             hasOrderId: Boolean(rawRazorpayOrderId),
             hasPaymentId: Boolean(rawRazorpayPaymentId),
             hasSignature: Boolean(rawRazorpaySignature),
             studentUid: req.user!.uid
+          });
+          await writeVerificationLog({
+            status: 'failed',
+            failureCode: 'MISSING_PAYMENT_FIELDS',
+            failureReason: 'Missing or malformed Razorpay order_id / payment_id in verification payload.',
+            signaturesMatch: false
           });
           res.status(400).json({
             success: false,
@@ -314,6 +386,12 @@ export function createApiApp() {
             studentUid: req.user!.uid,
             receivedSignatureLength: razorpaySignature.length
           });
+          await writeVerificationLog({
+            status: 'failed',
+            failureCode: 'INVALID_SIGNATURE_FORMAT',
+            failureReason: `Received signature length=${exactReceivedSig.length} failed 64-char hex validation.`,
+            signaturesMatch: false
+          });
           res.status(400).json({
             success: false,
             verified: false,
@@ -331,6 +409,12 @@ export function createApiApp() {
             razorpayOrderId,
             razorpayPaymentId
           });
+          await writeVerificationLog({
+            status: 'failed',
+            failureCode: 'FORBIDDEN',
+            failureReason: `Cross-account verification blocked (targetStudentId=${studentId}).`,
+            signaturesMatch: false
+          });
           res.status(403).json({
             success: false,
             verified: false,
@@ -347,6 +431,12 @@ export function createApiApp() {
             orderOwnerUid: trackedOrder.studentUid,
             razorpayOrderId
           });
+          await writeVerificationLog({
+            status: 'failed',
+            failureCode: 'ORDER_OWNERSHIP_MISMATCH',
+            failureReason: `Order belongs to another student account (orderOwnerUid=${trackedOrder.studentUid}).`,
+            signaturesMatch: false
+          });
           res.status(403).json({
             success: false,
             verified: false,
@@ -356,15 +446,17 @@ export function createApiApp() {
           return;
         }
 
-        const keyId = getRazorpayKeyId();
-        const keySecret = getRazorpayKeySecret();
-        const webhookSecret = getRazorpayWebhookSecret();
-
         if (!keySecret) {
           console.error('[RAZORPAY VERIFY FAILED] RAZORPAY_KEY_SECRET is not configured on backend server:', {
             hasKeyId: Boolean(keyId),
             razorpayOrderId,
             razorpayPaymentId
+          });
+          await writeVerificationLog({
+            status: 'failed',
+            failureCode: 'SERVER_SECRET_MISSING',
+            failureReason: 'RAZORPAY_KEY_SECRET is missing or empty on backend server.',
+            signaturesMatch: false
           });
           res.status(500).json({
             success: false,
@@ -376,12 +468,6 @@ export function createApiApp() {
         }
 
         // Strict HMAC-SHA256 verification using Razorpay API Key Secret: HMAC_SHA256(order_id + "|" + payment_id, key_secret)
-        const signaturePayload = `${razorpayOrderId}|${razorpayPaymentId}`;
-        const generatedSignature = crypto
-          .createHmac('sha256', keySecret)
-          .update(signaturePayload)
-          .digest('hex');
-
         const expectedBuf = Buffer.from(generatedSignature, 'utf8');
         const receivedBuf = Buffer.from(razorpaySignature, 'utf8');
         const isSignatureValid =
@@ -391,27 +477,41 @@ export function createApiApp() {
         if (!isSignatureValid) {
           let matchedWebhookSecretInstead = false;
           if (webhookSecret) {
-            const webhookCheckSig = crypto
-              .createHmac('sha256', webhookSecret)
-              .update(signaturePayload)
-              .digest('hex');
+            const webhookCheckSig = computeRazorpayHmacSignature(rawInputString, webhookSecret);
             matchedWebhookSecretInstead = webhookCheckSig === razorpaySignature;
           }
 
+          const sanitizationMismatch =
+            exactOrderStr !== razorpayOrderId || exactPaymentStr !== razorpayPaymentId
+              ? ` Raw vs sanitized ID difference detected (rawOrder="${exactOrderStr}", rawPay="${exactPaymentStr}").`
+              : '';
+
+          const failureReason =
+            (matchedWebhookSecretInstead
+              ? 'Signature matched RAZORPAY_WEBHOOK_SECRET instead of RAZORPAY_KEY_SECRET — swap/configure API Key Secret properly.'
+              : 'HMAC SHA256 mismatch — verify RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET belong to the same Razorpay key pair and mode (Live/Test).') +
+            sanitizationMismatch;
+
           console.error('[RAZORPAY VERIFY FAILED] HMAC SHA256 Signature Mismatch:', {
-            reason: matchedWebhookSecretInstead
-              ? 'Signature matched RAZORPAY_WEBHOOK_SECRET instead of RAZORPAY_KEY_SECRET — swap/configure API Key Secret properly'
-              : 'HMAC SHA256 mismatch — verify RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET belong to the same Razorpay key pair and mode (Live/Test)',
+            reason: failureReason,
             orderId,
             razorpayOrderId,
             razorpayPaymentId,
             studentUid: req.user!.uid,
-            keyIdPrefix: keyId ? keyId.slice(0, 12) : 'MISSING',
-            keyMode: keyId.startsWith('rzp_live_') ? 'live' : keyId.startsWith('rzp_test_') ? 'test' : 'unknown',
+            keyIdPrefix: keyIdPrefix || 'MISSING',
+            keyMode,
             secretMatchesWebhookSecret: Boolean(webhookSecret && keySecret === webhookSecret),
             matchedWebhookSecretInstead,
             receivedSigPrefix: razorpaySignature.slice(0, 8),
             expectedSigPrefix: generatedSignature.slice(0, 8)
+          });
+
+          await writeVerificationLog({
+            status: 'failed',
+            failureCode: 'SIGNATURE_MISMATCH',
+            failureReason,
+            signaturesMatch: false,
+            matchedWebhookSecretInstead
           });
 
           res.status(400).json({
@@ -440,6 +540,12 @@ export function createApiApp() {
               attemptedOrder: razorpayOrderId,
               attemptedUid: effectiveStudentId
             });
+            await writeVerificationLog({
+              status: 'failed',
+              failureCode: 'DUPLICATE_PAYMENT_REPLAY',
+              failureReason: `Payment already verified for order=${existingVerified.razorpayOrderId}, uid=${existingVerified.studentUid}.`,
+              signaturesMatch: true
+            });
             res.status(409).json({
               success: false,
               verified: false,
@@ -448,6 +554,14 @@ export function createApiApp() {
             });
             return;
           }
+
+          await writeVerificationLog({
+            status: 'verified',
+            failureCode: 'NONE',
+            failureReason: 'Idempotent verification retry succeeded.',
+            signaturesMatch: true,
+            alreadyProcessed: true
+          });
 
           res.json({
             success: true,
@@ -464,30 +578,96 @@ export function createApiApp() {
         }
 
         const verifiedAt = new Date().toISOString();
+        const effectiveOrderId = orderId || trackedOrder?.receipt || razorpayOrderId;
+
+        // Fetch authoritative product metadata from Firestore so drive links/titles are server-authoritative
+        let productTitle = 'Educational Notes';
+        let coverImagePath = '';
+        let driveFileLink = '';
+        let pdfStoragePath = '';
+        let pdfList: any[] = [];
+        let authoritativeAmountPaise = trackedOrder?.amountPaise || 100;
+
+        try {
+          if (effectiveProductId && effectiveProductId !== 'prod') {
+            const prodSnap = await getDoc(doc(db, 'products', effectiveProductId));
+            if (prodSnap.exists()) {
+              const p = prodSnap.data() as any;
+              productTitle = p.title || productTitle;
+              coverImagePath = p.coverImagePath || '';
+              driveFileLink = p.driveFileLink || '';
+              pdfStoragePath = p.pdfStoragePath || '';
+              if (Array.isArray(p.pdfList)) pdfList = p.pdfList;
+              if (Number(p.sellingPricePaise) > 0) authoritativeAmountPaise = Number(p.sellingPricePaise);
+            }
+          }
+        } catch {
+          // Non-blocking fallback
+        }
+
+        // Server-side persistence of verified order ('paid') and duplicate-free purchase ('PAID' / 'active')
+        const persistenceResult = await persistVerifiedOrderAndPurchase({
+          authToken: callerAuthToken,
+          orderId: effectiveOrderId,
+          uid: effectiveStudentId,
+          userEmail: req.user?.email || '',
+          studentName: req.user?.displayName || 'MKR Student',
+          productId: effectiveProductId,
+          productTitle,
+          coverImagePath,
+          driveFileLink,
+          pdfStoragePath,
+          pdfList,
+          amountPaise: authoritativeAmountPaise,
+          razorpayOrderId,
+          razorpayPaymentId,
+          razorpaySignature,
+          verifiedAt
+        });
+
         verifiedCheckoutPayments.set(razorpayPaymentId, {
-          orderId: orderId || razorpayOrderId,
+          orderId: effectiveOrderId,
           razorpayOrderId,
           studentUid: effectiveStudentId,
           purchaseId,
           verifiedAt
         });
 
+        await writeVerificationLog({
+          status: 'verified',
+          failureCode: 'NONE',
+          failureReason: persistenceResult.synced
+            ? 'HMAC SHA256 signature matched and verified purchase persisted to Firestore.'
+            : `HMAC SHA256 signature matched. Client fulfillment fallback armed (${persistenceResult.error || 'pending sync'}).`,
+          signaturesMatch: true
+        });
+
         console.log(
-          `✅ [RAZORPAY VERIFY SUCCESS] Order=${orderId || razorpayOrderId} Payment=${razorpayPaymentId} Student=${effectiveStudentId}`
+          `✅ [RAZORPAY VERIFY SUCCESS] Order=${effectiveOrderId} Payment=${razorpayPaymentId} Student=${effectiveStudentId} FirestoreSynced=${persistenceResult.synced}`
         );
 
         res.json({
           success: true,
           verified: true,
-          orderId,
+          orderId: effectiveOrderId,
           razorpayOrderId,
           razorpayPaymentId,
+          razorpaySignature,
           purchaseId,
+          purchase: persistenceResult.purchase,
+          firestoreSynced: persistenceResult.synced,
+          alreadyPurchased: persistenceResult.alreadyPurchased,
           verifiedAt,
           message: 'Payment successfully verified by server'
         });
       } catch (error: any) {
         console.error('[RAZORPAY VERIFY ERROR] Unexpected exception:', error);
+        await writeVerificationLog({
+          status: 'failed',
+          failureCode: 'UNEXPECTED_ERROR',
+          failureReason: error?.message || 'Unexpected exception during signature verification',
+          signaturesMatch: false
+        }).catch(() => {});
         res.status(500).json({
           success: false,
           verified: false,
@@ -838,25 +1018,75 @@ export function createApiApp() {
   );
 
   /**
+   * Admin Razorpay Signature Verification Diagnostic Logs Endpoint
+   * Protected with requireAdmin; retrieves immutable verification logs from Firestore and recent server buffer.
+   */
+  router.get(
+    '/admin/razorpay-verification-logs',
+    requireAdmin,
+    async (req: Request, res: Response): Promise<void> => {
+      try {
+        const authHeader = req.headers.authorization || '';
+        const adminAuthToken = authHeader.startsWith('Bearer ') ? authHeader.substring(7).trim() : '';
+        const limitParam = Math.min(100, Math.max(1, Number(req.query.limit) || 50));
+        const result = await fetchRazorpaySignatureVerificationLogs({
+          authToken: adminAuthToken,
+          limit: limitParam
+        });
+        res.json({
+          success: true,
+          count: result.logs.length,
+          source: result.source,
+          logs: result.logs
+        });
+      } catch (err: any) {
+        console.error('Error fetching Razorpay verification logs:', err);
+        res.status(500).json({ error: 'Failed to retrieve Razorpay verification logs' });
+      }
+    }
+  );
+
+  /**
    * Webhook handler for Razorpay async payment capture (Requirement 19)
    * Validated using timing-safe HMAC-SHA256 signature verification & idempotency
    */
   router.post('/payment/webhook', (req: Request, res: Response): void => {
     try {
-      const webhookSignature = req.headers['x-razorpay-signature'] as string;
+      const webhookSignature = (req.headers['x-razorpay-signature'] as string) || '';
       const webhookSecret = getRazorpayWebhookSecret();
+      const paymentEntity = req.body?.payload?.payment?.entity;
+      const webhookPaymentId = paymentEntity?.id || '';
+      const webhookOrderId = paymentEntity?.order_id || '';
 
       if (webhookSecret) {
+        const rawPayloadBuf = (req as any).rawBody || Buffer.from(JSON.stringify(req.body));
+        const rawPayloadSnippet = Buffer.isBuffer(rawPayloadBuf)
+          ? rawPayloadBuf.toString('utf8').slice(0, 300)
+          : String(rawPayloadBuf || '').slice(0, 300);
+
         if (!webhookSignature) {
           console.warn('⚠️ Webhook rejected: Missing x-razorpay-signature header');
+          void logRazorpaySignatureVerificationAttempt({
+            uid: 'razorpay_webhook',
+            attemptType: 'webhook_verify',
+            status: 'failed',
+            failureCode: 'MISSING_WEBHOOK_SIGNATURE',
+            failureReason: 'Missing x-razorpay-signature header on webhook request.',
+            razorpayOrderId: webhookOrderId,
+            razorpayPaymentId: webhookPaymentId,
+            rawInputString: rawPayloadSnippet,
+            generatedSignature: '',
+            receivedSignature: '',
+            signaturesMatch: false,
+            keySecretLength: webhookSecret.length
+          });
           res.status(400).json({ error: 'Missing x-razorpay-signature header' });
           return;
         }
 
-        const rawPayload = (req as any).rawBody || Buffer.from(JSON.stringify(req.body));
         const expectedSignature = crypto
           .createHmac('sha256', webhookSecret)
-          .update(rawPayload)
+          .update(rawPayloadBuf)
           .digest('hex');
 
         const expectedBuf = Buffer.from(expectedSignature, 'utf8');
@@ -865,6 +1095,20 @@ export function createApiApp() {
         // Timing-safe cryptographic comparison prevents side-channel timing attacks
         if (expectedBuf.length !== receivedBuf.length || !crypto.timingSafeEqual(expectedBuf, receivedBuf)) {
           console.warn('⚠️ Webhook rejected: Signature mismatch from Razorpay');
+          void logRazorpaySignatureVerificationAttempt({
+            uid: 'razorpay_webhook',
+            attemptType: 'webhook_verify',
+            status: 'failed',
+            failureCode: 'WEBHOOK_SIGNATURE_MISMATCH',
+            failureReason: 'x-razorpay-signature did not match HMAC-SHA256 of raw webhook body using RAZORPAY_WEBHOOK_SECRET.',
+            razorpayOrderId: webhookOrderId,
+            razorpayPaymentId: webhookPaymentId,
+            rawInputString: rawPayloadSnippet,
+            generatedSignature: expectedSignature,
+            receivedSignature: webhookSignature,
+            signaturesMatch: false,
+            keySecretLength: webhookSecret.length
+          });
           res.status(400).json({ error: 'Invalid webhook signature' });
           return;
         }
@@ -874,8 +1118,7 @@ export function createApiApp() {
       console.log(`📡 Razorpay Webhook Event: ${event}`);
 
       if (event === 'payment.captured' || event === 'order.paid') {
-        const paymentEntity = req.body?.payload?.payment?.entity;
-        const paymentId = paymentEntity?.id;
+        const paymentId = webhookPaymentId;
         if (paymentId) {
           // Idempotency: avoid redundant webhook processing logs without interfering with /payment/verify
           if (webhookProcessedPayments.has(paymentId)) {
@@ -886,7 +1129,7 @@ export function createApiApp() {
           console.log(`✅ Webhook verified payment captured: ${paymentId}`);
         }
       } else if (event === 'payment.failed') {
-        const paymentId = req.body?.payload?.payment?.entity?.id;
+        const paymentId = webhookPaymentId;
         console.warn(`❌ Webhook payment failed notification: ${paymentId}`);
       }
 

@@ -237,6 +237,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
           razorpay_order_id: string;
           razorpay_signature: string;
         }) => {
+          let backendVerified = false;
           try {
             setStep('processing');
 
@@ -259,9 +260,10 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
             });
 
             if (verifyResult.verified) {
-              // 5. Fulfill purchase in Firestore
+              backendVerified = true;
+              // 5. Fulfill purchase in Firestore (idempotent if backend already persisted it)
               const purchase = await fulfillVerifiedPurchase({
-                orderId,
+                orderId: verifyResult.orderId || orderId,
                 uid: user.uid,
                 productId: product.id,
                 productTitle: product.title,
@@ -269,11 +271,14 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                 driveFileLink: product.driveFileLink || '',
                 pdfStoragePath: product.pdfStoragePath || '',
                 pdfList: product.pdfList || [],
-                razorpayPaymentId: response.razorpay_payment_id,
-                razorpayOrderId: response.razorpay_order_id || razorpayOrderId
+                razorpayPaymentId: rzpPaymentId,
+                razorpayOrderId: rzpOrderId,
+                razorpaySignature: rzpSignature,
+                amountPaise: backendOrderResponse.amount || product.sellingPricePaise,
+                verifiedPurchaseFromServer: verifyResult.purchase
               });
 
-              setLastPaymentId(response.razorpay_payment_id);
+              setLastPaymentId(rzpPaymentId);
               setCompletedPurchase(purchase);
               setStep('success');
               onSuccess(purchase);
@@ -292,7 +297,9 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
             }
           } catch (err: any) {
             console.error('Payment verification failed:', err);
-            await recordFailedOrder(orderId, err.message);
+            if (!backendVerified) {
+              await recordFailedOrder(orderId, err.message);
+            }
             setGeneralError(err.message || 'Payment verification failed. If your money was deducted, our team will assist you immediately.');
             setStep('failed');
           }
@@ -397,13 +404,19 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
             </div>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2 max-w-md mx-auto">
-              {(completedPurchase.driveFileLink || (completedPurchase.pdfList && completedPurchase.pdfList.length > 0)) && (
+              {(completedPurchase.driveFileLink ||
+                product.driveFileLink ||
+                (completedPurchase.pdfList && completedPurchase.pdfList.length > 0) ||
+                (product.pdfList && product.pdfList.length > 0)) && (
                 isAndroidWebViewApp() ? (
                   <button
                     type="button"
                     onClick={() =>
                       openExternalDriveInAndroid(
-                        completedPurchase.driveFileLink || completedPurchase.pdfList?.[0]?.driveUrl
+                        completedPurchase.driveFileLink ||
+                          product.driveFileLink ||
+                          completedPurchase.pdfList?.[0]?.driveUrl ||
+                          product.pdfList?.[0]?.driveUrl
                       )
                     }
                     className="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-red-700 hover:bg-red-800 text-white font-extrabold text-xs shadow-md flex items-center justify-center space-x-2 transition-all cursor-pointer"
@@ -417,8 +430,8 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                     onClick={() =>
                       triggerFileDownload(
                         product,
-                        !completedPurchase.driveFileLink && completedPurchase.pdfList?.[0]
-                          ? completedPurchase.pdfList[0]
+                        !completedPurchase.driveFileLink && !product.driveFileLink
+                          ? (completedPurchase.pdfList?.[0] || product.pdfList?.[0])
                           : undefined
                       )
                     }

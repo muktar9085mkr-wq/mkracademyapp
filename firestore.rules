@@ -56,27 +56,50 @@ service cloud.firestore {
 
     // Orders collection: Students can only read/list their own orders; Admins can read/manage all
     match /orders/{orderId} {
-      allow get: if isSignedIn() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow get: if isSignedIn() && (resource == null || resource.data.uid == request.auth.uid || isAdmin());
       allow list: if isSignedIn() && (resource.data.uid == request.auth.uid || isAdmin());
       allow create: if isSignedIn() &&
+        orderId.size() > 0 && orderId.size() <= 128 &&
         request.resource.data.uid == request.auth.uid &&
-        request.resource.data.status == 'pending';
+        request.resource.data.status == 'pending' &&
+        request.resource.data.productId is string && request.resource.data.productId.size() > 0 &&
+        request.resource.data.amountPaise is number && request.resource.data.amountPaise > 0;
       allow update: if isAdmin() || (
         isSignedIn() &&
         resource.data.uid == request.auth.uid &&
         request.resource.data.uid == request.auth.uid &&
         request.resource.data.productId == resource.data.productId &&
         request.resource.data.amountPaise == resource.data.amountPaise &&
-        request.resource.data.status in ['paid', 'failed'] &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'status',
           'razorpayPaymentId',
           'razorpayOrderId',
+          'razorpaySignature',
           'verifiedAt',
           'updatedAt',
           'failedAt',
-          'failureReason'
-        ])
+          'failureReason',
+          'approvalMethod'
+        ]) &&
+        (
+          (
+            request.resource.data.status == 'paid' &&
+            resource.data.status in ['pending', 'failed', 'paid'] &&
+            request.resource.data.razorpayPaymentId is string &&
+            request.resource.data.razorpayPaymentId.size() >= 8 &&
+            request.resource.data.razorpayPaymentId.size() <= 128 &&
+            request.resource.data.razorpayOrderId is string &&
+            request.resource.data.razorpayOrderId.size() >= 8 &&
+            request.resource.data.razorpayOrderId.size() <= 128 &&
+            (!('razorpayOrderId' in resource.data) || resource.data.razorpayOrderId == '' || request.resource.data.razorpayOrderId == resource.data.razorpayOrderId) &&
+            request.resource.data.razorpaySignature is string &&
+            request.resource.data.razorpaySignature.matches('^[a-f0-9]{64}$')
+          ) ||
+          (
+            request.resource.data.status == 'failed' &&
+            resource.data.status in ['pending', 'failed']
+          )
+        )
       );
       allow delete: if isAdmin();
     }
@@ -87,18 +110,28 @@ service cloud.firestore {
     }
 
     // Purchases entitlements:
-    // Students can read/list their own purchases.
+    // Students can read/list their own purchases (and check existence of pur_{uid}_{productId} before creation).
     // Purchase creation requires either Admin approval OR a verified 'paid' or 'manually_approved' order in database.
     match /purchases/{purchaseId} {
-      allow get: if isSignedIn() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow get: if isSignedIn() && (resource == null || resource.data.uid == request.auth.uid || isAdmin());
       allow list: if isSignedIn() && (resource.data.uid == request.auth.uid || isAdmin());
       allow create: if isAdmin() || (
         isSignedIn() &&
+        purchaseId.size() > 0 && purchaseId.size() <= 128 && purchaseId.matches('^[a-zA-Z0-9_\\-]+$') &&
         request.resource.data.uid == request.auth.uid &&
-        request.resource.data.orderId is string &&
+        request.resource.data.id == purchaseId &&
+        request.resource.data.productId is string && request.resource.data.productId.size() > 0 &&
+        request.resource.data.orderId is string && request.resource.data.orderId.size() > 0 &&
+        request.resource.data.entitlementStatus == 'active' &&
+        request.resource.data.paymentStatus == 'PAID' &&
+        request.resource.data.razorpayPaymentId is string && request.resource.data.razorpayPaymentId.size() >= 8 &&
+        request.resource.data.razorpayOrderId is string && request.resource.data.razorpayOrderId.size() >= 8 &&
         exists(/databases/$(database)/documents/orders/$(request.resource.data.orderId)) &&
         get(/databases/$(database)/documents/orders/$(request.resource.data.orderId)).data.status in ['paid', 'manually_approved'] &&
-        get(/databases/$(database)/documents/orders/$(request.resource.data.orderId)).data.uid == request.auth.uid
+        get(/databases/$(database)/documents/orders/$(request.resource.data.orderId)).data.uid == request.auth.uid &&
+        get(/databases/$(database)/documents/orders/$(request.resource.data.orderId)).data.productId == request.resource.data.productId &&
+        get(/databases/$(database)/documents/orders/$(request.resource.data.orderId)).data.razorpayPaymentId == request.resource.data.razorpayPaymentId &&
+        get(/databases/$(database)/documents/orders/$(request.resource.data.orderId)).data.razorpayOrderId == request.resource.data.razorpayOrderId
       );
       allow update, delete: if isAdmin();
     }
@@ -124,7 +157,7 @@ service cloud.firestore {
 
     // User Sessions: Device and active session tracking
     match /user_sessions/{sessionId} {
-      allow get: if isSignedIn() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow get: if isSignedIn() && (resource == null || resource.data.uid == request.auth.uid || isAdmin());
       allow list: if isSignedIn() && (resource.data.uid == request.auth.uid || isAdmin());
       allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
       allow update: if isAdmin() || (isSignedIn() && resource.data.uid == request.auth.uid);
@@ -133,7 +166,7 @@ service cloud.firestore {
 
     // Download Events: Idempotent student PDF download tracking and analytics
     match /download_events/{eventId} {
-      allow get: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow get: if isSignedIn() && (resource == null || resource.data.userId == request.auth.uid || isAdmin());
       allow list: if isAdmin();
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
       allow update, delete: if false;
@@ -169,6 +202,63 @@ service cloud.firestore {
     match /youtube_feed_cache/{cacheId} {
       allow read: if true;
       allow write: if isAdmin();
+    }
+
+    function isValidRazorpayVerificationLog(data) {
+      return data.keys().hasAll([
+          'logId', 'uid', 'userEmail', 'attemptType', 'status',
+          'failureCode', 'failureReason', 'orderId', 'productId',
+          'razorpayOrderId', 'razorpayPaymentId', 'rawInputString',
+          'generatedSignature', 'receivedSignature', 'signaturesMatch',
+          'matchedWebhookSecretInstead', 'keyIdConfigured', 'keyIdPrefix',
+          'keyMode', 'keySecretLength', 'payloadFormat', 'alreadyProcessed',
+          'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'logId', 'uid', 'userEmail', 'attemptType', 'status',
+          'failureCode', 'failureReason', 'orderId', 'productId',
+          'razorpayOrderId', 'razorpayPaymentId', 'rawInputString',
+          'generatedSignature', 'receivedSignature', 'signaturesMatch',
+          'matchedWebhookSecretInstead', 'keyIdConfigured', 'keyIdPrefix',
+          'keyMode', 'keySecretLength', 'payloadFormat', 'alreadyProcessed',
+          'createdAt'
+        ])
+        && data.logId is string && data.logId.size() > 0 && data.logId.size() <= 128 && data.logId.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.uid is string && data.uid == request.auth.uid && data.uid.size() > 0 && data.uid.size() <= 128
+        && data.userEmail is string && data.userEmail.size() <= 150
+        && data.attemptType in ['checkout_verify', 'webhook_verify']
+        && data.status in ['verified', 'failed']
+        && data.failureCode is string && data.failureCode.size() <= 80
+        && data.failureReason is string && data.failureReason.size() <= 500
+        && data.orderId is string && data.orderId.size() <= 128
+        && data.productId is string && data.productId.size() <= 128
+        && data.razorpayOrderId is string && data.razorpayOrderId.size() <= 128
+        && data.razorpayPaymentId is string && data.razorpayPaymentId.size() <= 128
+        && data.rawInputString is string && data.rawInputString.size() <= 300
+        && data.generatedSignature is string && data.generatedSignature.size() <= 256
+        && data.receivedSignature is string && data.receivedSignature.size() <= 256
+        && data.signaturesMatch is bool
+        && data.matchedWebhookSecretInstead is bool
+        && data.keyIdConfigured is bool
+        && data.keyIdPrefix is string && data.keyIdPrefix.size() <= 32
+        && data.keyMode in ['live', 'test', 'missing', 'unknown']
+        && data.keySecretLength is number && data.keySecretLength >= 0 && data.keySecretLength <= 512
+        && data.payloadFormat in ['snake_case', 'camelCase', 'mixed', 'missing']
+        && data.alreadyProcessed is bool
+        && data.createdAt is string && data.createdAt.size() > 0 && data.createdAt.size() <= 64;
+    }
+
+    // Razorpay Signature Verification Diagnostic Logs:
+    // Appended during authenticated verification attempts under caller UID;
+    // ONLY administrators can inspect logs (prevents HMAC signature oracle abuse).
+    match /razorpay_verification_logs/{logId} {
+      allow get, list: if isAdmin();
+      allow create: if isSignedIn()
+        && logId.size() > 0 && logId.size() <= 128 && logId.matches('^[a-zA-Z0-9_\\-]+$')
+        && request.resource.data.logId == logId
+        && request.resource.data.uid == request.auth.uid
+        && isValidRazorpayVerificationLog(request.resource.data);
+      allow update, delete: if false;
     }
   }
 }
